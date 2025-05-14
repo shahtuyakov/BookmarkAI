@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+.pnpm-store
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist
+build
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage
+.nyc_output
+
+# IDE
+.idea
+.vscode/*
+!.vscode/bookmarkai.code-workspace
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+.next
+.turbo
