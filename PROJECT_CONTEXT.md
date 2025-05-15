@@ -1,20 +1,22 @@
 # BookmarkAI Project Context
 
-*Last updated: 2025-05-16*
+*Last updated: 2025-05-17*
 
 ## Project Overview
 BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated sharing, enriches it with AI summaries/transcripts, and resurfaces items through search, digests, and integrations.
 
 ## Current Status
-- **Phase**: 0 - Local Dev Environment (95% complete)
+- **Phase**: 0 - Local Dev Environment (96% complete)
 - **Sprint**: 1 (May 10-24)
 - **Upcoming Milestone**: MVP Skeleton (Phase 1) - Target: May 31
 
 ## Phase Progress
-- **Phase 0**: 🏗️ 95% complete
+- **Phase 0**: 🏗️ 96% complete
   - ✅ 0.1-0.3: Complete
+  - ✅ 0.4: Complete - Database migration scripts
   - 🏗️ 0.8: 50% - Configure ESLint/Prettier and Git hooks (in progress)
   - 🏗️ 0.9: 25% - Implement secrets handling sandbox (started)
+  - ⏱️ 0.5: 0% - Develop seed data scripts (next up)
 - **Phase 1-7**: ⏱️ Not started
 
 ## Current Tech Stack
@@ -23,6 +25,7 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - **Backend**: Fastify via NestJS adapter
 - **Data**: PostgreSQL 15 + pgvector, Redis, S3
 - **Infrastructure**: AWS CDK (TypeScript)
+- **ORM**: Drizzle ORM
 
 ## High-Level Architecture
 1. **Capture Layer**: Mobile share extensions & browser extension for content saving
@@ -44,6 +47,7 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - Structuring project as a monorepo with pnpm workspace
 - Using AWS CDK for infrastructure as code with modular stacks
 - Designing security groups to avoid circular dependencies in CDK
+- Using Drizzle ORM for database schema and migrations
 
 ## Known Challenges
 - GPU configuration for Whisper transcription in development environment
@@ -51,6 +55,6 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - Designing effective content moderation approach
 
 ## Next Steps
-- Complete Phase 0 tasks
+- Complete remaining Phase 0 tasks
 - Begin Phase 1 implementation
 - Set up CI/CD pipeline
