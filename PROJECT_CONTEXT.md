@@ -12,11 +12,15 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 
 ## Phase Progress
 - **Phase 0**: ✅ 100% complete
-  - ✅ 0.1-0.3: Complete
+  - ✅ 0.1: Complete - Set up mono-repo with pnpm workspace
+  - ✅ 0.2: Complete - Create Docker Compose configuration
+  - ✅ 0.3: Complete - Implement AWS CDK infrastructure templates
   - ✅ 0.4: Complete - Database migration scripts
   - ✅ 0.5: Complete - Develop seed data scripts
+  - ✅ 0.6: Complete - Document environment variables
   - ✅ 0.8: Complete - Configure ESLint/Prettier and Git hooks
   - ✅ 0.9: Complete - Implement secrets handling sandbox
+  - ⏱️ 0.7: Not started - Set up dev environment documentation
 - **Phase 1**: ⏱️ Not started
 
 ## Current Tech Stack
@@ -37,7 +41,7 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 7. **Digest Service**: Weekly stats and email digests
 
 ## Current Focus
-- Completing Phase 0 (Development Environment)
+- Completed Phase 0 (Development Environment)
 - Preparing for Phase 1 implementation
 - Setting up project tracking and context system
 
@@ -49,6 +53,7 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - Designing security groups to avoid circular dependencies in CDK
 - Using Drizzle ORM for database schema and migrations
 - Implementing TypeScript-based seeding system with CI/CD support
+- Created comprehensive environment variable documentation with standardized naming
 
 ## Known Challenges
 - GPU configuration for Whisper transcription in development environment
@@ -56,6 +61,7 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - Designing effective content moderation approach
 
 ## Next Steps
+- Complete Task 0.7: Set up dev environment documentation
 - Begin Phase 1 implementation
 - Set up CI/CD pipeline
 - Implement API Gateway core functionality
