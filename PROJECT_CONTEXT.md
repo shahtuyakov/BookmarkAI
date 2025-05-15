@@ -20,7 +20,7 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
   - ✅ 0.6: Complete - Document environment variables
   - ✅ 0.8: Complete - Configure ESLint/Prettier and Git hooks
   - ✅ 0.9: Complete - Implement secrets handling sandbox
-  - ⏱️ 0.7: Not started - Set up dev environment documentation
+  - ✅ 0.7: Complete - Set up dev environment documentation
 - **Phase 1**: ⏱️ Not started
 
 ## Current Tech Stack
@@ -61,7 +61,6 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - Designing effective content moderation approach
 
 ## Next Steps
-- Complete Task 0.7: Set up dev environment documentation
 - Begin Phase 1 implementation
 - Set up CI/CD pipeline
 - Implement API Gateway core functionality
