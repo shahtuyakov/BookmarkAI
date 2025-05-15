@@ -1,0 +1,29 @@
+services:
+  # Create pgAdmin for database management in dev
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+
+  # Create MinIO Client container
+  mc:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (mc config host add minio http://minio:9000 minioadmin minioadmin) do echo '...waiting...' && sleep 1; done;
+      mc mb minio/bookmarkai-media;
+      mc mb minio/bookmarkai-storyboards;
+      exit 0;
+      "
+
+volumes:
+  pgadmin-data:

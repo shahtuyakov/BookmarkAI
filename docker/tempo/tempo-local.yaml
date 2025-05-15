@@ -1,0 +1,26 @@
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    jaeger:
+      protocols:
+        thrift_http:
+          endpoint: 0.0.0.0:14268
+    zipkin:
+      endpoint: 0.0.0.0:9411
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /etc/tempo/data
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+      cluster: docker-compose
