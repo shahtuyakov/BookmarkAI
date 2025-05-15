@@ -1,24 +1,20 @@
 # BookmarkAI Project Context
 
-*Last updated: 2025-05-15*
+*Last updated: 2025-05-16*
 
 ## Project Overview
 BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated sharing, enriches it with AI summaries/transcripts, and resurfaces items through search, digests, and integrations.
 
 ## Current Status
-- **Phase**: 0 - Local Dev Environment (35% complete)
+- **Phase**: 0 - Local Dev Environment (95% complete)
 - **Sprint**: 1 (May 10-24)
-- **Recent Milestones**: 
-  - ✅ Mono-repo setup (May 15)
-  - ✅ Docker environment configuration (May 15)
 - **Upcoming Milestone**: MVP Skeleton (Phase 1) - Target: May 31
 
 ## Phase Progress
-- **Phase 0**: 🏗️ 35% complete
-  - ✅ 0.1: 100% - Set up mono-repo with pnpm workspace (completed)
-  - ✅ 0.2: 100% - Docker Compose configuration (completed)
-  - 🏗️ 0.3: 0% - Implement AWS CDK infrastructure templates (not started)
-  - ⏱️ 0.4-0.9: 0% - Not started
+- **Phase 0**: 🏗️ 95% complete
+  - ✅ 0.1-0.3: Complete
+  - 🏗️ 0.8: 50% - Configure ESLint/Prettier and Git hooks (in progress)
+  - 🏗️ 0.9: 25% - Implement secrets handling sandbox (started)
 - **Phase 1-7**: ⏱️ Not started
 
 ## Current Tech Stack
@@ -27,15 +23,6 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - **Backend**: Fastify via NestJS adapter
 - **Data**: PostgreSQL 15 + pgvector, Redis, S3
 - **Infrastructure**: AWS CDK (TypeScript)
-- **Observability**: Grafana, Prometheus, Tempo
-
-## Local Environment
-- **Database**: PostgreSQL with pgvector extension (port 5433)
-- **Cache/Queue**: Redis (port 6379) 
-- **Storage**: MinIO S3-compatible (ports 9000-9001)
-- **Monitoring**: Grafana (port 3000), Prometheus (port 9090)
-- **Tracing**: Tempo (port 3200)
-- **Tools**: pgAdmin (port 5050)
 
 ## High-Level Architecture
 1. **Capture Layer**: Mobile share extensions & browser extension for content saving
@@ -47,25 +34,23 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 7. **Digest Service**: Weekly stats and email digests
 
 ## Current Focus
-- Implementing AWS CDK infrastructure templates (Task 0.3)
-- Preparing for database migration scripts (Task 0.4)
-- Planning Phase 1 MVP Skeleton implementation
+- Completing development environment setup
+- Preparing for Phase 1 implementation
+- Setting up project tracking and context system
 
 ## Recent Decisions
 - Using Redis Streams with BullMQ instead of SQS for better local development
 - Implementing pgvector with HNSW for vector similarity search
-- Structured project as a monorepo with pnpm workspace
-- Configured Docker for comprehensive local development environment
-- Using port 5433 for PostgreSQL to avoid conflicts with local instances
+- Structuring project as a monorepo with pnpm workspace
+- Using AWS CDK for infrastructure as code with modular stacks
+- Designing security groups to avoid circular dependencies in CDK
 
 ## Known Challenges
-- Loki log aggregation service configuration pending resolution
 - GPU configuration for Whisper transcription in development environment
 - Rate limiting strategy for social media APIs
 - Designing effective content moderation approach
 
 ## Next Steps
-- Begin AWS CDK infrastructure templates (Task 0.3)
-- Create database migration scripts (Task 0.4)
-- Develop seed data scripts (Task 0.5)
-- Document environment variables (Task 0.6)
+- Complete Phase 0 tasks
+- Begin Phase 1 implementation
+- Set up CI/CD pipeline

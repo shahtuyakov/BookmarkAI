@@ -36,3 +36,6 @@ Thumbs.db
 # Build artifacts
 .next
 .turbo
+# CDK output files
+cdk.out/
+infrastructure/cdk.out/
