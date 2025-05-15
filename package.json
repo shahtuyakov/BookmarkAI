@@ -1,33 +1,49 @@
 {
-    "name": "bookmarkai",
-    "version": "0.1.0",
-    "private": true,
-    "scripts": {
-        "lint": "eslint .",
-        "format": "prettier --write .",
-        "seed:build": "tsc -p scripts/tsconfig.json",
-        "seed": "npm run seed:build && node scripts/dist/seed/index.js",
-        "seed:users": "npm run seed:build && node scripts/dist/seed/index.js --users",
-        "seed:shares": "npm run seed:build && node scripts/dist/seed/index.js --shares",
-        "seed:transcripts": "npm run seed:build && node scripts/dist/seed/index.js --transcripts",
-        "seed:embeddings": "npm run seed:build && node scripts/dist/seed/index.js --embeddings",
-        "seed:verify": "npm run seed:build && node scripts/dist/seed/verify.js",
-        "seed:all": "npm run seed:build && node scripts/dist/seed/index.js --all",
-        "seed:ci": "npm run seed:build && NODE_ENV=ci node scripts/dist/seed/ci.js",
-        "seed:ci:local": "npm run seed:build && NODE_ENV=ci-local node scripts/dist/seed/ci.js",
-        "seed:clean": "npm run seed:build && CLEAN_SEED=true node scripts/dist/seed/ci.js"  
-    },
-    "engines": {
-        "node": ">=18.0.0",
-        "pnpm": ">=8.0.0"
-    },
-    "dependencies": {
-        "ioredis": "^5.6.1",
-        "pg": "^8.16.0"
-    },
-    "devDependencies": {
-        "typescript": "^5.0.0",
-        "@types/pg": "^8.10.9",
-        "@types/ioredis": "^5.0.0"
-    }
+  "name": "bookmarkai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "ts-prune": "ts-prune -p .",
+    "prepare": "husky install",
+    "seed:build": "tsc -p scripts/tsconfig.json",
+    "seed": "npm run seed:build && node scripts/dist/seed/index.js",
+    "seed:users": "npm run seed:build && node scripts/dist/seed/index.js --users",
+    "seed:shares": "npm run seed:build && node scripts/dist/seed/index.js --shares",
+    "seed:transcripts": "npm run seed:build && node scripts/dist/seed/index.js --transcripts",
+    "seed:embeddings": "npm run seed:build && node scripts/dist/seed/index.js --embeddings",
+    "seed:verify": "npm run seed:build && node scripts/dist/seed/verify.js",
+    "seed:all": "npm run seed:build && node scripts/dist/seed/index.js --all",
+    "seed:ci": "npm run seed:build && NODE_ENV=ci node scripts/dist/seed/ci.js",
+    "seed:ci:local": "npm run seed:build && NODE_ENV=ci-local node scripts/dist/seed/ci.js",
+    "seed:clean": "npm run seed:build && CLEAN_SEED=true node scripts/dist/seed/ci.js"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "dependencies": {
+    "ioredis": "^5.6.1",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-unused-imports": "^3.0.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.1",
+    "pyright": "^1.1.350",
+    "ts-prune": "^0.10.3",
+    "typescript": "^5.0.0",
+    "@types/pg": "^8.10.9",
+    "@types/ioredis": "^5.0.0"
+  }
 }

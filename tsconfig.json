@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  },
+  "references": [
+    { "path": "./packages/api-gateway" },
+    { "path": "./packages/extension" },
+    { "path": "./packages/fetchers" },
+    { "path": "./packages/mobile" },
+    { "path": "./packages/orchestrator" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/web" },
+    { "path": "./scripts" }
+  ]
+}

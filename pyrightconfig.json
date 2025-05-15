@@ -1,0 +1,14 @@
+{
+  "include": ["python"],
+  "exclude": ["**/node_modules", "**/__pycache__", "**/.*"],
+  "ignore": ["python/**/tests"],
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "pythonVersion": "3.9",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportUnusedImport": "warning",
+  "reportUnusedVariable": "warning",
+  "reportUnusedFunction": "warning",
+  "reportUnusedClass": "warning"
+}
