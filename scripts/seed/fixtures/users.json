@@ -1,0 +1,9 @@
+{
+    "users": [
+      { "id": "81f9a979-367e-40e2-8df0-5501705c95d0", "email": "alex1@example.com", "name": "Alex Smith", "password": "defaultpassword" },
+      { "id": "b0f24e05-967a-45a1-9c45-8f171c539c62", "email": "sam1@example.com", "name": "Sam Johnson", "password": "defaultpassword" },
+      { "id": "c6f3d76d-107c-4c4c-99f0-3e5a9f0bed92", "email": "taylor1@example.com", "name": "Taylor Wong", "password": "defaultpassword" },
+      { "id": "d7f48b27-327c-4848-99f0-3e5a9f0bed92", "email": "jordan1@example.com", "name": "Jordan Rivera", "password": "defaultpassword" },
+      { "id": "e8f59c39-547d-4a4a-99f0-3e5a9f0bed92", "email": "casey1@example.com", "name": "Casey Johnson", "password": "defaultpassword" }
+    ]
+  }

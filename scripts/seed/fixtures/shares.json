@@ -1,0 +1,18 @@
+[
+    {
+        "id": "a7c81a98-cfd0-4c69-85fb-e9ab901b0d14",
+        "user_id": "81f9a979-367e-40e2-8df0-5501705c95d0", 
+        "url": "https://www.reddit.com/r/programming/comments/abcdef/interesting_programming_tips/",
+        "platform": "reddit",
+        "status": "completed",
+        "idempotency_key": "def456"
+      },
+      {
+        "id": "b2c6d8e1-3f4a-5b6c-7d8e-9f0a1b2c3d4e",
+        "user_id": "c6f3d76d-107c-4c4c-99f0-3e5a9f0bed92", 
+        "url": "https://twitter.com/techguru/status/1234567890123456789",
+        "platform": "twitter",
+        "status": "completed",
+        "idempotency_key": "ghi789"
+      }    
+]
