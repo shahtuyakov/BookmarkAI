@@ -15,6 +15,13 @@
       "when": 1747312547288,
       "tag": "0001_daffy_wind_dancer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1747431291649,
+      "tag": "0002_sticky_shaman",
+      "breakpoints": true
     }
   ]
 }

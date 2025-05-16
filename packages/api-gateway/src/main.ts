@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
+import fastifyCookie from '@fastify/cookie';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -11,6 +12,9 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter({ logger: true }),
   );
+
+  // Register cookie parser
+  await app.register(fastifyCookie);
 
   // Apply global validation pipe
   app.useGlobalPipes(
@@ -25,7 +29,10 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // Enable CORS for development
-  app.enableCors();
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
 
   // Start the server
   const port = process.env.PORT || 3001;
