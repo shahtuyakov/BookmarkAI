@@ -1,10 +1,4 @@
-ALTER TABLE "users" ADD COLUMN "role" varchar(50) NOT NULL DEFAULT 'user';
-ALTER TABLE "users" ADD COLUMN "refresh_hash" text;
-ALTER TABLE "users" ADD COLUMN "refresh_family_id" uuid;
-ALTER TABLE "users" ADD COLUMN "last_login" timestamp;
-ALTER TABLE "users" ADD COLUMN "failed_attempts" integer DEFAULT 0;
-ALTER TABLE "users" ADD COLUMN "failed_attempts_reset_at" timestamp;
-ALTER TABLE "users" ADD COLUMN "active" boolean NOT NULL DEFAULT true;
+-- Migration: Add email verification and password reset fields
 ALTER TABLE IF EXISTS "users" ADD COLUMN IF NOT EXISTS "email_verified" boolean NOT NULL DEFAULT false;
 ALTER TABLE IF EXISTS "users" ADD COLUMN IF NOT EXISTS "verification_token" text;
 ALTER TABLE IF EXISTS "users" ADD COLUMN IF NOT EXISTS "verification_token_expiry" timestamp;

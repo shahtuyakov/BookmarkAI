@@ -1,14 +1,18 @@
-import { Injectable, Logger, ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, ConflictException, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { DrizzleService } from '../../../database/services/drizzle.service';
 import { PasswordService } from './password.service';
 import { KmsJwtService, TokenResponse } from './kms-jwt.service';
+import { EmailService } from './email.service';
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and } from 'drizzle-orm';
+import { randomBytes } from 'crypto';
+import { eq, and, lt, isNull, gt } from 'drizzle-orm';
 import * as schema from '../../../db/schema';
 import { users } from '../../../db/schema';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { RefreshTokenDto } from '../dto/refresh.dto';
+import { ResetPasswordRequestDto } from '../dto/reset-password-request.dto';
+import { ResetPasswordDto } from '../dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -17,7 +21,8 @@ export class AuthService {
   constructor(
     private readonly db: DrizzleService,
     private readonly passwordService: PasswordService,
-    private readonly kmsJwtService: KmsJwtService
+    private readonly kmsJwtService: KmsJwtService,
+    private readonly emailService: EmailService
   ) {}
 
   /**
@@ -44,6 +49,10 @@ export class AuthService {
       // Generate refresh family ID
       const refreshFamilyId = uuidv4();
 
+      // Generate verification token
+      const verificationToken = this.generateToken();
+      const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
       // Create the user
       const [newUser] = await this.db.database
         .insert(users)
@@ -53,8 +62,23 @@ export class AuthService {
           password: hashedPassword,
           role: 'user',
           refreshFamilyId,
+          emailVerified: false,
+          verificationToken,
+          verificationTokenExpiry,
+          active: true,
         })
-        .returning({ id: users.id, email: users.email, role: users.role });
+        .returning({ id: users.id, email: users.email, role: users.role, name: users.name });
+
+      // Send verification email
+      const emailSent = await this.emailService.sendVerificationEmail(
+        email,
+        name,
+        verificationToken
+      );
+
+      if (!emailSent) {
+        this.logger.warn(`Failed to send verification email to ${email}`);
+      }
 
       // Generate tokens
       const tokens = await this.kmsJwtService.createTokens(newUser.id, newUser.email, newUser.role);
@@ -101,6 +125,11 @@ export class AuthService {
         throw new UnauthorizedException('Invalid credentials');
       }
 
+      // Check if account is active
+      if (!foundUser.active) {
+        throw new UnauthorizedException('Account is inactive');
+      }
+
       // Reset failed attempts on successful login
       if (foundUser.failedAttempts > 0) {
         await this.resetFailedAttempts(foundUser.id);
@@ -129,6 +158,228 @@ export class AuthService {
       }
       this.logger.error(`Login failed: ${error.message}`);
       throw new BadRequestException('Login failed');
+    }
+  }
+
+  /**
+   * Verify email with token
+   */
+  async verifyEmail(token: string): Promise<boolean> {
+    try {
+      // Find user with matching verification token and not expired
+      const now = new Date();
+      const user = await this.db.database
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.verificationToken, token),
+            eq(users.emailVerified, false),
+            // Use gt (greater than) with column as first parameter
+            gt(users.verificationTokenExpiry, now)
+          )
+        )
+        .limit(1);
+
+      if (user.length === 0) {
+        throw new BadRequestException('Invalid or expired verification token');
+      }
+
+      // Update user to mark email as verified
+      await this.db.database
+        .update(users)
+        .set({
+          emailVerified: true,
+          verificationToken: null,
+          verificationTokenExpiry: null,
+        })
+        .where(eq(users.id, user[0].id));
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Email verification failed: ${error.message}`);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Email verification failed');
+    }
+  }
+
+  /**
+   * Resend verification email
+   */
+  async resendVerificationEmail(email: string): Promise<boolean> {
+    try {
+      // Find user by email
+      const user = await this.db.database
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (user.length === 0) {
+        throw new NotFoundException('User not found');
+      }
+
+      const foundUser = user[0];
+
+      // Check if email is already verified
+      if (foundUser.emailVerified) {
+        throw new BadRequestException('Email is already verified');
+      }
+
+      // Generate new verification token
+      const verificationToken = this.generateToken();
+      const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      // Update user with new token
+      await this.db.database
+        .update(users)
+        .set({
+          verificationToken,
+          verificationTokenExpiry,
+        })
+        .where(eq(users.id, foundUser.id));
+
+      // Send verification email
+      const emailSent = await this.emailService.sendVerificationEmail(
+        foundUser.email,
+        foundUser.name,
+        verificationToken
+      );
+
+      if (!emailSent) {
+        this.logger.warn(`Failed to send verification email to ${foundUser.email}`);
+        throw new BadRequestException('Failed to send verification email');
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Resend verification email failed: ${error.message}`);
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to resend verification email');
+    }
+  }
+
+  /**
+   * Request password reset
+   */
+  async requestPasswordReset(dto: ResetPasswordRequestDto): Promise<boolean> {
+    const { email } = dto;
+
+    try {
+      // Find user by email
+      const user = await this.db.database
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (user.length === 0) {
+        // Don't reveal if user exists
+        return true;
+      }
+
+      const foundUser = user[0];
+
+      // Check if account is active
+      if (!foundUser.active) {
+        // Don't reveal account status
+        return true;
+      }
+
+      // Generate reset token
+      const resetToken = this.generateToken();
+      const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      // Update user with reset token
+      await this.db.database
+        .update(users)
+        .set({
+          resetPasswordToken: resetToken,
+          resetPasswordTokenExpiry: resetTokenExpiry,
+        })
+        .where(eq(users.id, foundUser.id));
+
+      // Send password reset email
+      const emailSent = await this.emailService.sendPasswordResetEmail(
+        foundUser.email,
+        resetToken
+      );
+
+      if (!emailSent) {
+        this.logger.warn(`Failed to send password reset email to ${foundUser.email}`);
+        throw new BadRequestException('Failed to send password reset email');
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Password reset request failed: ${error.message}`);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Password reset request failed');
+    }
+  }
+
+  /**
+   * Reset password with token
+   */
+  async resetPassword(dto: ResetPasswordDto): Promise<boolean> {
+    const { token, password } = dto;
+
+    try {
+      // Find user with matching reset token and not expired
+      const now = new Date();
+      const user = await this.db.database
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.resetPasswordToken, token),
+            // Use gt (greater than) with column as first parameter
+            gt(users.resetPasswordTokenExpiry, now)
+          )
+        )
+        .limit(1);
+
+      if (user.length === 0) {
+        throw new BadRequestException('Invalid or expired reset token');
+      }
+
+      const foundUser = user[0];
+
+      // Hash the new password
+      const hashedPassword = await this.passwordService.hashPassword(password);
+
+      // Update user with new password and clear reset token
+      await this.db.database
+        .update(users)
+        .set({
+          password: hashedPassword,
+          resetPasswordToken: null,
+          resetPasswordTokenExpiry: null,
+        })
+        .where(eq(users.id, foundUser.id));
+
+      // Invalidate all refresh tokens for this user
+      await this.db.database
+        .update(users)
+        .set({
+          refreshHash: null,
+          refreshFamilyId: uuidv4(), // Generate new family ID to invalidate all refresh tokens
+        })
+        .where(eq(users.id, foundUser.id));
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Password reset failed: ${error.message}`);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Password reset failed');
     }
   }
 
@@ -211,6 +462,46 @@ export class AuthService {
       this.logger.error(`Logout failed: ${error.message}`);
       throw new BadRequestException('Logout failed');
     }
+  }
+
+  /**
+   * Get user profile
+   */
+  async getUserProfile(userId: string) {
+    try {
+      const user = await this.db.database
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          role: users.role,
+          emailVerified: users.emailVerified,
+          lastLogin: users.lastLogin,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (user.length === 0) {
+        throw new NotFoundException('User not found');
+      }
+
+      return user[0];
+    } catch (error) {
+      this.logger.error(`Get user profile failed: ${error.message}`);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to get user profile');
+    }
+  }
+
+  /**
+   * Generate a random token
+   */
+  private generateToken(): string {
+    return randomBytes(32).toString('hex');
   }
 
   /**

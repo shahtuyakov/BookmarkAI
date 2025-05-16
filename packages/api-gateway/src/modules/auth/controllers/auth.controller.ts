@@ -1,8 +1,11 @@
-import { Body, Controller, Post, HttpCode, HttpStatus, UseGuards, Req, Res, Logger } from '@nestjs/common';
+import { Body, Controller, Post, HttpCode, HttpStatus, UseGuards, Req, Res, Logger, Get, Query } from '@nestjs/common';
 import { AuthService } from '../services/auth.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { RefreshTokenDto } from '../dto/refresh.dto';
+import { ResetPasswordRequestDto } from '../dto/reset-password-request.dto';
+import { ResetPasswordDto } from '../dto/reset-password.dto';
+import { ResendVerificationDto } from '../dto/resend-verification.dto';
 import { Public } from '../decorators/public.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { Request, Response } from 'express';
@@ -12,12 +15,14 @@ import { ConfigService } from '../../../config/services/config.service';
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
   private readonly isProduction: boolean;
+  private readonly webAppUrl: string;
 
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {
     this.isProduction = this.configService.isProduction();
+    this.webAppUrl = this.configService.get('WEB_APP_URL', 'http://localhost:3000');
   }
 
   /**
@@ -102,6 +107,82 @@ export class AuthController {
     await this.authService.logout(user.id, body.refreshToken);
     
     return { success: true };
+  }
+
+  /**
+   * Verify email
+   */
+  @Public()
+  @Get('verify-email')
+  async verifyEmail(
+    @Query('token') token: string,
+    @Res() response: Response,
+  ) {
+    try {
+      await this.authService.verifyEmail(token);
+      
+      // Redirect to the web app with success message
+      return response.redirect(`${this.webAppUrl}/auth/email-verified?success=true`);
+    } catch (error) {
+      // Redirect to the web app with error message
+      return response.redirect(`${this.webAppUrl}/auth/email-verified?success=false&error=${error.message}`);
+    }
+  }
+
+  /**
+   * Resend verification email
+   */
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    await this.authService.resendVerificationEmail(dto.email);
+    return { success: true, message: 'Verification email sent if the account exists' };
+  }
+
+  /**
+   * Request password reset
+   */
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() dto: ResetPasswordRequestDto) {
+    await this.authService.requestPasswordReset(dto);
+    return { success: true, message: 'Password reset email sent if the account exists' };
+  }
+
+  /**
+   * Reset password with token (form submission)
+   */
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.authService.resetPassword(dto);
+    return { success: true, message: 'Password has been reset successfully' };
+  }
+
+  /**
+   * Get reset password form (page render or redirect)
+   */
+  @Public()
+  @Get('reset-password')
+  async getResetPasswordPage(
+    @Query('token') token: string,
+    @Res() response: Response,
+  ) {
+    // Redirect to the web app reset password page with the token
+    return response.redirect(`${this.webAppUrl}/auth/reset-password?token=${token}`);
+  }
+
+  /**
+   * Get user profile
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  async getProfile(@Req() request: Request) {
+    const user = request.user as { id: string };
+    return this.authService.getUserProfile(user.id);
   }
 
   /**

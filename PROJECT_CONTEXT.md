@@ -8,9 +8,9 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 
 ## Current Status
 
-- **Phase**: 1 - MVP Skeleton (8% complete)
+- **Phase**: 1 - MVP Skeleton (16% complete)
 - **Sprint**: 1 (May 10-24)
-- **Recent Milestone**: ✅ Phase 0 - Local Dev Environment (Completed May 17)
+- **Recent Milestone**: ✅ JWT Auth with Email Verification (Completed May 17)
 - **Current Milestone**: 🏗️ Phase 1 - MVP Skeleton (Target: May 31)
 
 ## Phase Progress
@@ -27,10 +27,10 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
   - ✅ 0.8: Complete - Configure ESLint/Prettier and Git hooks
   - ✅ 0.9: Complete - Implement secrets handling sandbox
 
-- **Phase 1**: 🏗️ 8% complete
+- **Phase 1**: 🏗️ 16% complete
 
   - ✅ 1.1: Complete - Create NestJS+Fastify project structure
-  - ⏱️ 1.2: Not started - Implement JWT auth middleware
+  - ✅ 1.2: Complete - Implement JWT auth middleware with email verification
   - ⏱️ 1.3: Not started - Develop health check endpoint
   - ⏱️ 1.4: Not started - Implement /shares endpoint
   - ⏱️ 1.5-1.14: Not started
@@ -43,39 +43,50 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - **API Framework**: NestJS with Fastify adapter
 - **Client**: React Native (mobile), Next.js 14 (web), WebExtension (planned)
 - **Backend**: NestJS with Fastify, BullMQ (planned)
+- **Authentication**: JWT with AWS KMS, Refresh tokens, Email verification
 - **Data**: PostgreSQL 15 + pgvector, Redis, S3
 - **Infrastructure**: AWS CDK (TypeScript)
 - **ORM**: Drizzle ORM
+- **Email**: Ethereal (dev), AWS SES (production)
+
+## Recent Enhancements
+
+- **Enhanced Authentication System**:
+  - Email verification flow with secure tokens
+  - Password reset functionality
+  - User profile management
+  - Role-based access control
+  - Comprehensive security measures
 
 ## High-Level Architecture
 
-1. **Capture Layer**: Mobile share extensions & browser extension for content saving
-2. **API Gateway**: NestJS+Fastify application with modular structure
-3. **Orchestration Worker**: Processes events, dispatches sub-tasks (planned)
-4. **Python ML Workers**: Caption extraction, transcription, summarization (planned)
-5. **Post-processing**: Finalizes records, marks status (planned)
-6. **Inbox/Search**: Vector similarity search via pgvector (planned)
-7. **Digest Service**: Weekly stats and email digests (planned)
+1. **User Authentication**: JWT-based auth with refresh tokens and email verification
+2. **Capture Layer**: Mobile share extensions & browser extension for content saving
+3. **API Gateway**: NestJS+Fastify application with modular structure
+4. **Orchestration Worker**: Processes events, dispatches sub-tasks (planned)
+5. **Python ML Workers**: Caption extraction, transcription, summarization (planned)
+6. **Post-processing**: Finalizes records, marks status (planned)
+7. **Inbox/Search**: Vector similarity search via pgvector (planned)
+8. **Digest Service**: Weekly stats and email digests (planned)
 
 ## Current Focus
 
 - Implementing Phase 1 MVP Skeleton
-- Next task: JWT auth middleware (Task 1.2)
-- Expanding health check endpoint (Task 1.3)
-- Implementing /shares endpoint (Task 1.4)
+- Next task: Develop health check endpoint (Task 1.3)
+- Followed by: Implement /shares endpoint (Task 1.4)
 
 ## Recent Decisions
 
-- Implemented modular monolith architecture using NestJS with Fastify (ADR-001)
-- Integrated existing Drizzle ORM setup with NestJS dependency injection
-- Selected port 3001 for the API gateway to avoid conflicts
-- Used global modules for configuration and database access
-- Implemented custom pgvector type compatible with Drizzle ORM v0.43.1
+- Enhanced JWT auth with email verification and password reset
+- Implemented token family tracking to prevent refresh token attacks
+- Used Ethereal for local email testing to avoid actual sending
+- Added user enumeration protection in security-sensitive flows
+- Created both Bearer token and cookie-based auth for different clients
 
 ## Known Challenges
 
-- Ensuring proper module boundaries as the application grows
-- Integrating authentication with future mobile and web clients
+- Ensuring proper auth integration with mobile and extension clients
+- Designing efficient /shares endpoint with proper security
 - Planning microservice extraction path for ML components
 - Designing effective vector search strategies for content retrieval
 
@@ -84,3 +95,10 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - Complete remaining tasks in Phase 1
 - Set up CI/CD pipeline for automated deployment
 - Begin planning for Phase 2 (Metadata + Caption Fetch)
+
+## Documentation Updates
+
+- Added ADR-002.1 for enhanced authentication
+- Created comprehensive auth API documentation
+- Added user management and email templates guides
+- Developed auth developer guide for implementers

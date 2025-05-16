@@ -12,6 +12,11 @@ export const users = pgTable('users', {
   failedAttempts: integer('failed_attempts').default(0),
   failedAttemptsResetAt: timestamp('failed_attempts_reset_at'),
   active: boolean('active').notNull().default(true),
+  emailVerified: boolean('email_verified').notNull().default(false),
+  verificationToken: text('verification_token'),
+  verificationTokenExpiry: timestamp('verification_token_expiry'),
+  resetPasswordToken: text('reset_password_token'),
+  resetPasswordTokenExpiry: timestamp('reset_password_token_expiry'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });

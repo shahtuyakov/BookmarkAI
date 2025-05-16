@@ -1,0 +1,98 @@
+# ADR 002.1: Enhanced Authentication with Email Verification and Password Reset
+
+* **Status**: Accepted  
+* **Date**: 2025-05-17  
+* **Authors**: @bookmarkai-core  
+* **Supersedes**: ADR-0002 (partially extends it)
+* **Superseded by**: —  
+
+## 1 — Context
+
+While ADR-002 established our core JWT authentication system, we identified the need for additional user management features:
+
+* Email verification to ensure valid user emails and reduce spam accounts
+* Password reset functionality to provide self-service account recovery
+* Enhanced user profile management
+* Account status tracking
+
+These features are industry-standard for secure applications and needed for BookmarkAI to provide a complete user management experience.
+
+## 2 — Decision
+
+We have implemented an enhanced authentication system that expands on our JWT-based auth with the following additions:
+
+| Feature | Implementation Details |
+|---------|------------------------|
+| **Email Verification** | • Verification tokens sent via email<br>• 24-hour token expiration<br>• Resend capability for tokens<br>• Status tracking in user profile |
+| **Password Reset** | • Secure reset tokens via email<br>• 1-hour token expiration<br>• Automatic refresh token invalidation on reset<br>• Protection against user enumeration |
+| **Email Service** | • Ethereal-based fake SMTP for development<br>• AWS SES integration for production<br>• HTML email templates with inline styling<br>• Tracking for email delivery status |
+| **User Status** | • Email verification status tracking<br>• Last login timestamp<br>• Failed login attempt tracking<br>• Account active/inactive status |
+
+## 3 — Technical Implementation
+
+### User Schema Enhancements
+
+```sql
+-- Added fields to users table
+ALTER TABLE "users" ADD COLUMN "email_verified" boolean NOT NULL DEFAULT false;
+ALTER TABLE "users" ADD COLUMN "verification_token" text;
+ALTER TABLE "users" ADD COLUMN "verification_token_expiry" timestamp;
+ALTER TABLE "users" ADD COLUMN "reset_password_token" text;
+ALTER TABLE "users" ADD COLUMN "reset_password_token_expiry" timestamp;
+```
+
+### New Endpoints
+
+| Endpoint | Method | Purpose | Authentication |
+|----------|--------|---------|----------------|
+| `/auth/register` | POST | Already existed, now includes email verification | Public |
+| `/auth/verify-email` | GET | Verifies email via token | Public |
+| `/auth/resend-verification` | POST | Resends verification email | Public |
+| `/auth/forgot-password` | POST | Initiates password reset process | Public |
+| `/auth/reset-password` | POST | Completes password reset with token | Public |
+| `/auth/reset-password` | GET | Renders or redirects to reset form | Public |
+| `/auth/profile` | GET | Retrieves user profile information | Protected |
+
+### Email Service
+
+Implemented dual-mode email service:
+* **Development**: Uses Ethereal for fake SMTP with preview URLs
+* **Production**: Uses AWS SES for reliable email delivery
+
+## 4 — Rationale
+
+* **Email verification** prevents fake accounts and protects against spam registrations
+* **Self-service password reset** reduces support burden and improves user experience
+* **Secure token management** ensures all token-based flows maintain proper security
+* **Account status tracking** provides better audit capabilities and security control
+
+## 5 — Consequences
+
+* **Work Impact**: 
+  * Additional database schema changes
+  * New endpoints and service components
+  * Integration with email services
+
+* **Security Considerations**:
+  * Tokens use secure randomization and appropriate expiration times
+  * Sensitive flows protect against user enumeration
+  * Failed login tracking helps prevent brute force attacks
+
+* **User Experience**:
+  * Users can recover accounts independently
+  * Email verification improves trust
+  * Profile tracking provides transparency
+
+## 6 — Alternative Approaches Considered
+
+| Approach | Pros | Cons | Decision |
+|----------|------|------|----------|
+| **Third-party auth provider** | Feature-rich, managed service | Vendor lock-in, less customization | Rejected |
+| **Magic links only (no passwords)** | Simpler UX, no password storage | Email dependence, less secure for shared devices | Rejected |
+| **SMS verification** | Better verification rates | Higher cost, privacy concerns | Consider for future 2FA |
+
+## 7 — Related Documentation
+
+* [API Documentation](../api/auth-endpoints.md)
+* [Email Templates Guide](../guides/email-templates.md)
+* [User Management Flow](../guides/user-management.md)
