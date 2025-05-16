@@ -24,6 +24,7 @@ module.exports = {
     '.eslintrc.js',
     '.lintstagedrc.js',
     '.prettierrc.js',
+    'scripts/**/*.js',
   ],
   env: {
     node: true,
