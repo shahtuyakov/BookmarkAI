@@ -7,19 +7,35 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "ts-node --transpile-only src/db/migrate.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.11.0",
   "dependencies": {
+    "@nestjs/common": "^11.1.1",
+    "@nestjs/core": "^11.1.1",
+    "@nestjs/platform-fastify": "^11.1.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
     "drizzle-orm": "^0.43.1",
-    "pg": "^8.16.0"
+    "fastify": "^5.3.3",
+    "pg": "^8.16.0",
+    "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
+    "@nestjs/cli": "^11.0.7",
     "@types/pg": "^8.15.1",
     "dotenv": "^16.5.0",
-    "drizzle-kit": "^0.31.1"
+    "drizzle-kit": "^0.31.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   }
 }
