@@ -9,14 +9,6 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "references": [
-    { "path": "./packages/api-gateway" },
-    { "path": "./packages/extension" },
-    { "path": "./packages/fetchers" },
-    { "path": "./packages/mobile" },
-    { "path": "./packages/orchestrator" },
-    { "path": "./packages/shared" },
-    { "path": "./packages/web" },
-    { "path": "./scripts" }
-  ]
+  "include": ["scripts/**/*.ts"],
+  "exclude": ["**/node_modules", "**/.*/"]
 }
