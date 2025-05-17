@@ -24,7 +24,7 @@ const rl = readline.createInterface({
 
 // Test URLs
 const TEST_URLS = [
-  'https://www.tiktok.com/@user/video/1234567897',
+  'https://www.tiktok.com/@user/video/1234567890',
   'https://www.reddit.com/r/programming/comments/abc123/title',
   'https://twitter.com/user/status/1234567890',
   'https://x.com/user/status/1234567890'
@@ -184,16 +184,19 @@ async function createShare() {
  */
 async function testIdempotency() {
   try {
-    // Use a fixed idempotency key
-    const idempotencyKey = '11111111-1111-1111-1111-111111111111';
+    // Generate a fresh UUID for this test run to avoid conflicts with previous tests
+    const idempotencyKey = uuidv4();
+    // Use a fixed URL - both must match for idempotency
+    const testUrl = 'https://www.tiktok.com/@user/video/12345-idempotency-test';
     
-    colorLog('\n🔄 Testing idempotency (creating share with same key)...', 'info');
+    colorLog('\n🔄 Testing idempotency (creating same share twice with same key)...', 'info');
+    colorLog(`Using idempotency key: ${idempotencyKey}`, 'info');
     
     // First request
-    colorLog('First request:', 'info');
+    colorLog('\nFirst request:', 'info');
     const response1 = await axios.post(
       `${API_URL}/v1/shares`, 
-      { url: TEST_URLS[0] },
+      { url: testUrl },
       { 
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -205,11 +208,11 @@ async function testIdempotency() {
     
     console.log(JSON.stringify(response1.data, null, 2));
     
-    // Second request with same key
-    colorLog('\nSecond request with same idempotency key:', 'info');
+    // Second request with same key AND same URL
+    colorLog('\nSecond request with same idempotency key and same URL:', 'info');
     const response2 = await axios.post(
       `${API_URL}/v1/shares`, 
-      { url: TEST_URLS[0] },
+      { url: testUrl },
       { 
         headers: { 
           'Authorization': `Bearer ${token}`,
