@@ -8,6 +8,7 @@ import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ConfigService } from '../../config/services/config.service';
 import { AuthModule } from '../auth/auth.module';
 import { ErrorService } from './services/error.service';
+import { ShareProcessor } from './queue/share-processor';
 
 /**
  * Module for share management functionality
@@ -17,7 +18,7 @@ import { ErrorService } from './services/error.service';
     // Import AuthModule to access JwtAuthGuard and KmsJwtService
     AuthModule,
     
-    // Register BullMQ queue
+    // Register BullMQ queue with enhanced configuration from ADR
     BullModule.registerQueueAsync({
       name: SHARE_QUEUE.NAME,
       inject: [ConfigService],
@@ -32,8 +33,13 @@ import { ErrorService } from './services/error.service';
             type: 'exponential',
             delay: 5000,
           },
-          removeOnComplete: true,
-          removeOnFail: false,
+          timeout: configService.get('WORKER_TIMEOUT_MS', 30000),
+          removeOnComplete: { 
+            age: configService.get('COMPLETED_JOB_TTL_SECONDS', 86400) // 24 hours
+          },
+          removeOnFail: { 
+            age: configService.get('FAILED_JOB_TTL_SECONDS', 604800) // 7 days
+          },
         },
       }),
     }),
@@ -43,10 +49,14 @@ import { ErrorService } from './services/error.service';
     SharesService, 
     IdempotencyService,
     ErrorService,
-    // Also register ShareProcessor
-    require('./queue/share-processor').ShareProcessor
+    ShareProcessor // Register the processor here
   ],
-  exports: [SharesService, IdempotencyService, ErrorService],
+  exports: [
+    SharesService, 
+    IdempotencyService, 
+    ErrorService,
+    BullModule // Export BullModule so other modules can access the queue
+  ],
 })
 export class SharesModule {
   /**

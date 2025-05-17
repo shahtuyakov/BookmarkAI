@@ -2,6 +2,7 @@ import { Processor, Process } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import { DrizzleService } from '../../../database/services/drizzle.service';
+import { ConfigService } from '../../../config/services/config.service';
 import { shares } from '../../../db/schema/shares';
 import { SHARE_QUEUE } from './share-queue.constants';
 import { eq } from 'drizzle-orm';
@@ -9,22 +10,30 @@ import { ShareStatus } from '../constants/share-status.enum';
 
 /**
  * Processor for share background tasks
- * Note: This is a minimal implementation for Phase 1. It will be expanded in Phase 2.
+ * Note: MVP implementation for Phase 1. Will be expanded in Phase 2 with platform-specific processing.
  */
 @Processor(SHARE_QUEUE.NAME)
 export class ShareProcessor {
   private readonly logger = new Logger(ShareProcessor.name);
+  private readonly processingDelayMs: number;
 
   constructor(
     private readonly db: DrizzleService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    // Get configuration with defaults
+    this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
+  }
 
   /**
    * Process a share
-   * In Phase 1, this just updates the status to 'processing'
+   * In Phase 1, this simulates processing with a delay
    * In Phase 2+, this will integrate with fetchers and ML services
    */
-  @Process(SHARE_QUEUE.JOBS.PROCESS)
+  @Process({
+    name: SHARE_QUEUE.JOBS.PROCESS,
+    concurrency: 3,
+  })
   async processShare(job: Job<{ shareId: string }>) {
     this.logger.log(`Processing share with ID: ${job.data.shareId}`);
     
@@ -40,55 +49,104 @@ export class ShareProcessor {
         throw new Error(`Share with ID ${job.data.shareId} not found`);
       }
       
-      // Update status to "processing"
-      await this.db.database
-        .update(shares)
-        .set({
-          status: ShareStatus.PROCESSING,
-          updatedAt: new Date(),
-        })
-        .where(eq(shares.id, job.data.shareId));
+      // Log URL being processed (key requirement from ADR)
+      this.logger.log(`Processing URL: ${share.url}`);
       
-      this.logger.log(`Updated share ${job.data.shareId} status to "processing"`);
+      // Share is already set to "processing" status from the controller,
+      // but we'll update the timestamp to mark when worker picked it up
+      await this.updateShareStatus(job.data.shareId, ShareStatus.PROCESSING);
       
-      // In Phase 1, we just update the status
-      // In Phase 2, this will trigger content fetchers
+      // Simulate processing time - In Phase 2 this will be replaced with platform-specific processing
+      this.logger.debug(`Simulating processing delay of ${this.processingDelayMs}ms`);
+      await this.delay(this.processingDelayMs);
       
-      // In a real implementation, we would fetch content, extract metadata,
-      // then trigger further jobs for AI processing
+      // In Phase 2, platform-specific processing will happen here
+      // await this.processPlatformContent(share.platform, share.url);
       
-      // For demo purposes, you could add a timeout and then update to DONE
-      // setTimeout(async () => {
-      //   await this.db.database
-      //     .update(shares)
-      //     .set({
-      //       status: ShareStatus.DONE,
-      //       updatedAt: new Date(),
-      //     })
-      //     .where(eq(shares.id, job.data.shareId));
-      //   
-      //   this.logger.log(`Updated share ${job.data.shareId} status to "done"`);
-      // }, 5000);
+      // Update status to "done"
+      await this.updateShareStatus(job.data.shareId, ShareStatus.DONE);
       
-      return { success: true };
+      this.logger.log(`Successfully processed share ${job.data.shareId}`);
+      
+      // Return result for monitoring/visibility
+      return { 
+        id: share.id, 
+        url: share.url, 
+        status: ShareStatus.DONE,
+        processingTimeMs: this.processingDelayMs
+      };
     } catch (error) {
       this.logger.error(`Error processing share ${job.data.shareId}: ${error.message}`, error.stack);
       
-      // Update status to "error"
-      try {
-        await this.db.database
-          .update(shares)
-          .set({
-            status: ShareStatus.ERROR,
-            updatedAt: new Date(),
-          })
-          .where(eq(shares.id, job.data.shareId));
-      } catch (updateError) {
-        this.logger.error(`Failed to update share status: ${updateError.message}`);
+      // Handle different error types
+      if (error.code && typeof error.code === 'string') {
+        // Database errors
+        await this.handleDatabaseError(job.data.shareId, error);
+      } else if (error.name === 'TimeoutError') {
+        // Timeout errors
+        this.logger.error(`Processing timed out for share ${job.data.shareId}`);
+        await this.updateShareStatus(job.data.shareId, ShareStatus.ERROR);
+      } else {
+        // Generic error handling
+        try {
+          await this.updateShareStatus(job.data.shareId, ShareStatus.ERROR);
+        } catch (updateError) {
+          this.logger.error(`Failed to update share status to error: ${updateError.message}`);
+        }
       }
       
       // Re-throw to trigger Bull's retry mechanism
       throw error;
     }
+  }
+
+  /**
+   * Helper to update share status
+   */
+  private async updateShareStatus(shareId: string, status: ShareStatus): Promise<void> {
+    try {
+      await this.db.database
+        .update(shares)
+        .set({
+          status,
+          updatedAt: new Date(),
+        })
+        .where(eq(shares.id, shareId));
+      
+      this.logger.log(`Updated share ${shareId} status to "${status}"`);
+    } catch (error) {
+      this.logger.error(`Failed to update share ${shareId} status to ${status}: ${error.message}`);
+      throw error;  // Rethrow to be handled by the caller
+    }
+  }
+
+  /**
+   * Helper to handle database errors
+   */
+  private async handleDatabaseError(shareId: string, error: any): Promise<void> {
+    this.logger.error(`Database error for share ${shareId}: ${error.message} (Code: ${error.code})`);
+    
+    try {
+      await this.updateShareStatus(shareId, ShareStatus.ERROR);
+    } catch (updateError) {
+      this.logger.error(`Failed to update share status after database error: ${updateError.message}`);
+    }
+  }
+
+  /**
+   * Helper to create a delay (Promise-based setTimeout)
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * In Phase 2, this will process platform-specific content
+   * Currently a placeholder for architecture purposes
+   */
+  private async processPlatformContent(platform: string, url: string): Promise<void> {
+    // This is a placeholder for Phase 2 implementation
+    this.logger.debug(`[Phase 2 Placeholder] Processing ${platform} content from ${url}`);
+    // In Phase 2, this will dispatch to platform-specific processors
   }
 }

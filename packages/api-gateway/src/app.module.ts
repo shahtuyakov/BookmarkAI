@@ -10,7 +10,6 @@ import { ConfigService } from './config/services/config.service';
 
 /**
  * Root module for BookmarkAI API Gateway
- * Follows the modular monolith architecture (ADR-001)
  */
 @Module({
   imports: [
@@ -34,7 +33,6 @@ import { ConfigService } from './config/services/config.service';
     HealthModule,
     AuthModule,
     SharesModule,
-    // More modules will be added as they're implemented
   ],
 })
 export class AppModule {
