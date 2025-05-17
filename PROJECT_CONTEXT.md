@@ -1,4 +1,4 @@
-# BookmarkAI Project Context
+# PROJECT_CONTEXT.md
 
 _Last updated: 2025-05-17_
 
@@ -8,9 +8,11 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 
 ## Current Status
 
-- **Phase**: 1 - MVP Skeleton (25% complete)
+- **Phase**: 1 - MVP Skeleton (26% complete)
 - **Sprint**: 1 (May 10-24)
-- **Recent Milestone**: ✅ Health Check Endpoint (Completed May 17)
+- **Recent Milestones**: 
+  - ✅ JWT Auth with Email Verification (Completed May 17)
+  - ✅ /shares endpoint implementation (Completed May 17)
 - **Current Milestone**: 🏗️ Phase 1 - MVP Skeleton (Target: May 31)
 
 ## Phase Progress
@@ -27,13 +29,14 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
   - ✅ 0.8: Complete - Configure ESLint/Prettier and Git hooks
   - ✅ 0.9: Complete - Implement secrets handling sandbox
 
-- **Phase 1**: 🏗️ 25% complete
+- **Phase 1**: 🏗️ 26% complete
 
   - ✅ 1.1: Complete - Create NestJS+Fastify project structure
   - ✅ 1.2: Complete - Implement JWT auth middleware with email verification
   - ✅ 1.3: Complete - Develop health check endpoint
-  - 🏗️ 1.4: In Progress - Implement /shares endpoint
-  - ⏱️ 1.5-1.14: Not started
+  - ✅ 1.4: Complete - Implement /shares endpoint with idempotency
+  - 🏗️ 1.5: In Progress - Set up BullMQ worker (15%)
+  - ⏱️ 1.6-1.14: Not started
 
 - **Phase 2-7**: ⏱️ Not started
 
@@ -42,7 +45,7 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 - **Languages**: TypeScript (Node 20), Python 3.12
 - **API Framework**: NestJS with Fastify adapter
 - **Client**: React Native (mobile), Next.js 14 (web), WebExtension (planned)
-- **Backend**: NestJS with Fastify, BullMQ (planned)
+- **Backend**: NestJS with Fastify, BullMQ (initial integration)
 - **Authentication**: JWT with AWS KMS, Refresh tokens, Email verification
 - **Data**: PostgreSQL 15 + pgvector, Redis, S3
 - **Infrastructure**: AWS CDK (TypeScript)
@@ -51,25 +54,27 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 
 ## Recent Enhancements
 
-- **Comprehensive Health Check System**:
-  - Database and Redis connectivity verification
-  - Performance metrics for each service
-  - Appropriate HTTP status codes based on system health
-  - Detailed reporting for monitoring integration
-  
 - **Enhanced Authentication System**:
   - Email verification flow with secure tokens
   - Password reset functionality
   - User profile management
   - Role-based access control
-  - Comprehensive security measures
+
+- **Shares API Endpoint**:
+  - Implemented RESTful /shares endpoint with proper validation
+  - Added platform detection (TikTok, Reddit, Twitter, X)
+  - Integrated with BullMQ for background processing
+  - Implemented cursor-based pagination for efficient listing
+  - Added Redis-based idempotency handling with 24h TTL
+  - Created comprehensive error handling system
+  - Added rate limiting (10 req/10s) to prevent abuse
 
 ## High-Level Architecture
 
 1. **User Authentication**: JWT-based auth with refresh tokens and email verification
 2. **Capture Layer**: Mobile share extensions & browser extension for content saving
 3. **API Gateway**: NestJS+Fastify application with modular structure
-4. **Orchestration Worker**: Processes events, dispatches sub-tasks (planned)
+4. **Orchestration Worker**: Processes events, dispatches sub-tasks (in progress)
 5. **Python ML Workers**: Caption extraction, transcription, summarization (planned)
 6. **Post-processing**: Finalizes records, marks status (planned)
 7. **Inbox/Search**: Vector similarity search via pgvector (planned)
@@ -77,25 +82,27 @@ BookmarkAI captures social-media content (TikTok, Reddit, X) via user-initiated 
 
 ## Current Focus
 
-- Implementing /shares endpoint (Task 1.4)
-- Design URL normalization and platform detection logic
-- Create share creation workflow with idempotency protection
+- Completing Phase 1 MVP Skeleton
+- Next task: Expand BullMQ worker setup (Task 1.5)
+- Followed by: Create React Native mobile app shell (Task 1.6)
 
 ## Recent Decisions
 
-- Implemented health checks for all critical infrastructure components
-- Added response time metrics to health checks for performance monitoring
-- Used HTTP status codes to properly indicate system health
-- Made health endpoint publicly accessible for monitoring systems
+- Enhanced JWT auth with email verification and password reset
+- Implemented token family tracking to prevent refresh token attacks
+- Created Redis-based idempotency system for the /shares endpoint
+- Adopted cursor-based pagination for better performance with large datasets
+- Developed comprehensive error handling system with specific error codes
+
+## Known Challenges
+
+- Ensuring proper auth integration with mobile and extension clients
+- Planning microservice extraction path for ML components
+- Designing effective vector search strategies for content retrieval
+- Managing background job reliability with potential rate limiting from external APIs
 
 ## Next Steps
 
-- Complete Task 1.4: /shares endpoint implementation
-- Prepare for Task 1.5: BullMQ worker setup
-- Begin planning for mobile share extensions (Tasks 1.7-1.8)
-
-## Documentation Updates
-
-- Added task documentation for health check endpoint
-- Updated health check testing instructions
-- Documented health check response format and status codes
+- Complete remaining tasks in Phase 1
+- Set up CI/CD pipeline for automated deployment
+- Begin planning for Phase 2 (Metadata + Caption Fetch)

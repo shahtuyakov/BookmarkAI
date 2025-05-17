@@ -1,6 +1,4 @@
-# Testing Instructions for /shares API Endpoint
-
-This document provides step-by-step instructions for testing the newly implemented `/shares` API endpoint with different tools.
+# This document provides step-by-step instructions for testing the newly implemented `/shares` API endpoint with different tools.
 
 ## 1. Using the Interactive Test Script
 
