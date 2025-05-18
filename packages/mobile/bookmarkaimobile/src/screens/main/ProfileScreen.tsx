@@ -1,14 +1,27 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Avatar, Text, Button, Divider, List } from 'react-native-paper';
+import React, { useState } from 'react';
+import { View, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
+import { Avatar, Text, Button, Divider, List, Dialog, Portal } from 'react-native-paper';
 import { useAuth } from '../../contexts/AuthContext';
+import * as biometricService from '../../services/biometrics';
 
 const ProfileScreen = () => {
-  const { user, logout, isLoading } = useAuth();
+  const { 
+    user, 
+    logout, 
+    isLoading, 
+    isBiometricsAvailable, 
+    isBiometricsEnabled, 
+    biometryType,
+    enableBiometrics,
+    disableBiometrics
+  } = useAuth();
+
+  const [confirmLogoutVisible, setConfirmLogoutVisible] = useState(false);
 
   const handleLogout = async () => {
     try {
       await logout();
+      setConfirmLogoutVisible(false);
     } catch (err) {
       console.error('Logout error', err);
     }
@@ -25,12 +38,75 @@ const ProfileScreen = () => {
       .substring(0, 2);
   };
 
+  // Toggle biometric login
+  const toggleBiometrics = async (newValue: boolean) => {
+    try {
+      if (newValue) {
+        // Enable biometrics
+        if (!isBiometricsAvailable) {
+          Alert.alert(
+            'Not Available',
+            'Biometric authentication is not available on this device.'
+          );
+          return;
+        }
+
+        // Authenticate first to confirm identity
+        const authenticated = await biometricService.authenticateWithBiometrics(
+          'Confirm your identity to enable biometric login'
+        );
+
+        if (!authenticated) {
+          Alert.alert(
+            'Authentication Failed',
+            'Biometric authentication failed. Please try again.'
+          );
+          return;
+        }
+
+        const success = await enableBiometrics();
+        if (!success) {
+          Alert.alert(
+            'Error',
+            'Failed to enable biometric login. Please try again.'
+          );
+        }
+      } else {
+        // Disable biometrics
+        const success = await disableBiometrics();
+        if (!success) {
+          Alert.alert(
+            'Error',
+            'Failed to disable biometric login. Please try again.'
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling biometrics:', error);
+      Alert.alert(
+        'Error',
+        'An error occurred while managing biometric settings.'
+      );
+    }
+  };
+
+  // Get biometric display name
+  const getBiometricName = () => {
+    return biometricService.getBiometricName(biometryType);
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Avatar.Text size={80} label={getInitials()} />
         <Text style={styles.name}>{user?.name || 'User'}</Text>
         <Text style={styles.email}>{user?.email || 'user@example.com'}</Text>
+        
+        {user?.lastLogin && (
+          <Text style={styles.lastLogin}>
+            Last login: {new Date(user.lastLogin).toLocaleString()}
+          </Text>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -51,6 +127,50 @@ const ProfileScreen = () => {
           title="Notifications"
           left={props => <List.Icon {...props} icon="bell" />}
           onPress={() => {}}
+        />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Security</Text>
+        
+        {isBiometricsAvailable ? (
+          <List.Item
+            title={`${getBiometricName()} Login`}
+            description={`Sign in without entering your password`}
+            left={props => <List.Icon {...props} icon="fingerprint" />}
+            right={() => (
+              <Switch
+                value={isBiometricsEnabled}
+                onValueChange={toggleBiometrics}
+              />
+            )}
+          />
+        ) : (
+          <List.Item
+            title="Biometric Login"
+            description="Not available on this device"
+            left={props => <List.Icon {...props} icon="fingerprint" />}
+            right={() => (
+              <Switch
+                value={false}
+                disabled={true}
+              />
+            )}
+          />
+        )}
+        
+        <Divider />
+        
+        <List.Item
+          title="Offline Access"
+          description="Allow access to your bookmarks offline"
+          left={props => <List.Icon {...props} icon="wifi-off" />}
+          right={() => (
+            <Switch
+              value={true}
+              onValueChange={() => {}}
+            />
+          )}
         />
       </View>
 
@@ -94,12 +214,26 @@ const ProfileScreen = () => {
 
       <Button
         mode="contained"
-        onPress={handleLogout}
+        onPress={() => setConfirmLogoutVisible(true)}
         loading={isLoading}
         icon="logout"
         style={styles.logoutButton}>
         Sign Out
       </Button>
+      
+      {/* Logout confirmation dialog */}
+      <Portal>
+        <Dialog visible={confirmLogoutVisible} onDismiss={() => setConfirmLogoutVisible(false)}>
+          <Dialog.Title>Sign Out</Dialog.Title>
+          <Dialog.Content>
+            <Text>Are you sure you want to sign out of your account?</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmLogoutVisible(false)}>Cancel</Button>
+            <Button onPress={handleLogout} loading={isLoading}>Sign Out</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
   );
 };
@@ -123,6 +257,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginTop: 5,
+  },
+  lastLogin: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 10,
   },
   section: {
     backgroundColor: '#ffffff',

@@ -1,3 +1,4 @@
+// src/App.tsx
 import React from 'react';
 import { StatusBar, useColorScheme } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
@@ -5,6 +6,8 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import { enableScreens } from 'react-native-screens';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './contexts/AuthContext';
+import { NetworkProvider } from './hooks/useNetworkStatus';
+import { PersistentQueryClientProvider } from './services/queryClient';
 import RootNavigator from './navigation';
 import { useAppTheme, lightTheme, darkTheme } from './theme';
 
@@ -47,12 +50,19 @@ function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
       <PaperProvider theme={paperTheme}>
-        <AuthProvider>
-          <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-          <NavigationContainer theme={navigationTheme}>
-            <RootNavigator />
-          </NavigationContainer>
-        </AuthProvider>
+        {/* Network status provider for offline detection */}
+        <NetworkProvider>
+          {/* React Query provider with persistence */}
+          <PersistentQueryClientProvider>
+            {/* Auth provider for user authentication */}
+            <AuthProvider>
+              <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+              <NavigationContainer theme={navigationTheme}>
+                <RootNavigator />
+              </NavigationContainer>
+            </AuthProvider>
+          </PersistentQueryClientProvider>
+        </NetworkProvider>
       </PaperProvider>
     </SafeAreaProvider>
   );

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { ScrollView, View, StyleSheet, Image, Linking, RefreshControl } from 'react-native';
-import { Text, Card, Button, Chip, Divider, ActivityIndicator, useTheme } from 'react-native-paper';
+import React from 'react';
+import { ScrollView, View, StyleSheet, Linking, RefreshControl } from 'react-native';
+import { Text, Card, Button, Chip, Divider, ActivityIndicator, useTheme, Banner } from 'react-native-paper';
 import { RouteProp } from '@react-navigation/native';
 import { HomeStackParamList } from '../../navigation/types';
-import { sharesAPI, Share } from '../../services/api/shares';
+import { useShareById } from '../../hooks/useShares';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 type Props = {
   route: RouteProp<HomeStackParamList, 'Detail'>;
@@ -26,43 +27,16 @@ const getPlatformColor = (platform: string) => {
 const DetailScreen: React.FC<Props> = ({ route }) => {
   const { id } = route.params;
   const theme = useTheme();
+  const { isConnected } = useNetworkStatus();
   
-  const [share, setShare] = useState<Share | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Fetch share details
-  const fetchShareDetails = async (refresh = false) => {
-    if (refresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    
-    try {
-      const response = await sharesAPI.getShareById(id);
-      setShare(response);
-      setError(null);
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || 
-                           'Failed to load bookmark details. Please try again.';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
-  
-  // Fetch on mount
-  useEffect(() => {
-    fetchShareDetails();
-  }, [id]);
-  
-  // Handle refresh
-  const handleRefresh = () => {
-    fetchShareDetails(true);
-  };
+  // Get share details with React Query
+  const { 
+    share, 
+    isLoading, 
+    isRefreshing, 
+    error, 
+    refresh 
+  } = useShareById(id);
   
   // Handle opening the URL in browser
   const openInBrowser = () => {
@@ -82,9 +56,16 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
   if (error || !share) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error || 'Failed to load content'}</Text>
-        <Button mode="contained" onPress={() => fetchShareDetails()}>
-          Retry
+        <Text style={styles.errorText}>
+          {isConnected 
+            ? 'Failed to load bookmark details. Please try again.' 
+            : 'You\'re offline. Connect to the internet to load the latest details.'}
+        </Text>
+        <Button
+          mode="contained"
+          onPress={() => refresh()}
+          disabled={!isConnected}>
+          {isConnected ? 'Retry' : 'Offline'}
         </Button>
       </View>
     );
@@ -102,6 +83,9 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
     });
   };
   
+  // Check if this is a pending offline share
+  const isPendingOfflineShare = share._isPending === true;
+  
   return (
     <ScrollView
       style={styles.container}
@@ -109,11 +93,41 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}
-          onRefresh={handleRefresh}
+          onRefresh={refresh}
           colors={[theme.colors.primary]}
           tintColor={theme.colors.primary}
+          enabled={isConnected}
         />
       }>
+      
+      {!isConnected && (
+        <Banner
+          visible={true}
+          icon="wifi-off"
+          actions={[
+            {
+              label: 'Dismiss',
+              onPress: () => {},
+            },
+          ]}>
+          You're offline. Some content may not be updated.
+        </Banner>
+      )}
+      
+      {isPendingOfflineShare && (
+        <Banner
+          visible={true}
+          icon="cloud-sync"
+          actions={[
+            {
+              label: 'Dismiss',
+              onPress: () => {},
+            },
+          ]}>
+          This bookmark is waiting to be synced when you're back online.
+        </Banner>
+      )}
+      
       <Card style={styles.card}>
         {share.metadata?.thumbnailUrl && (
           <Card.Cover source={{ uri: share.metadata.thumbnailUrl }} style={styles.coverImage} />

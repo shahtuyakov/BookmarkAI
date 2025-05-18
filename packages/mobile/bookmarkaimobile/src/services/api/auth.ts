@@ -1,16 +1,21 @@
+// src/services/api/auth.ts
 import apiClient, { saveTokens, clearTokens } from './client';
 
 export interface User {
   id: string;
   email: string;
-  name: string;
+  name?: string;
+  emailVerified?: boolean;
+  lastLogin?: string;
+  role?: string;
+  createdAt?: string;
 }
 
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
-  user: User;
+  user?: User; // Make this optional since your server might not include it
 }
 
 export interface LoginRequest {
@@ -37,18 +42,66 @@ export interface ConfirmResetRequest {
 export const authAPI = {
   // Login
   login: async (credentials: LoginRequest) => {
-    const response = await apiClient.post<{data: AuthResponse}>('/auth/login', credentials);
-    const { accessToken, refreshToken, user } = response.data.data;
-    await saveTokens(accessToken, refreshToken);
-    return { user };
+    console.log('Attempting login with:', credentials.email);
+    try {
+      const response = await apiClient.post<{data: AuthResponse}>('/auth/login', credentials);
+      console.log('Full login response:', response.data);
+      
+      const { accessToken, refreshToken } = response.data.data;
+      
+      // If the server doesn't return user info directly, we'll fetch it
+      let user: User;
+      
+      if (response.data.data.user) {
+        // If user data is included in the response
+        user = response.data.data.user;
+        console.log('Login successful with user data from response:', user);
+      } else {
+        // If user data isn't included, fetch it separately using the new token
+        console.log('No user data in response, fetching profile...');
+        await saveTokens(accessToken, refreshToken);
+        user = await authAPI.getUserProfile();
+        console.log('Fetched user profile:', user);
+      }
+      
+      await saveTokens(accessToken, refreshToken);
+      return { user };
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
   },
   
   // Register
   register: async (userData: RegisterRequest) => {
-    const response = await apiClient.post<{data: AuthResponse}>('/auth/register', userData);
-    const { accessToken, refreshToken, user } = response.data.data;
-    await saveTokens(accessToken, refreshToken);
-    return { user };
+    console.log('Attempting registration with:', userData.email);
+    try {
+      const response = await apiClient.post<{data: AuthResponse}>('/auth/register', userData);
+      console.log('Full registration response:', response.data);
+      
+      const { accessToken, refreshToken } = response.data.data;
+      
+      // If the server doesn't return user info directly, we'll fetch it
+      let user: User;
+      
+      if (response.data.data.user) {
+        // If user data is included in the response
+        user = response.data.data.user;
+        console.log('Registration successful with user data from response:', user);
+      } else {
+        // If user data isn't included, fetch it separately
+        console.log('No user data in response, fetching profile...');
+        await saveTokens(accessToken, refreshToken);
+        user = await authAPI.getUserProfile();
+        console.log('Fetched user profile:', user);
+      }
+      
+      await saveTokens(accessToken, refreshToken);
+      return { user };
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
+    }
   },
   
   // Logout
@@ -66,7 +119,9 @@ export const authAPI = {
   
   // Get user profile
   getUserProfile: async () => {
+    console.log('Fetching user profile...');
     const response = await apiClient.get<{data: User}>('/auth/profile');
+    console.log('User profile response:', response.data);
     return response.data.data;
   },
   
@@ -78,5 +133,13 @@ export const authAPI = {
   // Reset password with token
   resetPassword: async (data: ConfirmResetRequest) => {
     await apiClient.post('/auth/reset-password', data);
+  },
+  
+  // Refresh token
+  refreshToken: async (refreshToken: string) => {
+    const response = await apiClient.post<{data: AuthResponse}>('/auth/refresh', { refreshToken });
+    const { accessToken, refreshToken: newRefreshToken } = response.data.data;
+    await saveTokens(accessToken, newRefreshToken);
+    return { accessToken, refreshToken: newRefreshToken };
   },
 };

@@ -1,3 +1,4 @@
+// src/screens/auth/RegisterScreen.tsx
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { TextInput, Button, Text, HelperText } from 'react-native-paper';
@@ -51,14 +52,25 @@ const RegisterScreen = ({ navigation }: Props) => {
   };
 
   const validatePassword = (text: string) => {
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@29057%*?&])[A-Za-z\d@29057%*?&]{8,}$/;
+    // Fixed regex to properly validate passwords
+    // Checks for at least:
+    // - 8 characters
+    // - 1 uppercase letter
+    // - 1 lowercase letter
+    // - 1 number
+    // - 1 special character
+    const hasUppercase = /[A-Z]/.test(text);
+    const hasLowercase = /[a-z]/.test(text);
+    const hasNumber = /\d/.test(text);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(text);
+
     if (!text) {
       setPasswordError('Password is required');
       return false;
     } else if (text.length < 8) {
       setPasswordError('Password must be at least 8 characters');
       return false;
-    } else if (!passwordRegex.test(text)) {
+    } else if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecialChar) {
       setPasswordError('Password must include uppercase, lowercase, number, and special character');
       return false;
     } else {

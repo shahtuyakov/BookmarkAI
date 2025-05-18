@@ -9,82 +9,45 @@ import {
   Image,
   SafeAreaView 
 } from 'react-native';
-import { FAB, Searchbar, Text, useTheme, Dialog, Portal, Button, TextInput } from 'react-native-paper';
+import { FAB, Searchbar, Text, useTheme, Dialog, Portal, Button, TextInput, Chip } from 'react-native-paper';
 import { HomeScreenNavigationProp } from '../../navigation/types';
-import { useShares } from '../../hooks/useShares';
+import { useSharesList, useCreateShare } from '../../hooks/useShares';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
 import { Share } from '../../services/api/shares';
-import { sharesAPI } from '../../services/api/shares';
-import { v4 as uuidv4 } from 'uuid';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
 }
-
-// Create some fallback mock data in case API fails
-const FALLBACK_MOCK_DATA: Share[] = [
-  {
-    id: 'mock-1',
-    url: 'https://www.tiktok.com/@user/video/123456',
-    platform: 'tiktok',
-    status: 'done',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    metadata: {
-      title: 'TikTok Video Example',
-      author: 'TikTok Creator',
-      description: 'This is an example TikTok video from our mock data.',
-      thumbnailUrl: 'https://picsum.photos/seed/tiktok/400/200'
-    }
-  },
-  {
-    id: 'mock-2',
-    url: 'https://www.reddit.com/r/programming/comments/abc123',
-    platform: 'reddit',
-    status: 'done',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
-    metadata: {
-      title: 'Programming Discussion on Reddit',
-      author: 'Reddit User',
-      description: 'An interesting discussion about programming from Reddit.',
-      thumbnailUrl: 'https://picsum.photos/seed/reddit/400/200'
-    }
-  },
-  {
-    id: 'mock-3',
-    url: 'https://twitter.com/user/status/123456',
-    platform: 'twitter',
-    status: 'processing',
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-    updatedAt: new Date(Date.now() - 172800000).toISOString(),
-    metadata: {
-      title: 'Interesting Tweet Thread',
-      author: 'Twitter User',
-      description: 'A viral thread discussing current technology trends.',
-      thumbnailUrl: 'https://picsum.photos/seed/twitter/400/200'
-    }
-  }
-];
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const theme = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogVisible, setIsAddDialogVisible] = useState(false);
   const [newUrl, setNewUrl] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Use our custom hook to fetch shares
+  // Get network status
+  const { isConnected } = useNetworkStatus();
+  
+  // Get shares with React Query
   const { 
     shares, 
     isLoading, 
     isRefreshing, 
     error, 
-    hasMore, 
-    refreshShares, 
-    loadMoreShares 
-  } = useShares({ limit: 10 });
+    fetchNextPage, 
+    hasNextPage, 
+    refresh, 
+    isFetchingNextPage 
+  } = useSharesList({ limit: 10 });
+  
+  // Create share mutation
+  const { 
+    createShare, 
+    isLoading: isSubmitting, 
+    pendingCount 
+  } = useCreateShare();
   
   // Handle search (this would be expanded in a real implementation)
   const handleSearch = (query: string) => {
@@ -114,20 +77,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       return;
     }
     
-    setIsSubmitting(true);
-    
     try {
-      // Generate a idempotency key
-      const idempotencyKey = uuidv4();
-      
-      // Create a new share through the API
-      await sharesAPI.createShare(newUrl, idempotencyKey);
+      await createShare(newUrl);
       
       // Hide dialog and reset form
       hideAddDialog();
-      
-      // Refresh the shares list
-      refreshShares();
       
       // Show success message
       Alert.alert('Success', 'Bookmark added successfully');
@@ -136,14 +90,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                            'Failed to add bookmark. Please try again.';
       
       Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
+    }
+  };
+  
+  // Handle loading more data when reaching end of list
+  const handleLoadMore = () => {
+    if (hasNextPage && !isFetchingNextPage && isConnected) {
+      fetchNextPage();
     }
   };
   
   // Render a loading footer when loading more items
   const renderFooter = () => {
-    if (!hasMore) return null;
+    if (!hasNextPage) return null;
+    if (!isConnected) return <Text style={styles.offlineFooter}>Connect to load more</Text>;
     
     return (
       <View style={styles.footerLoader}>
@@ -152,66 +112,55 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     );
   };
   
-  // Get the shares data to display (either from API or fallback)
-  const displayShares = shares.length > 0 ? shares : FALLBACK_MOCK_DATA;
-  
   // Render content based on state
   const renderContent = () => {
     if (isLoading) {
       return (
-        <FlatList
-          data={FALLBACK_MOCK_DATA}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            <View style={styles.loadingOverlay}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text style={styles.loadingText}>Loading your bookmarks...</Text>
-            </View>
-          }
-        />
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Loading your bookmarks...</Text>
+        </View>
       );
     }
     
     if (error && shares.length === 0) {
       return (
-        <FlatList
-          data={FALLBACK_MOCK_DATA}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-              <Button mode="contained" onPress={refreshShares} style={styles.retryButton}>
-                Retry
-              </Button>
-            </View>
-          }
-        />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>
+            {isConnected 
+              ? 'Failed to load bookmarks. Please try again.' 
+              : 'You\'re offline. Connect to the internet to load your bookmarks.'}
+          </Text>
+          <Button 
+            mode="contained" 
+            onPress={() => refresh()} 
+            style={styles.retryButton}
+            disabled={!isConnected}>
+            {isConnected ? 'Retry' : 'Offline'}
+          </Button>
+        </View>
       );
     }
     
-    if (displayShares.length === 0) {
+    if (shares.length === 0) {
       return <EmptyState onAddBookmark={showAddDialog} />;
     }
     
     return (
       <FlatList
-        data={displayShares}
+        data={shares}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
-            onRefresh={refreshShares}
+            onRefresh={refresh}
             colors={[theme.colors.primary]}
             tintColor={theme.colors.primary}
           />
         }
-        onEndReached={loadMoreShares}
+        onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={renderFooter}
       />
@@ -220,6 +169,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   
   return (
     <SafeAreaView style={styles.container}>
+      {!isConnected && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>You're offline. Some features may be limited.</Text>
+        </View>
+      )}
+      
       <Searchbar
         placeholder="Search bookmarks"
         onChangeText={handleSearch}
@@ -228,6 +183,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       />
       
       {renderContent()}
+      
+      {pendingCount > 0 && (
+        <Chip 
+          icon="cloud-off-outline" 
+          style={styles.pendingChip} 
+          mode="outlined">
+          {pendingCount} bookmark{pendingCount > 1 ? 's' : ''} pending sync
+        </Chip>
+      )}
       
       <FAB
         icon="plus"
@@ -250,6 +214,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               placeholder="https://example.com"
               style={styles.urlInput}
             />
+            {!isConnected && (
+              <Text style={styles.offlineWarning}>
+                You're offline. Your bookmark will be saved and synced when you reconnect.
+              </Text>
+            )}
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={hideAddDialog} disabled={isSubmitting}>Cancel</Button>
@@ -279,16 +248,20 @@ const styles = StyleSheet.create({
     paddingBottom: 80, // Space for FAB
   },
   loadingOverlay: {
+    flex: 1,
     padding: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingText: {
     marginTop: 10,
     color: '#666',
   },
   errorContainer: {
+    flex: 1,
     padding: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   errorText: {
     fontSize: 16,
@@ -311,6 +284,31 @@ const styles = StyleSheet.create({
   },
   urlInput: {
     marginTop: 10,
+  },
+  offlineBanner: {
+    backgroundColor: '#FF9500',
+    padding: 10,
+    alignItems: 'center',
+  },
+  offlineText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  offlineFooter: {
+    textAlign: 'center',
+    padding: 16,
+    color: '#666',
+  },
+  offlineWarning: {
+    marginTop: 10,
+    color: '#FF9500',
+    fontSize: 12,
+  },
+  pendingChip: {
+    position: 'absolute',
+    bottom: 80,
+    alignSelf: 'center',
+    borderColor: '#FF9500',
   },
 });
 

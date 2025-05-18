@@ -1,16 +1,17 @@
+// src/navigation/index.tsx
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import AuthNavigator from './auth/AuthNavigator';
 import MainNavigator from './main/MainNavigator';
 import { RootStackParamList } from './types';
+import { useAuth } from '../contexts/AuthContext';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
 const RootNavigator = () => {
-  // For development, always show the main app
-  const isAuthenticated = true;
-  const isLoading = false;
+  // Use the real auth context to determine if user is authenticated
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (

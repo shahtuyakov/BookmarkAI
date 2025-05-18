@@ -1,169 +1,221 @@
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import * as Keychain from 'react-native-keychain';
 import { DeviceEventEmitter } from 'react-native';
+import { USE_REAL_SERVER, API_BASE_URL, KEYCHAIN_SERVICE } from './client-config';
 
-// For development without a backend server
-const USE_MOCK_API = true;
+console.log(`🔧 API MODE: ${USE_REAL_SERVER ? 'REAL SERVER' : 'MOCK DATA'}`);
+console.log(`🔧 API URL: ${API_BASE_URL}`);
 
-// Mock tokens for testing
-const MOCK_ACCESS_TOKEN = 'mock-access-token';
-const MOCK_REFRESH_TOKEN = 'mock-refresh-token';
-
-// Save tokens to secure storage (mocked)
-export const saveTokens = async (accessToken: string, refreshToken: string) => {
-  console.log('Saved tokens (mock):', { accessToken, refreshToken });
-  return true;
-};
-
-// Get access token from secure storage (mocked)
-export const getAccessToken = async (): Promise<string | null> => {
-  return USE_MOCK_API ? MOCK_ACCESS_TOKEN : null;
-};
-
-// Get refresh token from secure storage (mocked)
-export const getRefreshToken = async (): Promise<string | null> => {
-  return USE_MOCK_API ? MOCK_REFRESH_TOKEN : null;
-};
-
-// Clear tokens (logout) (mocked)
-export const clearTokens = async () => {
-  console.log('Cleared tokens (mock)');
-  return true;
-};
-
-// Create a simple mock API client that returns predefined data
-const apiClient = {
-  get: async (url: string, config?: any) => {
-    console.log('Mock GET request:', url, config);
-    
-    // Mock successful response
-    return {
-      data: {
-        success: true,
-        data: getMockData(url, 'get')
-      }
-    };
+// Create axios instance with default config
+const axiosInstance: AxiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
   },
-  
-  post: async (url: string, data?: any, config?: any) => {
-    console.log('Mock POST request:', url, data, config);
-    
-    // Mock successful response
-    return {
-      data: {
-        success: true,
-        data: getMockData(url, 'post', data)
-      }
-    };
-  },
-  
-  put: async (url: string, data?: any, config?: any) => {
-    console.log('Mock PUT request:', url, data, config);
-    
-    // Mock successful response
-    return {
-      data: {
-        success: true,
-        data: getMockData(url, 'put', data)
-      }
-    };
-  },
-  
-  delete: async (url: string, config?: any) => {
-    console.log('Mock DELETE request:', url, config);
-    
-    // Mock successful response
-    return {
-      data: {
-        success: true,
-        data: {}
-      }
-    };
-  }
-};
+});
 
-// Helper to generate mock data based on the URL
-function getMockData(url: string, method: string, requestData?: any) {
-  // Auth endpoints
-  if (url.includes('/auth/login') || url.includes('/auth/register')) {
-    return {
-      accessToken: MOCK_ACCESS_TOKEN,
-      refreshToken: MOCK_REFRESH_TOKEN,
-      expiresIn: 900, // 15 minutes
-      user: {
-        id: '123e4567-e89b-12d3-a456-426614174000',
-        email: requestData?.email || 'user@example.com',
-        name: requestData?.name || 'Test User'
-      }
-    };
+// Add logging for debugging
+axiosInstance.interceptors.request.use(config => {
+  console.log('Request:', {
+    url: config.url,
+    method: config.method,
+    data: config.data,
+    headers: config.headers
+  });
+  return config;
+});
+
+axiosInstance.interceptors.response.use(
+  response => {
+    console.log('Response:', {
+      status: response.status,
+      data: response.data
+    });
+    return response;
+  },
+  error => {
+    console.log('Error Response:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    return Promise.reject(error);
   }
-  
-  // User profile
-  if (url.includes('/auth/profile')) {
-    return {
-      id: '123e4567-e89b-12d3-a456-426614174000',
-      email: 'user@example.com',
-      name: 'Test User'
-    };
-  }
-  
-  // List shares
-  if (url === '/v1/shares') {
-    // Generate mock shares
-    const shares = Array.from({ length: 10 }).map((_, index) => ({
-      id: `share-${index + 1}`,
-      url: `https://example.com/content/${index + 1}`,
-      platform: ['tiktok', 'reddit', 'twitter', 'x'][index % 4],
-      status: ['pending', 'processing', 'done', 'error'][index % 4],
-      createdAt: new Date(Date.now() - index * 86400000).toISOString(),
-      updatedAt: new Date(Date.now() - index * 43200000).toISOString(),
-      metadata: {
-        title: `Mock Content ${index + 1}`,
-        author: `Author ${index + 1}`,
-        description: `This is a mock description for content ${index + 1}. It represents what might be returned from the API for a bookmark.`,
-        thumbnailUrl: `https://picsum.photos/400/${200 + index * 10}`
-      }
-    }));
-    
-    return {
-      items: shares,
-      cursor: 'mock-cursor',
-      hasMore: false,
-      limit: 10
-    };
-  }
-  
-  // Get share by ID
-  if (url.match(/\/v1\/shares\/[^/]+$/)) {
-    const id = url.split('/').pop();
-    return {
-      id,
-      url: `https://example.com/content/${id}`,
-      platform: 'tiktok',
-      status: 'done',
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      updatedAt: new Date(Date.now() - 43200000).toISOString(),
-      metadata: {
-        title: `Content ${id}`,
-        author: 'John Doe',
-        description: 'This is a detailed description of the bookmarked content. It contains various details about what the content is about.',
-        thumbnailUrl: 'https://picsum.photos/400/250'
-      }
-    };
-  }
-  
-  // Create share
-  if (url === '/v1/shares' && method === 'post') {
-    return {
-      id: `new-share-${Date.now()}`,
-      url: requestData?.url || 'https://example.com/new-content',
-      platform: 'tiktok',
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-  }
-  
-  // Default response
-  return {};
+);
+
+// Interface for tokens
+interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
 }
 
-export default apiClient;
+// Save tokens to secure storage (Keychain)
+export const saveTokens = async (accessToken: string, refreshToken: string): Promise<boolean> => {
+  try {
+    console.log('Saving tokens to Keychain');
+    await Keychain.setGenericPassword(
+      'auth_tokens',
+      JSON.stringify({ accessToken, refreshToken }),
+      { service: KEYCHAIN_SERVICE }
+    );
+    return true;
+  } catch (error) {
+    console.error('Error saving tokens to Keychain:', error);
+    return false;
+  }
+};
+
+// Get tokens from secure storage
+export const getTokens = async (): Promise<AuthTokens | null> => {
+  try {
+    const credentials = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
+    if (!credentials) {
+      console.log('No tokens found in Keychain');
+      return null;
+    }
+    console.log('Tokens retrieved from Keychain');
+    return JSON.parse(credentials.password);
+  } catch (error) {
+    console.error('Error getting tokens from Keychain:', error);
+    return null;
+  }
+};
+
+// Get access token from secure storage
+export const getAccessToken = async (): Promise<string | null> => {
+  const tokens = await getTokens();
+  return tokens ? tokens.accessToken : null;
+};
+
+// Clear tokens (logout)
+export const clearTokens = async (): Promise<boolean> => {
+  try {
+    console.log('Clearing tokens from Keychain');
+    await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
+    return true;
+  } catch (error) {
+    console.error('Error clearing tokens from Keychain:', error);
+    return false;
+  }
+};
+
+// Flag to prevent multiple refresh attempts
+let isRefreshing = false;
+// Store pending requests to retry after token refresh
+let failedQueue: any[] = [];
+
+// Process the failed queue
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(promise => {
+    if (error) {
+      promise.reject(error);
+    } else {
+      promise.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+// Add request interceptor to add the access token to requests
+axiosInstance.interceptors.request.use(
+  async (config: AxiosRequestConfig) => {
+    // If the request doesn't need a token (like login/register)
+    if (config.url?.includes('/auth/login') || config.url?.includes('/auth/register')) {
+      return config;
+    }
+
+    const token = await getAccessToken();
+    if (token) {
+      config.headers = {
+        ...config.headers,
+        Authorization: `Bearer ${token}`,
+      };
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle token refresh
+axiosInstance.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  async (error) => {
+    const originalRequest = error.config;
+
+    // If the error is not 401 or the request already retried, reject
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // If another request is already refreshing the token
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then(token => {
+          originalRequest.headers['Authorization'] = `Bearer ${token}`;
+          return axiosInstance(originalRequest);
+        })
+        .catch(err => {
+          return Promise.reject(err);
+        });
+    }
+
+    // Mark original request as retried
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    // Get the refresh token
+    const tokens = await getTokens();
+    if (!tokens || !tokens.refreshToken) {
+      // No refresh token, force re-login
+      isRefreshing = false;
+      await clearTokens();
+      DeviceEventEmitter.emit('auth-error');
+      return Promise.reject(error);
+    }
+
+    try {
+      // Call the refresh token endpoint
+      const response = await axios.post(
+        `${API_BASE_URL}/auth/refresh`,
+        { refreshToken: tokens.refreshToken },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+
+      const { accessToken, refreshToken } = response.data.data;
+      await saveTokens(accessToken, refreshToken);
+
+      // Update the failed requests with the new token
+      processQueue(null, accessToken);
+      
+      // Update the original request with the new token
+      originalRequest.headers['Authorization'] = `Bearer ${accessToken}`;
+      
+      // Reset the refreshing flag
+      isRefreshing = false;
+      
+      // Retry the original request
+      return axiosInstance(originalRequest);
+    } catch (refreshError) {
+      // Token refresh failed, reject all pending requests
+      processQueue(refreshError, null);
+      
+      // Reset the refreshing flag
+      isRefreshing = false;
+      
+      // Clear tokens and force re-login
+      await clearTokens();
+      DeviceEventEmitter.emit('auth-error');
+      
+      return Promise.reject(refreshError);
+    }
+  }
+);
+
+export default axiosInstance;

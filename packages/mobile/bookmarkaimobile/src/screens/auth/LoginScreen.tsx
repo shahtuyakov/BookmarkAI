@@ -1,5 +1,6 @@
+// src/screens/auth/LoginScreen.tsx
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { TextInput, Button, Text, HelperText } from 'react-native-paper';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthScreenNavigationProp } from '../../navigation/types';
@@ -35,9 +36,6 @@ const LoginScreen = ({ navigation }: Props) => {
     if (!text) {
       setPasswordError('Password is required');
       return false;
-    } else if (text.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
-      return false;
     } else {
       setPasswordError('');
       return true;
@@ -54,13 +52,9 @@ const LoginScreen = ({ navigation }: Props) => {
         // Navigation is handled by the AuthContext observer
       } catch (err) {
         // Error is handled by the AuthContext
+        Alert.alert("Login Failed", "Please check your credentials and try again.");
       }
     }
-  };
-  
-  // Test login function - skips validation for testing
-  const handleTestLogin = async () => {
-    await login('test@example.com', 'password123');
   };
 
   return (
@@ -117,14 +111,6 @@ const LoginScreen = ({ navigation }: Props) => {
             Sign In
           </Button>
           
-          {/* Dev-only test login button */}
-          <Button
-            mode="outlined"
-            onPress={handleTestLogin}
-            style={[styles.button, styles.testButton]}>
-            TEST MODE: Bypass Login
-          </Button>
-          
           <Button
             mode="text"
             onPress={() => navigation.navigate('ForgotPassword')}
@@ -177,10 +163,6 @@ const styles = StyleSheet.create({
   button: {
     marginTop: 20,
     paddingVertical: 8,
-  },
-  testButton: {
-    marginTop: 10,
-    borderColor: '#FF9500',
   },
   textButton: {
     marginTop: 15,
