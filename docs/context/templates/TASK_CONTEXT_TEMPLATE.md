@@ -14,6 +14,12 @@
 - [Key requirement 2]
 - [Key requirement 3]
 
+## Installed dependencies
+- [List of installed dependencies]
+- [List of installed dependencies]
+- [List of installed dependencies]
+- [List of installed dependencies]
+
 ## Implementation Approach
 - [Approach detail 1]
 - [Approach detail 2]

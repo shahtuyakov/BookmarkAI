@@ -55,6 +55,15 @@ The auth system includes:
 - **2025-05-17**: Implemented token family tracking to prevent refresh token reuse attacks
 - **2025-05-17**: Used Ethereal for local email testing to avoid actual email sending
 
+## Important commands
+- `cd packages/api-gateway && npm run start:dev` - Run API server for development
+- `cd packages/api-gateway && npm run start:prod` - Run API server for production
+- `cd packages/api-gateway && npm run start:test` - Run API server for testing
+- `cd packages/api-gateway && npm run start:local` - Run API server for local development
+- `cd packages/api-gateway && npm run start:dev` - Run API server for development
+- `cd packages/api-gateway && npm run start:prod` - Run API server for production
+- `cd packages/api-gateway && npm run start:test` - Run API server for testing
+
 ## Questions & Notes
 - Consider implementing 2FA in a future phase
 - Email templates should be moved to separate files for better maintenance
