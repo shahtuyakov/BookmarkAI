@@ -45,7 +45,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   // Create share mutation
   const { 
     createShare, 
-    isLoading: isSubmitting, 
+    isPending: isSubmitting, 
     pendingCount 
   } = useCreateShare();
   

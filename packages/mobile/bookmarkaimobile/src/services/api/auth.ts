@@ -1,5 +1,5 @@
 // src/services/api/auth.ts
-import apiClient, { saveTokens, clearTokens } from './client';
+import apiClient, { saveTokens, clearTokens, getTokens } from './client';
 
 export interface User {
   id: string;
@@ -105,16 +105,23 @@ export const authAPI = {
   },
   
   // Logout
-  logout: async () => {
-    try {
-      // Call the backend to invalidate token
-      await apiClient.post('/auth/logout');
-    } catch (error) {
-      console.error('Error logging out from server', error);
-    }
-    
-    // Always clear local tokens regardless of server response
-    await clearTokens();
+    logout: async () => {
+      try {
+        // Get the refresh token from storage
+        const tokens = await getTokens();
+        
+        // Call the backend to invalidate token, including the refresh token
+        if (tokens?.refreshToken) {
+          await apiClient.post('/auth/logout', { refreshToken: tokens.refreshToken });
+        } else {
+          await apiClient.post('/auth/logout');
+        }
+      } catch (error) {
+        console.error('Error logging out from server', error);
+      }
+      
+      // Always clear local tokens regardless of server response
+      await clearTokens();
   },
   
   // Get user profile
