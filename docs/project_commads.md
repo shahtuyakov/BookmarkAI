@@ -82,3 +82,11 @@ cd infrastructure && pnpm run synth
 # Run deploy for infrastructure
 
 cd infrastructure && pnpm run deploy
+
+# Disable the Husky pre-commit hooks
+
+npx husky uninstall
+
+# Enable the Husky pre-commit hooks
+
+npx husky install
