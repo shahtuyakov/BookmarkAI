@@ -1,4 +1,4 @@
-# ADR 0006: React Native Mobile App Shell for BookmarkAI
+# ADR 006: React Native Mobile App Shell for BookmarkAI
 
 - **Status**: Proposed
 - **Date**: 2025-05-17
