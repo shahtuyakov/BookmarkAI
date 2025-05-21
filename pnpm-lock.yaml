@@ -198,8 +198,6 @@ importers:
 
   packages/fetchers: {}
 
-  packages/mobile: {}
-
   packages/orchestrator: {}
 
   packages/shared: {}
