@@ -14,6 +14,8 @@
 		6D1605392DDE0FA800B2DB92 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1605342DDE0FA800B2DB92 /* KeychainHelper.swift */; };
 		6D16053A2DDE0FA800B2DB92 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1605372DDE0FA800B2DB92 /* ShareViewController.swift */; };
 		6D16053C2DDE0FA800B2DB92 /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6D1605362DDE0FA800B2DB92 /* MainInterface.storyboard */; };
+		6D9ADC342DDFE4720087F390 /* ShareHandler.m in Sources */ = {isa = PBXBuildFile; fileRef = 6D9ADC322DDFE4720087F390 /* ShareHandler.m */; };
+		6D9ADC352DDFE4720087F390 /* ShareHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9ADC332DDFE4720087F390 /* ShareHandler.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B37C5222F1456698DE4D3D62 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
@@ -59,6 +61,9 @@
 		6D1605342DDE0FA800B2DB92 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		6D1605352DDE0FA800B2DB92 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/MainInterface.storyboard; sourceTree = "<group>"; };
 		6D1605372DDE0FA800B2DB92 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		6D9ADC322DDFE4720087F390 /* ShareHandler.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ShareHandler.m; sourceTree = "<group>"; };
+		6D9ADC332DDFE4720087F390 /* ShareHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareHandler.swift; sourceTree = "<group>"; };
+		6D9ADC362DDFE4A10087F390 /* BookmarkAI-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "BookmarkAI-Bridging-Header.h"; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = BookmarkAI/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = BookmarkAI/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -128,12 +133,15 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
+				6D9ADC322DDFE4720087F390 /* ShareHandler.m */,
+				6D9ADC332DDFE4720087F390 /* ShareHandler.swift */,
 				13B07FAE1A68108700A75B9A /* BookmarkAI */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				6D1605382DDE0FA800B2DB92 /* BookmarkAIShare */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				6D9ADC362DDFE4A10087F390 /* BookmarkAI-Bridging-Header.h */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -212,7 +220,7 @@
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
-						LastSwiftMigration = 1120;
+						LastSwiftMigration = 1630;
 					};
 					6D0974B32DDDEDA400966E22 = {
 						CreatedOnToolsVersion = 16.3;
@@ -340,6 +348,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				6D9ADC342DDFE4720087F390 /* ShareHandler.m in Sources */,
+				6D9ADC352DDFE4720087F390 /* ShareHandler.swift in Sources */,
 				6D0974C92DDDEEA500966E22 /* KeychainHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -403,6 +413,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "BookmarkAI-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -438,6 +449,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "BookmarkAI-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				USE_HERMES = true;

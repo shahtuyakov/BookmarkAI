@@ -1,4 +1,3 @@
-// File: ShareHandler.m - Place this in your iOS project folder
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 

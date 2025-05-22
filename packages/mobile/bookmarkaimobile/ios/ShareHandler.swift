@@ -1,4 +1,3 @@
-// File: ShareHandler.swift - Place this in your iOS project folder
 import Foundation
 import React
 
@@ -14,15 +13,17 @@ class ShareHandler: RCTEventEmitter {
   }
   
   @objc func checkPendingShares() {
-    if let sharedDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
-      if let pendingURL = sharedDefaults.string(forKey: "pendingShareURL") {
-        // Clear the stored data
-        sharedDefaults.removeObject(forKey: "pendingShareURL")
-        sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
-        sharedDefaults.synchronize()
-        
-        // Send event to React Native
-        self.sendEvent(withName: "ShareExtensionData", body: ["url": pendingURL])
+    DispatchQueue.main.async {
+      if let sharedDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
+        if let pendingURL = sharedDefaults.string(forKey: "pendingShareURL") {
+          // Clear the stored data
+          sharedDefaults.removeObject(forKey: "pendingShareURL")
+          sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
+          sharedDefaults.synchronize()
+          
+          // Send event to React Native
+          self.sendEvent(withName: "ShareExtensionData", body: ["url": pendingURL])
+        }
       }
     }
   }
@@ -47,5 +48,11 @@ class ShareHandler: RCTEventEmitter {
   
   @objc func handleCheckPendingShares(_ notification: Notification) {
     self.checkPendingShares()
+  }
+  
+  // Required for RCTEventEmitter subclasses
+  override func invalidate() {
+    super.invalidate()
+    NotificationCenter.default.removeObserver(self)
   }
 }

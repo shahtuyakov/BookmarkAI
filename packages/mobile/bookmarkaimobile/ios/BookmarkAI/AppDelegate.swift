@@ -13,7 +13,14 @@ class AppDelegate: RCTAppDelegate {
     // They will be passed down to the ViewController used by React Native.
     self.initialProps = [:]
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    
+    // Check for pending shares after React Native is initialized
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+      NotificationCenter.default.post(name: NSNotification.Name("CheckPendingShares"), object: nil)
+    }
+    
+    return result
   }
 
   override func sourceURL(for bridge: RCTBridge) -> URL? {
@@ -26,5 +33,14 @@ class AppDelegate: RCTAppDelegate {
 #else
     Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
+  }
+  
+  // Handle deep links
+  override func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+    if url.scheme == "bookmarkai" {
+      // Let React Navigation handle the deep link
+      return super.application(app, open: url, options: options)
+    }
+    return false
   }
 }
