@@ -99,7 +99,7 @@ To maximize code reuse between mobile and web (Phase 4):
 - Semantic versioning (MAJOR.MINOR.PATCH)
 - API version tolerance specified in app requests
 - Runtime API compatibility checks to prompt updates when needed
-- Minimum OS version requirements: iOS 13+, Android 8+ (API 26)
+- Minimum OS version requirements: iOS 15.1+, Android 8+ (API 26)
 
 ## 8 — Links
 

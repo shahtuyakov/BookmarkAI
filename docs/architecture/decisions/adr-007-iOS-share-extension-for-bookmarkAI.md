@@ -90,7 +90,7 @@ C. Write to iCloud Key-Value store Automatic sync, less local plumbing. Slower, 
 7 — Versioning / Migration
 • Extension version aligned with main app build (CFBundleShortVersionString).
 • Queue schema version stored in UserDefaults(group). Migration script auto-runs if schema ≠ expected.
-• Minimum iOS version: 14 (Share Extension & App Groups stable, SFSymbols support).
+• Minimum iOS version: 15.1 (Share Extension & App Groups stable, SFSymbols support).
 
 ⸻
 
