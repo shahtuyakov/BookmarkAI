@@ -88,15 +88,27 @@ class ShareViewController: SLComposeServiceViewController {
             groupDefaults.synchronize()
         }
         
-        // Create deep link
+        // Create deep link URL
         if let encodedURL = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed),
            let deepLink = URL(string: "bookmarkai://share?url=\(encodedURL)&source=extension") {
             
-            self.extensionContext?.completeRequest(returningItems: nil) { _ in
-                UIApplication.shared.open(deepLink)
+            // Use NSExtensionContext to open URL (App Extension safe way)
+            var responder: UIResponder? = self as UIResponder
+            let selector = #selector(openURL(_:))
+            
+            // Walk up the responder chain to find someone who can handle the URL
+            while responder != nil {
+                if responder!.responds(to: selector) && responder != self {
+                    responder!.perform(selector, with: deepLink)
+                    break
+                }
+                responder = responder?.next
             }
-        } else {
+            
+            // Complete the extension request
             self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+        } else {
+            showError("Failed to create deep link")
         }
     }
     
@@ -110,5 +122,10 @@ class ShareViewController: SLComposeServiceViewController {
             self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
         })
         present(alert, animated: true)
+    }
+    
+    // This method will be called by the responder chain
+    @objc private func openURL(_ url: URL) {
+        // This is just a placeholder - the actual opening will be handled by the system
     }
 }
