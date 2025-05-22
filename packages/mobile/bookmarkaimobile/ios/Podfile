@@ -5,7 +5,7 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-platform :ios, '16.0'
+platform :ios, '15.0'
 prepare_react_native_project!
 
 linkage = ENV['USE_FRAMEWORKS']
@@ -19,28 +19,31 @@ target 'BookmarkAI' do
 
   use_react_native!(
     :path => config[:reactNativePath],
-    # Disable New Architecture features for stability
-    :hermes_enabled => false,
-    :fabric_enabled => false,
+    # Enable New Architecture for RN 0.79
+    :hermes_enabled => true,
+    :fabric_enabled => true,
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
   post_install do |installer|
-    # Standard React Native post install
+    # Standard React Native post install for 0.79
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false
     )
     
-    # Fix deployment targets and other issues
+    # Fix deployment targets and compatibility issues
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
-        # Fix deployment target
-        if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 16.0
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+        # Ensure minimum deployment target for RN 0.79
+        if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.0
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
         end
+        
+        # Fix Swift version for New Architecture compatibility
+        config.build_settings['SWIFT_VERSION'] = '5.0'
         
         # Fix glog deprecation warnings
         if target.name == 'glog'
@@ -49,23 +52,21 @@ target 'BookmarkAI' do
           config.build_settings['WARNING_CFLAGS'] = '-Wno-deprecated-declarations'
         end
         
-        # Fix C++ template issues (specifically for React-rendererdebug and ReactCommon)
-        if target.name.include?('React') || target.name == 'ReactCommon' || target.name == 'React-rendererdebug'
+        # New Architecture compatibility fixes
+        if target.name.include?('React') || target.name == 'ReactCommon'
           config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
           config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
           config.build_settings['OTHER_CPLUSPLUSFLAGS'] = [
             '$(inherited)',
             '-DFOLLY_NO_CONFIG',
             '-DFOLLY_MOBILE=1',
-            '-DFOLLY_USE_LIBCPP=1'
+            '-DFOLLY_USE_LIBCPP=1',
+            '-DFOLLY_CFG_NO_COROUTINES=1'
           ]
         end
 
-        # Additional fix for string_view template issues
-        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= []
-        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << '_LIBCPP_ENABLE_NODISCARD=1'
-
-        
+        # Enable strict concurrency for Swift 6 preparation
+        config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
       end
     end
   end
