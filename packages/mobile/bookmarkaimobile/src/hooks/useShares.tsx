@@ -107,6 +107,8 @@ export function useShareById(id: string) {
 
 // Hook to create a new share with offline support
 export function useCreateShare() {
+  console.log('🏗️ useCreateShare hook initialized');
+  
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   
@@ -189,8 +191,12 @@ export function useCreateShare() {
   // Main mutation for creating shares
   const mutation = useMutation({
     mutationFn: async ({ url }: { url: string }) => {
+      console.log(`🚀 Creating share for URL: ${url}`);
+      console.log(`📶 Network connected: ${isConnected}`);
+      
       // If offline, add to pending queue
       if (!isConnected) {
+        console.log('📴 Offline - adding to pending queue');
         const pendingShare = await addToPendingQueue(url);
         
         // Return a mock share that will be replaced when online
@@ -207,12 +213,23 @@ export function useCreateShare() {
       }
       
       // If online, create directly
+      console.log('🌐 Online - making API call');
       const idempotencyKey = uuidv4();
-      return await sharesAPI.createShare(url, idempotencyKey);
+      console.log(`🔑 Idempotency key: ${idempotencyKey}`);
+      
+      try {
+        const result = await sharesAPI.createShare(url, idempotencyKey);
+        console.log('✅ Share created successfully:', result);
+        return result;
+      } catch (error) {
+        console.error('❌ API call failed:', error);
+        throw error;
+      }
     },
     
     // Update cache after successful creation
     onSuccess: (newShare) => {
+      console.log('🎉 Share creation successful, updating cache');
       // Invalidate relevant queries to refetch data
       queryClient.invalidateQueries({ queryKey: sharesKeys.lists() });
       
@@ -222,12 +239,19 @@ export function useCreateShare() {
         delete newShare._isPending;
       }
     },
+    
+    onError: (error) => {
+      console.error('💥 Share creation failed:', error);
+    }
   });
   
   return {
     ...mutation,
     // Helper to simplify API for consumers
-    createShare: (url: string) => mutation.mutate({ url }),
+    createShare: (url: string) => {
+      console.log(`📝 createShare called with: ${url}`);
+      return mutation.mutate({ url });
+    },
     pendingCount: mutation.isPending ? 1 : 0, // Simple count for UI indicators
   };
 }

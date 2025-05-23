@@ -1,6 +1,3 @@
-// src/services/api/client-config.ts
-// Update these settings based on your API server and environment
-
 // Set to true to use real server, false to use mock
 export const USE_REAL_SERVER = true;
 
@@ -27,3 +24,8 @@ export const API_BASE_URL = API_URLS.IOSSimulator;
 
 // The key for storing tokens in Keychain
 export const KEYCHAIN_SERVICE = 'com.bookmarkai.auth';
+
+// Debug logging
+console.log('📡 API Configuration:');
+console.log(`   Base URL: ${API_BASE_URL}`);
+console.log(`   Use Real Server: ${USE_REAL_SERVER}`);

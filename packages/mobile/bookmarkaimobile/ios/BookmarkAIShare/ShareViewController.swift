@@ -11,33 +11,14 @@ class ShareViewController: SLComposeServiceViewController {
         title = "BookmarkAI"
         placeholder = "Add a comment (optional)"
         extractURL()
-        
-        // Debug: Check keychain access
-        let helper = KeychainHelper.shared
-        let isLoggedIn = helper.isUserLoggedIn()
-        let (accessToken, _) = helper.getAuthTokens()
-        
-        print("🔐 Share Extension Debug:")
-        print("   - Is logged in: \(isLoggedIn)")
-        print("   - Has access token: \(accessToken != nil)")
-        print("   - Token preview: \(accessToken?.prefix(20) ?? "nil")...")
     }
     
     override func didSelectPost() {
-        let helper = KeychainHelper.shared
-        
-        if !helper.isUserLoggedIn() {
-            print("❌ User not logged in - showing error")
-            showError("Please log in to BookmarkAI first")
-            return
-        }
-        
+        // Skip keychain check - let main app handle authentication
         guard let url = urlToShare, isURLSupported(url) else {
-            showError("Unsupported URL")
+            showError("Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, and X.")
             return
         }
-        
-        print("✅ User is logged in, proceeding with share")
         
         // Store in app group UserDefaults
         if let groupDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
@@ -46,7 +27,7 @@ class ShareViewController: SLComposeServiceViewController {
             groupDefaults.synchronize()
         }
         
-        // Create deep link URL
+        // Create deep link URL and open main app
         if let encodedURL = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed),
            let deepLink = URL(string: "bookmarkai://share?url=\(encodedURL)&source=extension") {
             

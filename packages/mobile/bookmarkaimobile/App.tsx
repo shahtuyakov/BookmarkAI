@@ -15,8 +15,10 @@ function AppContent(): React.JSX.Element {
   // Set up share extension handler
   useShareExtension({
     onShareReceived: (url) => {
-      console.log('Received shared URL:', url);
+      console.log('onShareReceived called with URL:', url);
+      console.log('About to call createShare...');
       createShare(url);
+      console.log('createShare called');
     }
   });
 
@@ -24,6 +26,7 @@ function AppContent(): React.JSX.Element {
 }
 
 function App(): React.JSX.Element {
+  console.log('🏁 App component mounting...');
   const theme = useAppTheme();
 
   return (
