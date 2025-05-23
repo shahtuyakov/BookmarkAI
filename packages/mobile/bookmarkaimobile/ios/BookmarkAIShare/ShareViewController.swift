@@ -11,6 +11,60 @@ class ShareViewController: SLComposeServiceViewController {
         title = "BookmarkAI"
         placeholder = "Add a comment (optional)"
         extractURL()
+        
+        // Debug: Check keychain access
+        let helper = KeychainHelper.shared
+        let isLoggedIn = helper.isUserLoggedIn()
+        let (accessToken, _) = helper.getAuthTokens()
+        
+        print("🔐 Share Extension Debug:")
+        print("   - Is logged in: \(isLoggedIn)")
+        print("   - Has access token: \(accessToken != nil)")
+        print("   - Token preview: \(accessToken?.prefix(20) ?? "nil")...")
+    }
+    
+    override func didSelectPost() {
+        let helper = KeychainHelper.shared
+        
+        if !helper.isUserLoggedIn() {
+            print("❌ User not logged in - showing error")
+            showError("Please log in to BookmarkAI first")
+            return
+        }
+        
+        guard let url = urlToShare, isURLSupported(url) else {
+            showError("Unsupported URL")
+            return
+        }
+        
+        print("✅ User is logged in, proceeding with share")
+        
+        // Store in app group UserDefaults
+        if let groupDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
+            groupDefaults.set(url.absoluteString, forKey: "pendingShareURL")
+            groupDefaults.set(Date(), forKey: "pendingShareTimestamp")
+            groupDefaults.synchronize()
+        }
+        
+        // Create deep link URL
+        if let encodedURL = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed),
+           let deepLink = URL(string: "bookmarkai://share?url=\(encodedURL)&source=extension") {
+            
+            var responder: UIResponder? = self as UIResponder
+            let selector = #selector(openURL(_:))
+            
+            while responder != nil {
+                if responder!.responds(to: selector) && responder != self {
+                    responder!.perform(selector, with: deepLink)
+                    break
+                }
+                responder = responder?.next
+            }
+            
+            self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+        } else {
+            showError("Failed to create deep link")
+        }
     }
     
     private func extractURL() {
@@ -70,48 +124,6 @@ class ShareViewController: SLComposeServiceViewController {
                host.contains("x.com")
     }
     
-    override func didSelectPost() {
-        if !KeychainHelper.shared.isUserLoggedIn() {
-            showError("Please log in to BookmarkAI first")
-            return
-        }
-        
-        guard let url = urlToShare, isURLSupported(url) else {
-            showError("Unsupported URL")
-            return
-        }
-        
-        // Store in app group UserDefaults
-        if let groupDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
-            groupDefaults.set(url.absoluteString, forKey: "pendingShareURL")
-            groupDefaults.set(Date(), forKey: "pendingShareTimestamp")
-            groupDefaults.synchronize()
-        }
-        
-        // Create deep link URL
-        if let encodedURL = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed),
-           let deepLink = URL(string: "bookmarkai://share?url=\(encodedURL)&source=extension") {
-            
-            // Use NSExtensionContext to open URL (App Extension safe way)
-            var responder: UIResponder? = self as UIResponder
-            let selector = #selector(openURL(_:))
-            
-            // Walk up the responder chain to find someone who can handle the URL
-            while responder != nil {
-                if responder!.responds(to: selector) && responder != self {
-                    responder!.perform(selector, with: deepLink)
-                    break
-                }
-                responder = responder?.next
-            }
-            
-            // Complete the extension request
-            self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
-        } else {
-            showError("Failed to create deep link")
-        }
-    }
-    
     override func didSelectCancel() {
         self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
@@ -124,8 +136,7 @@ class ShareViewController: SLComposeServiceViewController {
         present(alert, animated: true)
     }
     
-    // This method will be called by the responder chain
     @objc private func openURL(_ url: URL) {
-        // This is just a placeholder - the actual opening will be handled by the system
+        // This is handled by the system
     }
 }

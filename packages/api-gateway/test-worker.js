@@ -9,8 +9,8 @@ async function authenticate() {
   console.log('\n📝 Authenticating...');
   
   // Update with your credentials
-  const email = 'test@example.com';
-  const password = 'Test123!@#';
+  const email = 'seanT@example.com';
+  const password = 'Test123!Abc'; // Contains uppercase, lowercase, number and special char
   
   try {
     const response = await axios.post(`${API_URL}/auth/login`, {
