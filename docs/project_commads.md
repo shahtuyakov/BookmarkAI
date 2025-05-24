@@ -90,3 +90,7 @@ npx husky uninstall
 # Enable the Husky pre-commit hooks
 
 npx husky install
+
+# Run the the metro bundler
+
+cd packages/mobile/bookmarkaimobile && npx react-native start
