@@ -51,8 +51,9 @@ User taps “Share › BookmarkAI”  ─►  ShareActivity (noHistory, finish <
 
 * **WorkManager layer**  
   * Constraint: `NetworkType.CONNECTED`.  
-  * Retries with exponential back-off; updates row to *UPLOADED* or *FAILED*.  
-  * No foreground service notification required.
+  * **Adaptive batching**: sequential uploads when the queue has ≤ 5 items; up to **3 parallel coroutines** with jittered delay when > 5.  
+  * Retries with exponential back-off (max 6 h); sets row status to *UPLOADED* or *FAILED*.  
+  * No foreground-service notification required.
 
 * **Storage**  
   * `Room` + `SQLCipher` (via `net.zetetic:android-database-sqlcipher`) for encryption at rest.  
@@ -66,8 +67,9 @@ User taps “Share › BookmarkAI”  ─►  ShareActivity (noHistory, finish <
   * JS side reuses `ShareExtensionHandler.ts` (no platform forks).
 
 * **UX**  
-  * If BookmarkAI app is foreground → show `Snackbar("Bookmark saved")`.  
-  * Otherwise rely on share-sheet acknowledgement; no auto-launch.
+  * Always show a **1-second Toast** (“Saved to BookmarkAI”) from `ShareActivity`, regardless of whether the main app is foreground.  
+  * **No auto-launch** of the main app; deeper interaction happens only after the user opens BookmarkAI.  
+  * When the main app is open, badge the **Inbox** icon with the count of failed shares (via `getPendingCount()`).
 
 ---
 
@@ -91,6 +93,11 @@ User taps “Share › BookmarkAI”  ─►  ShareActivity (noHistory, finish <
 | OEM kills WorkManager on aggressive ROMs | Exponential back‑off + flushQueue() on App launch + manual `pull‑to‑sync` |
 | DB migration issues | Versioned Room schema, test migrations in CI |
 | Play Integrity / namespace errors with new module | Gradle 8.* `namespace` fields added in all modules |
+
+### Success Metrics
+* **URL share success rate** ≥ 99 % within 10 minutes (P95).  
+* **Toast latency** < 150 ms at P99.  
+* Crash-free rate ≥ 99.9 % for `ShareActivity` and `ShareUploadWorker`.
 
 ---
 
