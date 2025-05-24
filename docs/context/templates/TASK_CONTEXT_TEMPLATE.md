@@ -45,3 +45,8 @@
 - PR: [PR links]
 - Documentation: [Links to relevant docs]
 - References: [External references or research]
+
+## Future Improvements
+- [Future improvement 1]
+- [Future improvement 2]
+- [Future improvement 3]
