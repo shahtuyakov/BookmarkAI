@@ -71,6 +71,28 @@ User taps “Share › BookmarkAI”  ─►  ShareActivity (noHistory, finish <
   * **No auto-launch** of the main app; deeper interaction happens only after the user opens BookmarkAI.  
   * When the main app is open, badge the **Inbox** icon with the count of failed shares (via `getPendingCount()`).
 
+  ### Authentication Handling
+* WorkManager reads tokens from EncryptedSharedPreferences
+* On 401 errors: mark share as NEEDS_AUTH, let main app refresh tokens
+* Main app processes NEEDS_AUTH items after successful token refresh
+
+### Success Metrics
+* **URL share success rate** ≥ 99 % within 10 minutes (P95).  
+* **Toast latency** < 150 ms at P99.  
+* Crash-free rate ≥ 99.9 % for `ShareActivity` and `ShareUploadWorker`.
+
+### Error Classification
+* **Permanent failures**: Unsupported platform, malformed URL → delete from queue
+* **Auth failures**: Expired tokens → mark NEEDS_AUTH, retry after refresh
+* **Temporary failures**: Network, server errors → exponential backoff retry
+* **Rate limit**: 429 responses → back off with jitter
+
+
+### Queue Limits & Cleanup
+* Maximum 100 pending items (protect against abuse)
+* Cleanup completed items after 7 days
+* Failed items kept for 30 days with manual retry option
+
 ---
 
 ## Consequences
@@ -94,10 +116,6 @@ User taps “Share › BookmarkAI”  ─►  ShareActivity (noHistory, finish <
 | DB migration issues | Versioned Room schema, test migrations in CI |
 | Play Integrity / namespace errors with new module | Gradle 8.* `namespace` fields added in all modules |
 
-### Success Metrics
-* **URL share success rate** ≥ 99 % within 10 minutes (P95).  
-* **Toast latency** < 150 ms at P99.  
-* Crash-free rate ≥ 99.9 % for `ShareActivity` and `ShareUploadWorker`.
 
 ---
 
