@@ -14,22 +14,43 @@ class ShareViewController: SLComposeServiceViewController {
     }
     
     override func didSelectPost() {
-        // Skip keychain check - let main app handle authentication
         guard let url = urlToShare, isURLSupported(url) else {
             showError("Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, and X.")
             return
         }
         
-        // Store in app group UserDefaults
+        // Show immediate success feedback
+        showSuccessAndClose(url: url)
+    }
+    
+    private func showSuccessAndClose(url: URL) {
+        // Create success alert
+        let alert = UIAlertController(
+            title: "Bookmark Saved! 🎉", 
+            message: "Successfully saved to BookmarkAI:\n\(url.host ?? url.absoluteString)", 
+            preferredStyle: .alert
+        )
+        
+        // Add action that handles the background saving
+        alert.addAction(UIAlertAction(title: "Great!", style: .default) { [weak self] _ in
+            self?.saveInBackgroundAndClose(url: url)
+        })
+        
+        present(alert, animated: true)
+    }
+    
+    private func saveInBackgroundAndClose(url: URL) {
+        // Store in app group UserDefaults for background processing
         if let groupDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
             groupDefaults.set(url.absoluteString, forKey: "pendingShareURL")
             groupDefaults.set(Date(), forKey: "pendingShareTimestamp")
+            groupDefaults.set(true, forKey: "shareProcessedByExtension") // Flag to prevent duplicate popup
             groupDefaults.synchronize()
         }
         
-        // Create deep link URL and open main app
+        // Create deep link URL and open main app silently (in background)
         if let encodedURL = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed),
-           let deepLink = URL(string: "bookmarkai://share?url=\(encodedURL)&source=extension") {
+           let deepLink = URL(string: "bookmarkai://share?url=\(encodedURL)&source=extension&silent=true") {
             
             var responder: UIResponder? = self as UIResponder
             let selector = #selector(openURL(_:))
@@ -41,11 +62,10 @@ class ShareViewController: SLComposeServiceViewController {
                 }
                 responder = responder?.next
             }
-            
-            self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
-        } else {
-            showError("Failed to create deep link")
         }
+        
+        // Close the extension
+        self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
     
     private func extractURL() {

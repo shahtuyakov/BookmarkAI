@@ -23,6 +23,10 @@ class ShareHandler: RCTEventEmitter {
         if let pendingURL = sharedDefaults.string(forKey: "pendingShareURL") {
           print("📤 ShareHandler: Found pending URL: \(pendingURL)")
           
+          // Check if this was already processed by the extension (silent mode)
+          let wasProcessedByExtension = sharedDefaults.bool(forKey: "shareProcessedByExtension")
+          print("🤫 ShareHandler: Was processed by extension: \(wasProcessedByExtension)")
+          
           // Check timestamp to avoid processing very old shares
           if let timestamp = sharedDefaults.object(forKey: "pendingShareTimestamp") as? Date {
             let timeSinceShare = Date().timeIntervalSince(timestamp)
@@ -33,17 +37,24 @@ class ShareHandler: RCTEventEmitter {
               // Clear the stored data first
               sharedDefaults.removeObject(forKey: "pendingShareURL")
               sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
+              sharedDefaults.removeObject(forKey: "shareProcessedByExtension")
               sharedDefaults.synchronize()
               print("🧹 ShareHandler: Cleared stored data")
               
-              // Send event to React Native
-              self.sendEvent(withName: "ShareExtensionData", body: ["url": pendingURL])
-              print("📨 ShareHandler: Sent event to React Native")
+              // Send event to React Native with silent flag
+              let eventData: [String: Any] = [
+                "url": pendingURL,
+                "silent": wasProcessedByExtension
+              ]
+              
+              self.sendEvent(withName: "ShareExtensionData", body: eventData)
+              print("📨 ShareHandler: Sent event to React Native (silent: \(wasProcessedByExtension))")
             } else {
               print("⏰ ShareHandler: Share too old, ignoring")
               // Clean up old data
               sharedDefaults.removeObject(forKey: "pendingShareURL")
               sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
+              sharedDefaults.removeObject(forKey: "shareProcessedByExtension")
               sharedDefaults.synchronize()
             }
           } else {
@@ -51,10 +62,16 @@ class ShareHandler: RCTEventEmitter {
             // No timestamp, process it anyway but clear it
             sharedDefaults.removeObject(forKey: "pendingShareURL")
             sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
+            sharedDefaults.removeObject(forKey: "shareProcessedByExtension")
             sharedDefaults.synchronize()
             
-            self.sendEvent(withName: "ShareExtensionData", body: ["url": pendingURL])
-            print("📨 ShareHandler: Sent event to React Native (no timestamp)")
+            let eventData: [String: Any] = [
+              "url": pendingURL,
+              "silent": wasProcessedByExtension
+            ]
+            
+            self.sendEvent(withName: "ShareExtensionData", body: eventData)
+            print("📨 ShareHandler: Sent event to React Native (no timestamp, silent: \(wasProcessedByExtension))")
           }
         } else {
           print("ℹ️ ShareHandler: No pending URL found")

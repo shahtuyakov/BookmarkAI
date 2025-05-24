@@ -8,36 +8,40 @@ import RootNavigator from '../src/navigation';
 import { useAppTheme } from '../src/theme';
 import { useShareExtension } from '../src/services/ShareExtensionHandler';
 import { useCreateShare } from '../src/hooks/useShares';
-import { Alert } from 'react-native';
 
 function AppContent(): React.JSX.Element {
-  const { createShare, isPending, isError, error } = useCreateShare();
+  const { createShare } = useCreateShare();
   
   // Set up share extension handler
   useShareExtension({
-    onShareReceived: async (url) => {
-      console.log('📨 onShareReceived called with URL:', url);
+    onShareReceived: async (url, silent = false) => {
+      console.log('📨 onShareReceived called with URL:', url, 'Silent:', silent);
       
       try {
-        console.log('📝 About to call createShare...');
+        console.log('📝 About to call createShare silently...');
         await createShare(url);
         console.log('✅ createShare completed successfully');
         
-        // Show success feedback
-        Alert.alert(
-          'Bookmark Saved! 🎉',
-          `Successfully saved: ${url}`,
-          [{ text: 'OK', style: 'default' }]
-        );
+        // Only show feedback if NOT silent (for backward compatibility with old flows)
+        if (!silent) {
+          // This would only happen if someone uses the old deep link format
+          console.log('🔔 Showing success feedback (non-silent mode)');
+          // Could add a toast here instead of alert for less intrusive feedback
+        } else {
+          console.log('🤫 Silent mode - bookmark saved without user notification');
+        }
       } catch (err) {
         console.error('❌ createShare failed:', err);
         
-        // Show error feedback
-        Alert.alert(
-          'Failed to Save Bookmark',
-          'There was an error saving your bookmark. Please try again.',
-          [{ text: 'OK', style: 'default' }]
-        );
+        // For errors, we might still want to show feedback even in silent mode
+        // but make it less intrusive (like a toast instead of alert)
+        if (!silent) {
+          console.log('🚨 Showing error feedback');
+          // Could show error alert here
+        } else {
+          console.log('🤫 Silent mode error - bookmark failed to save');
+          // Could show a subtle toast or add to a retry queue
+        }
       }
     }
   });
