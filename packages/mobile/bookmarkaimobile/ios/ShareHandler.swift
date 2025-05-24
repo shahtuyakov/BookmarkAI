@@ -19,69 +19,97 @@ class ShareHandler: RCTEventEmitter {
       if let sharedDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
         print("✅ ShareHandler: Got shared UserDefaults")
         
-        // Check for pending URL
-        if let pendingURL = sharedDefaults.string(forKey: "pendingShareURL") {
-          print("📤 ShareHandler: Found pending URL: \(pendingURL)")
-          
-          // Check if this was already processed by the extension (silent mode)
-          let wasProcessedByExtension = sharedDefaults.bool(forKey: "shareProcessedByExtension")
-          print("🤫 ShareHandler: Was processed by extension: \(wasProcessedByExtension)")
-          
-          // Check timestamp to avoid processing very old shares
-          if let timestamp = sharedDefaults.object(forKey: "pendingShareTimestamp") as? Date {
-            let timeSinceShare = Date().timeIntervalSince(timestamp)
-            print("⏰ ShareHandler: Time since share: \(timeSinceShare) seconds")
-            
-            // Only process shares from the last 5 minutes
-            if timeSinceShare < 300 {
-              // Clear the stored data first
-              sharedDefaults.removeObject(forKey: "pendingShareURL")
-              sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
-              sharedDefaults.removeObject(forKey: "shareProcessedByExtension")
-              sharedDefaults.synchronize()
-              print("🧹 ShareHandler: Cleared stored data")
-              
-              // Send event to React Native with silent flag
-              let eventData: [String: Any] = [
-                "url": pendingURL,
-                "silent": wasProcessedByExtension
-              ]
-              
-              self.sendEvent(withName: "ShareExtensionData", body: eventData)
-              print("📨 ShareHandler: Sent event to React Native (silent: \(wasProcessedByExtension))")
-            } else {
-              print("⏰ ShareHandler: Share too old, ignoring")
-              // Clean up old data
-              sharedDefaults.removeObject(forKey: "pendingShareURL")
-              sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
-              sharedDefaults.removeObject(forKey: "shareProcessedByExtension")
-              sharedDefaults.synchronize()
-            }
-          } else {
-            print("⚠️ ShareHandler: No timestamp found, processing anyway")
-            // No timestamp, process it anyway but clear it
-            sharedDefaults.removeObject(forKey: "pendingShareURL")
-            sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
-            sharedDefaults.removeObject(forKey: "shareProcessedByExtension")
-            sharedDefaults.synchronize()
-            
-            let eventData: [String: Any] = [
-              "url": pendingURL,
-              "silent": wasProcessedByExtension
-            ]
-            
-            self.sendEvent(withName: "ShareExtensionData", body: eventData)
-            print("📨 ShareHandler: Sent event to React Native (no timestamp, silent: \(wasProcessedByExtension))")
-          }
-        } else {
-          print("ℹ️ ShareHandler: No pending URL found")
+        // Check for new pending shares in queue
+        if sharedDefaults.bool(forKey: "hasNewPendingShares") {
+          print("📦 ShareHandler: Found new pending shares in queue")
+          self.processSharesQueue(sharedDefaults: sharedDefaults)
         }
         
-        // Debug: Print all keys in UserDefaults
-        let allKeys = sharedDefaults.dictionaryRepresentation().keys
-        print("🔍 ShareHandler: All UserDefaults keys: \(allKeys)")
+        // Also check for legacy single share (backward compatibility)
+        self.checkLegacySingleShare(sharedDefaults: sharedDefaults)
       } else {
         print("❌ ShareHandler: Failed to get shared UserDefaults")
+      }
+    }
+  }
+  
+  private func processSharesQueue(sharedDefaults: UserDefaults) {
+    guard let sharesQueue = sharedDefaults.array(forKey: "pendingSharesQueue") as? [[String: Any]] else {
+      print("ℹ️ ShareHandler: No shares queue found")
+      return
+    }
+    
+    print("📦 ShareHandler: Processing \(sharesQueue.count) shares from queue")
+    
+    var validShares: [[String: Any]] = []
+    let currentTime = Date().timeIntervalSince1970
+    
+    // Filter out shares older than 5 minutes
+    for shareData in sharesQueue {
+      if let timestamp = shareData["timestamp"] as? TimeInterval {
+        let timeSinceShare = currentTime - timestamp
+        if timeSinceShare < 300 { // 5 minutes
+          validShares.append(shareData)
+        } else {
+          print("⏰ ShareHandler: Skipping old share (age: \(timeSinceShare)s)")
+        }
+      } else {
+        // No timestamp, assume it's recent
+        validShares.append(shareData)
+      }
+    }
+    
+    if !validShares.isEmpty {
+      // Send all valid shares using the existing event type
+      // Use a special format to indicate this is a queue
+      self.sendEvent(withName: "ShareExtensionData", body: [
+        "isQueue": true,
+        "shares": validShares,
+        "silent": true
+      ])
+      print("📨 ShareHandler: Sent \(validShares.count) shares to React Native as queue")
+    }
+    
+    // Clear the queue and flag
+    sharedDefaults.removeObject(forKey: "pendingSharesQueue")
+    sharedDefaults.removeObject(forKey: "hasNewPendingShares")
+    sharedDefaults.synchronize()
+    print("🧹 ShareHandler: Cleared shares queue")
+  }
+  
+  private func checkLegacySingleShare(sharedDefaults: UserDefaults) {
+    // Check for legacy single share format (backward compatibility)
+    if let pendingURL = sharedDefaults.string(forKey: "pendingShareURL") {
+      print("📤 ShareHandler: Found legacy single share: \(pendingURL)")
+      
+      let wasProcessedByExtension = sharedDefaults.bool(forKey: "shareProcessedByExtension")
+      
+      if let timestamp = sharedDefaults.object(forKey: "pendingShareTimestamp") as? Date {
+        let timeSinceShare = Date().timeIntervalSince(timestamp)
+        
+        if timeSinceShare < 300 { // 5 minutes
+          // Clear the stored data first
+          sharedDefaults.removeObject(forKey: "pendingShareURL")
+          sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
+          sharedDefaults.removeObject(forKey: "shareProcessedByExtension")
+          sharedDefaults.synchronize()
+          
+          // Send legacy single share event
+          let eventData: [String: Any] = [
+            "url": pendingURL,
+            "silent": wasProcessedByExtension,
+            "isQueue": false
+          ]
+          
+          self.sendEvent(withName: "ShareExtensionData", body: eventData)
+          print("📨 ShareHandler: Sent legacy share to React Native")
+        } else {
+          print("⏰ ShareHandler: Legacy share too old, cleaning up")
+          sharedDefaults.removeObject(forKey: "pendingShareURL")
+          sharedDefaults.removeObject(forKey: "pendingShareTimestamp")
+          sharedDefaults.removeObject(forKey: "shareProcessedByExtension")
+          sharedDefaults.synchronize()
+        }
       }
     }
   }
@@ -90,7 +118,6 @@ class ShareHandler: RCTEventEmitter {
     super.startObserving()
     print("👁️ ShareHandler: Started observing")
     
-    // Register to receive the notification
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(handleCheckPendingShares(_:)),
@@ -102,7 +129,6 @@ class ShareHandler: RCTEventEmitter {
   override func stopObserving() {
     super.stopObserving()
     print("🛑 ShareHandler: Stopped observing")
-    // Remove the observer
     NotificationCenter.default.removeObserver(self)
   }
   
@@ -111,7 +137,6 @@ class ShareHandler: RCTEventEmitter {
     self.checkPendingShares()
   }
   
-  // Required for RCTEventEmitter subclasses
   override func invalidate() {
     super.invalidate()
     print("💥 ShareHandler: Invalidated")

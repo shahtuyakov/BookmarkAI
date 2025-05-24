@@ -33,24 +33,41 @@ class ShareViewController: SLComposeServiceViewController {
         
         // Add action that handles the background saving
         alert.addAction(UIAlertAction(title: "Great!", style: .default) { [weak self] _ in
-            self?.saveInBackgroundAndClose(url: url)
+            self?.addToQueueAndClose(url: url)
         })
         
         present(alert, animated: true)
     }
     
-    private func saveInBackgroundAndClose(url: URL) {
-        // Store in app group UserDefaults for background processing
+    private func addToQueueAndClose(url: URL) {
+        // Add to pending shares queue instead of overwriting
         if let groupDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
-            groupDefaults.set(url.absoluteString, forKey: "pendingShareURL")
-            groupDefaults.set(Date(), forKey: "pendingShareTimestamp")
-            groupDefaults.set(true, forKey: "shareProcessedByExtension") // Flag to prevent duplicate popup
+            
+            // Create new share entry
+            let newShare: [String: Any] = [
+                "url": url.absoluteString,
+                "timestamp": Date().timeIntervalSince1970,
+                "id": UUID().uuidString
+            ]
+            
+            // Get existing queue or create new one
+            var sharesQueue = groupDefaults.array(forKey: "pendingSharesQueue") as? [[String: Any]] ?? []
+            
+            // Add new share to queue
+            sharesQueue.append(newShare)
+            
+            // Save updated queue
+            groupDefaults.set(sharesQueue, forKey: "pendingSharesQueue")
+            groupDefaults.set(true, forKey: "hasNewPendingShares") // Flag to trigger processing
             groupDefaults.synchronize()
+            
+            print("📤 Added share to queue. Queue size: \(sharesQueue.count)")
+            print("🔗 Share URL: \(url.absoluteString)")
         }
         
         // Create deep link URL and open main app silently (in background)
         if let encodedURL = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed),
-           let deepLink = URL(string: "bookmarkai://share?url=\(encodedURL)&source=extension&silent=true") {
+           let deepLink = URL(string: "bookmarkai://share?url=\(encodedURL)&source=extension&silent=true&queued=true") {
             
             var responder: UIResponder? = self as UIResponder
             let selector = #selector(openURL(_:))

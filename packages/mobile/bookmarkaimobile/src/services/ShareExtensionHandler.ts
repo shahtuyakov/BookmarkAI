@@ -6,11 +6,18 @@ console.log('🔍 ShareHandler module:', NativeModules.ShareHandler);
 
 const { ShareHandler } = NativeModules;
 
-interface ShareExtensionHandlerProps {
-  onShareReceived: (url: string, silent?: boolean) => void;
+interface ShareData {
+  url: string;
+  timestamp?: number;
+  id?: string;
 }
 
-export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProps) {
+interface ShareExtensionHandlerProps {
+  onShareReceived: (url: string, silent?: boolean) => void;
+  onSharesQueueReceived: (shares: ShareData[], silent?: boolean) => void;
+}
+
+export function useShareExtension({ onShareReceived, onSharesQueueReceived }: ShareExtensionHandlerProps) {
   const appState = useRef(AppState.currentState);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -23,9 +30,10 @@ export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProp
       const urlObj = new URL(event.url);
       const sharedUrl = urlObj.searchParams.get('url');
       const isSilent = urlObj.searchParams.get('silent') === 'true';
+      const isQueued = urlObj.searchParams.get('queued') === 'true';
       
       if (sharedUrl) {
-        console.log('📤 Processing shared URL:', sharedUrl, 'Silent:', isSilent);
+        console.log('📤 Processing shared URL:', sharedUrl, 'Silent:', isSilent, 'Queued:', isQueued);
         onShareReceived(decodeURIComponent(sharedUrl), isSilent);
       } else {
         console.log('❌ No URL parameter found in deep link');
@@ -83,7 +91,7 @@ export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProp
         checkPendingShares();
       }, 100);
       
-      // Start periodic checking for 10 seconds (shorter since it's silent)
+      // Start periodic checking for 10 seconds
       startPeriodicCheck();
       setTimeout(stopPeriodicCheck, 10000); // Stop after 10 seconds
       
@@ -118,17 +126,29 @@ export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProp
 
     // Listen for share extension events
     let nativeSubscription: any;
+    
     if (Platform.OS === 'ios' && ShareHandler) {
       console.log('✅ Setting up ShareHandler event listener');
       const shareEmitter = new NativeEventEmitter(ShareHandler);
-      nativeSubscription = shareEmitter.addListener('ShareExtensionData', (data: { url: string; silent?: boolean }) => {
+      
+      // Single event listener that handles both single shares and queues
+      nativeSubscription = shareEmitter.addListener('ShareExtensionData', (data: any) => {
         console.log('📨 ShareExtensionData event received:', data);
-        if (data.url) {
+        
+        if (data.isQueue && data.shares) {
+          // This is a queue of multiple shares
+          console.log(`📦 Processing queue of ${data.shares.length} shares`);
+          onSharesQueueReceived(data.shares, data.silent);
+        } else if (data.url) {
+          // This is a single share
+          console.log('📤 Processing single share:', data.url);
           onShareReceived(data.url, data.silent);
+        } else {
+          console.log('❌ Unrecognized share data format:', data);
         }
       });
       
-      // Single initial check with shorter delay
+      // Single initial check
       setTimeout(() => {
         console.log('⏰ Initial check for pending shares...');
         checkPendingShares();
@@ -150,7 +170,7 @@ export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProp
         nativeSubscription.remove();
       }
     };
-  }, [handleDeepLink, handleAppStateChange, checkPendingShares, onShareReceived, stopPeriodicCheck]);
+  }, [handleDeepLink, handleAppStateChange, checkPendingShares, onShareReceived, onSharesQueueReceived, stopPeriodicCheck]);
 
   return { checkPendingShares };
 }

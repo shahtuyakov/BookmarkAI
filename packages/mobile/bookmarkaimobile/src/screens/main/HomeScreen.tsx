@@ -112,6 +112,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     );
   };
   
+  // Generate unique key for each item
+  const getItemKey = (item: Share, index: number) => {
+    // Use a combination of ID, URL hash, and index to ensure uniqueness
+    const urlHash = item.url ? item.url.slice(-8) : 'no-url';
+    return `share-${item.id}-${urlHash}-${index}`;
+  };
+  
   // Render content based on state
   const renderContent = () => {
     if (isLoading) {
@@ -149,7 +156,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     return (
       <FlatList
         data={shares}
-        keyExtractor={(item) => item.id}
+        keyExtractor={getItemKey}
         renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
         contentContainerStyle={styles.listContent}
         refreshControl={
@@ -163,6 +170,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={renderFooter}
+        removeClippedSubviews={true}
+        initialNumToRender={10}
+        maxToRenderPerBatch={5}
+        windowSize={10}
       />
     );
   };

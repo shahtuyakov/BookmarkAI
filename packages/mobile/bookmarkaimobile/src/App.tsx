@@ -9,41 +9,85 @@ import { useAppTheme } from '../src/theme';
 import { useShareExtension } from '../src/services/ShareExtensionHandler';
 import { useCreateShare } from '../src/hooks/useShares';
 
+interface ShareData {
+  url: string;
+  timestamp?: number;
+  id?: string;
+}
+
 function AppContent(): React.JSX.Element {
   const { createShare } = useCreateShare();
   
-  // Set up share extension handler
-  useShareExtension({
-    onShareReceived: async (url, silent = false) => {
-      console.log('📨 onShareReceived called with URL:', url, 'Silent:', silent);
+  // Process multiple shares from queue
+  const handleSharesQueue = async (shares: ShareData[], silent = true) => {
+    console.log(`📦 Processing ${shares.length} shares from queue`);
+    
+    let successCount = 0;
+    let failureCount = 0;
+    
+    // Process shares in sequence to avoid overwhelming the API
+    for (let i = 0; i < shares.length; i++) {
+      const share = shares[i];
+      console.log(`📝 Processing share ${i + 1}/${shares.length}: ${share.url}`);
       
       try {
-        console.log('📝 About to call createShare silently...');
-        await createShare(url);
-        console.log('✅ createShare completed successfully');
+        await createShare(share.url);
+        successCount++;
+        console.log(`✅ Successfully processed share ${i + 1}: ${share.url}`);
         
-        // Only show feedback if NOT silent (for backward compatibility with old flows)
-        if (!silent) {
-          // This would only happen if someone uses the old deep link format
-          console.log('🔔 Showing success feedback (non-silent mode)');
-          // Could add a toast here instead of alert for less intrusive feedback
-        } else {
-          console.log('🤫 Silent mode - bookmark saved without user notification');
+        // Small delay between requests to be API-friendly
+        if (i < shares.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       } catch (err) {
-        console.error('❌ createShare failed:', err);
-        
-        // For errors, we might still want to show feedback even in silent mode
-        // but make it less intrusive (like a toast instead of alert)
-        if (!silent) {
-          console.log('🚨 Showing error feedback');
-          // Could show error alert here
-        } else {
-          console.log('🤫 Silent mode error - bookmark failed to save');
-          // Could show a subtle toast or add to a retry queue
-        }
+        failureCount++;
+        console.error(`❌ Failed to process share ${i + 1}: ${share.url}`, err);
       }
     }
+    
+    console.log(`🎯 Queue processing complete: ${successCount} succeeded, ${failureCount} failed`);
+    
+    // Optional: Show a subtle notification for multiple shares
+    if (!silent && shares.length > 1) {
+      console.log(`🔔 Could show notification: ${successCount}/${shares.length} bookmarks saved`);
+      // Could add a toast notification here
+    }
+  };
+  
+  // Process single share
+  const handleSingleShare = async (url: string, silent = false) => {
+    console.log('📨 Processing single share:', url, 'Silent:', silent);
+    
+    try {
+      console.log('📝 About to call createShare...');
+      await createShare(url);
+      console.log('✅ createShare completed successfully');
+      
+      // Only show feedback if NOT silent (for backward compatibility)
+      if (!silent) {
+        console.log('🔔 Showing success feedback (non-silent mode)');
+        // Could add toast here for less intrusive feedback
+      } else {
+        console.log('🤫 Silent mode - bookmark saved without user notification');
+      }
+    } catch (err) {
+      console.error('❌ createShare failed:', err);
+      
+      // For errors, we might still want to show feedback even in silent mode
+      if (!silent) {
+        console.log('🚨 Showing error feedback');
+        // Could show error alert here
+      } else {
+        console.log('🤫 Silent mode error - bookmark failed to save');
+        // Could show a subtle toast or add to a retry queue
+      }
+    }
+  };
+  
+  // Set up share extension handler
+  useShareExtension({
+    onShareReceived: handleSingleShare,
+    onSharesQueueReceived: handleSharesQueue,
   });
 
   return <RootNavigator />;

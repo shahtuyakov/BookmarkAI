@@ -237,9 +237,9 @@ export function useCreateShare() {
       // Snapshot the previous value
       const previousShares = queryClient.getQueryData(sharesKeys.lists());
       
-      // Create optimistic share
+      // Create optimistic share with guaranteed unique ID
       const optimisticShare: Share & { _isOptimistic?: boolean } = {
-        id: `temp-${Date.now()}`,
+        id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         url,
         platform: detectPlatformFromUrl(url),
         status: isConnected ? 'pending' : 'pending',
@@ -257,10 +257,14 @@ export function useCreateShare() {
           // Add the optimistic share to the first page
           const newPages = [...old.pages];
           if (newPages[0]) {
-            newPages[0] = {
-              ...newPages[0],
-              items: [optimisticShare, ...newPages[0].items],
-            };
+            // Check if URL already exists to prevent duplicates
+            const existingUrls = new Set(newPages[0].items.map((item: any) => item.url));
+            if (!existingUrls.has(url)) {
+              newPages[0] = {
+                ...newPages[0],
+                items: [optimisticShare, ...newPages[0].items],
+              };
+            }
           }
           
           return {
