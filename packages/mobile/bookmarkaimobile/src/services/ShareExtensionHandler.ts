@@ -1,5 +1,5 @@
-import { NativeEventEmitter, NativeModules, Linking, Platform } from 'react-native';
-import { useEffect, useCallback } from 'react';
+import { NativeEventEmitter, NativeModules, Linking, Platform, AppState, AppStateStatus } from 'react-native';
+import { useEffect, useCallback, useRef } from 'react';
 
 console.log('📦 Available NativeModules:', Object.keys(NativeModules));
 console.log('🔍 ShareHandler module:', NativeModules.ShareHandler);
@@ -11,6 +11,8 @@ interface ShareExtensionHandlerProps {
 }
 
 export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProps) {
+  const appState = useRef(AppState.currentState);
+
   // Handle deep links
   const handleDeepLink = useCallback((event: { url: string }) => {
     console.log('🔗 Deep link received:', event.url);
@@ -43,6 +45,23 @@ export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProp
     }
   }, []);
 
+  // Handle app state changes (background -> foreground)
+  const handleAppStateChange = useCallback((nextAppState: AppStateStatus) => {
+    console.log('📱 App state changed:', appState.current, '->', nextAppState);
+    
+    // App came to foreground from background
+    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      console.log('🔄 App came to foreground - checking for pending shares');
+      
+      // Add a small delay to ensure the app is fully active
+      setTimeout(() => {
+        checkPendingShares();
+      }, 500);
+    }
+    
+    appState.current = nextAppState;
+  }, [checkPendingShares]);
+
   useEffect(() => {
     console.log('🚀 ShareExtension handler initializing...');
     console.log('📱 Platform:', Platform.OS);
@@ -61,6 +80,9 @@ export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProp
       }
     });
 
+    // Listen for app state changes
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+
     // Listen for share extension events
     let nativeSubscription: any;
     if (Platform.OS === 'ios' && ShareHandler) {
@@ -75,9 +97,9 @@ export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProp
       
       // Check for pending shares on startup
       setTimeout(() => {
-        console.log('⏰ Delayed check for pending shares...');
+        console.log('⏰ Initial check for pending shares...');
         checkPendingShares();
-      }, 2000);
+      }, 1000);
       
     } else {
       console.log('❌ ShareHandler not available');
@@ -89,11 +111,12 @@ export function useShareExtension({ onShareReceived }: ShareExtensionHandlerProp
     return () => {
       console.log('🧹 Cleaning up ShareExtension listeners');
       linkingSubscription.remove();
+      appStateSubscription.remove();
       if (nativeSubscription) {
         nativeSubscription.remove();
       }
     };
-  }, [handleDeepLink, checkPendingShares, onShareReceived]);
+  }, [handleDeepLink, handleAppStateChange, checkPendingShares, onShareReceived]);
 
   return { checkPendingShares };
 }

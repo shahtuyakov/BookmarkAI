@@ -209,7 +209,7 @@ export function useCreateShare() {
           updatedAt: new Date().toISOString(),
           // Flag to indicate this is a pending offline share
           _isPending: true,
-        };
+        } as Share;
       }
       
       // If online, create directly
@@ -227,21 +227,107 @@ export function useCreateShare() {
       }
     },
     
-    // Update cache after successful creation
-    onSuccess: (newShare) => {
-      console.log('🎉 Share creation successful, updating cache');
-      // Invalidate relevant queries to refetch data
-      queryClient.invalidateQueries({ queryKey: sharesKeys.lists() });
+    // OPTIMISTIC UPDATE: Add the share to cache immediately
+    onMutate: async ({ url }) => {
+      console.log('🎯 onMutate: Starting optimistic update');
       
-      // If it was an offline share that's now synced, remove the pending flag
-      if (newShare._isPending) {
-        // This will happen when back online and syncing
-        delete newShare._isPending;
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: sharesKeys.lists() });
+      
+      // Snapshot the previous value
+      const previousShares = queryClient.getQueryData(sharesKeys.lists());
+      
+      // Create optimistic share
+      const optimisticShare: Share & { _isOptimistic?: boolean } = {
+        id: `temp-${Date.now()}`,
+        url,
+        platform: detectPlatformFromUrl(url),
+        status: isConnected ? 'pending' : 'pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        _isOptimistic: true,
+      };
+      
+      // Optimistically update the cache
+      queryClient.setQueriesData(
+        { queryKey: sharesKeys.lists() },
+        (old: any) => {
+          if (!old) return old;
+          
+          // Add the optimistic share to the first page
+          const newPages = [...old.pages];
+          if (newPages[0]) {
+            newPages[0] = {
+              ...newPages[0],
+              items: [optimisticShare, ...newPages[0].items],
+            };
+          }
+          
+          return {
+            ...old,
+            pages: newPages,
+          };
+        }
+      );
+      
+      console.log('✅ Optimistic update applied');
+      return { previousShares };
+    },
+    
+    // Update cache after successful creation
+    onSuccess: (newShare, variables, context) => {
+      console.log('🎉 Share creation successful, updating cache with real data');
+      
+      // Remove optimistic share and add real share
+      queryClient.setQueriesData(
+        { queryKey: sharesKeys.lists() },
+        (old: any) => {
+          if (!old) return old;
+          
+          const newPages = [...old.pages];
+          if (newPages[0]) {
+            // Remove optimistic share and add real share at the beginning
+            const filteredItems = newPages[0].items.filter(
+              (item: any) => !item._isOptimistic
+            );
+            
+            newPages[0] = {
+              ...newPages[0],
+              items: [newShare, ...filteredItems],
+            };
+          }
+          
+          return {
+            ...old,
+            pages: newPages,
+          };
+        }
+      );
+      
+      console.log('✅ Cache updated with real share data');
+    },
+    
+    // Handle errors
+    onError: (error, variables, context) => {
+      console.error('💥 Share creation failed:', error);
+      
+      // Revert optimistic update
+      if (context?.previousShares) {
+        queryClient.setQueryData(sharesKeys.lists(), context.previousShares);
+      }
+      
+      // For offline scenarios, we still want to keep the optimistic update
+      // but mark it as pending sync
+      if (!isConnected) {
+        console.log('📴 Offline error - keeping optimistic update as pending');
+        // The optimistic update stays, will sync when online
       }
     },
     
-    onError: (error) => {
-      console.error('💥 Share creation failed:', error);
+    // Always run after success or error
+    onSettled: () => {
+      console.log('🏁 Share creation settled');
+      // We don't need to invalidate here since we're doing optimistic updates
     }
   });
   
@@ -257,7 +343,7 @@ export function useCreateShare() {
 }
 
 // Helper to detect platform from URL
-function detectPlatformFromUrl(url: string): string {
+function detectPlatformFromUrl(url: string): 'tiktok' | 'reddit' | 'twitter' | 'x' | 'unknown' {
   try {
     const urlObj = new URL(url);
     const hostname = urlObj.hostname.toLowerCase();
