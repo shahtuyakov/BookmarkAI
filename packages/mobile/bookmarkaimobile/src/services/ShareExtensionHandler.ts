@@ -14,14 +14,14 @@ interface ShareData {
 
 interface ShareExtensionHandlerProps {
   onShareReceived: (url: string, silent?: boolean) => void;
-  onSharesQueueReceived: (shares: ShareData[], silent?: boolean) => void;
+  onSharesQueueReceived?: (shares: ShareData[], silent?: boolean) => void;
 }
 
 export function useShareExtension({ onShareReceived, onSharesQueueReceived }: ShareExtensionHandlerProps) {
   const appState = useRef(AppState.currentState);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Handle deep links
+  // Handle deep links (iOS only)
   const handleDeepLink = useCallback((event: { url: string }) => {
     console.log('🔗 Deep link received:', event.url);
     
@@ -43,7 +43,7 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     }
   }, [onShareReceived]);
 
-  // Check for pending shares from the share extension
+  // Check for pending shares (cross-platform)
   const checkPendingShares = useCallback(() => {
     console.log('🔍 Checking for pending shares...');
     if (ShareHandler?.checkPendingShares) {
@@ -55,6 +55,39 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     }
   }, []);
 
+  // Flush queue (Android-specific, but safe to call on iOS)
+  const flushQueue = useCallback(async () => {
+    if (Platform.OS === 'android' && ShareHandler?.flushQueue) {
+      try {
+        console.log('🔄 Flushing Android share queue...');
+        const result = await ShareHandler.flushQueue();
+        console.log('✅ Queue flush result:', result);
+        return result;
+      } catch (error) {
+        console.error('❌ Failed to flush queue:', error);
+        return null;
+      }
+    } else if (Platform.OS === 'ios') {
+      // On iOS, just check for pending shares
+      checkPendingShares();
+    }
+  }, [checkPendingShares]);
+
+  // Get pending count (Android-specific)
+  const getPendingCount = useCallback(async (): Promise<number> => {
+    if (Platform.OS === 'android' && ShareHandler?.getPendingCount) {
+      try {
+        const count = await ShareHandler.getPendingCount();
+        console.log('📊 Pending count:', count);
+        return count;
+      } catch (error) {
+        console.error('❌ Failed to get pending count:', error);
+        return 0;
+      }
+    }
+    return 0;
+  }, []);
+
   // Start periodic checking when app is active
   const startPeriodicCheck = useCallback(() => {
     if (checkIntervalRef.current) {
@@ -64,10 +97,16 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     console.log('🔄 Starting periodic check for pending shares');
     checkIntervalRef.current = setInterval(() => {
       if (AppState.currentState === 'active') {
-        checkPendingShares();
+        if (Platform.OS === 'android') {
+          // On Android, flush the queue
+          flushQueue();
+        } else {
+          // On iOS, check for pending shares
+          checkPendingShares();
+        }
       }
     }, 2000); // Check every 2 seconds when active
-  }, [checkPendingShares]);
+  }, [checkPendingShares, flushQueue]);
 
   // Stop periodic checking
   const stopPeriodicCheck = useCallback(() => {
@@ -88,7 +127,11 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
       
       // Immediate check
       setTimeout(() => {
-        checkPendingShares();
+        if (Platform.OS === 'android') {
+          flushQueue();
+        } else {
+          checkPendingShares();
+        }
       }, 100);
       
       // Start periodic checking for 10 seconds
@@ -101,33 +144,37 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     }
     
     appState.current = nextAppState;
-  }, [checkPendingShares, startPeriodicCheck, stopPeriodicCheck]);
+  }, [checkPendingShares, flushQueue, startPeriodicCheck, stopPeriodicCheck]);
 
   useEffect(() => {
     console.log('🚀 ShareExtension handler initializing...');
     console.log('📱 Platform:', Platform.OS);
-    console.log('🔗 Setting up deep link listener...');
     
-    // Listen for deep links
-    const linkingSubscription = Linking.addEventListener('url', handleDeepLink);
-    
-    // Check for initial URL (app opened via deep link)
-    Linking.getInitialURL().then(url => {
-      if (url) {
-        console.log('🔗 Initial URL found:', url);
-        handleDeepLink({ url });
-      } else {
-        console.log('ℹ️ No initial URL');
-      }
-    });
+    // iOS-specific setup
+    if (Platform.OS === 'ios') {
+      console.log('🍎 Setting up iOS deep link listener...');
+      
+      // Listen for deep links
+      const linkingSubscription = Linking.addEventListener('url', handleDeepLink);
+      
+      // Check for initial URL (app opened via deep link)
+      Linking.getInitialURL().then(url => {
+        if (url) {
+          console.log('🔗 Initial URL found:', url);
+          handleDeepLink({ url });
+        } else {
+          console.log('ℹ️ No initial URL');
+        }
+      });
+    }
 
-    // Listen for app state changes
+    // Listen for app state changes (both platforms)
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
 
-    // Listen for share extension events
+    // Listen for share extension events (both platforms)
     let nativeSubscription: any;
     
-    if (Platform.OS === 'ios' && ShareHandler) {
+    if (ShareHandler) {
       console.log('✅ Setting up ShareHandler event listener');
       const shareEmitter = new NativeEventEmitter(ShareHandler);
       
@@ -135,7 +182,7 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
       nativeSubscription = shareEmitter.addListener('ShareExtensionData', (data: any) => {
         console.log('📨 ShareExtensionData event received:', data);
         
-        if (data.isQueue && data.shares) {
+        if (data.isQueue && data.shares && onSharesQueueReceived) {
           // This is a queue of multiple shares
           console.log(`📦 Processing queue of ${data.shares.length} shares`);
           onSharesQueueReceived(data.shares, data.silent);
@@ -148,29 +195,88 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
         }
       });
       
+      // Listen for pending count changes (Android-specific)
+      if (Platform.OS === 'android') {
+        const pendingCountSubscription = shareEmitter.addListener('PendingCountChanged', (data: any) => {
+          console.log('📊 Pending count changed:', data.pendingCount);
+          // Could emit this to a global state or context if needed
+        });
+        
+        // Clean up pending count subscription
+        const originalRemove = nativeSubscription.remove;
+        nativeSubscription.remove = () => {
+          originalRemove();
+          pendingCountSubscription.remove();
+        };
+      }
+      
       // Single initial check
       setTimeout(() => {
         console.log('⏰ Initial check for pending shares...');
-        checkPendingShares();
+        if (Platform.OS === 'android') {
+          flushQueue();
+        } else {
+          checkPendingShares();
+        }
       }, 500);
       
     } else {
       console.log('❌ ShareHandler not available');
-      console.log('   Platform iOS:', Platform.OS === 'ios');
+      console.log('   Platform:', Platform.OS);
       console.log('   ShareHandler exists:', !!ShareHandler);
     }
 
     // Cleanup
     return () => {
       console.log('🧹 Cleaning up ShareExtension listeners');
-      linkingSubscription.remove();
+      
+      if (Platform.OS === 'ios') {
+        // iOS-specific cleanup
+        const linkingSubscription = Linking.addEventListener('url', handleDeepLink);
+        linkingSubscription.remove();
+      }
+      
       appStateSubscription.remove();
       stopPeriodicCheck();
       if (nativeSubscription) {
         nativeSubscription.remove();
       }
     };
-  }, [handleDeepLink, handleAppStateChange, checkPendingShares, onShareReceived, onSharesQueueReceived, stopPeriodicCheck]);
+  }, [handleDeepLink, handleAppStateChange, checkPendingShares, flushQueue, onShareReceived, onSharesQueueReceived, stopPeriodicCheck]);
 
-  return { checkPendingShares };
+  return { 
+    checkPendingShares, 
+    flushQueue, 
+    getPendingCount,
+    // Platform-specific methods
+    ...(Platform.OS === 'android' && {
+      // Android-specific methods could be exposed here
+      retryFailedItems: async () => {
+        if (ShareHandler?.retryFailedItems) {
+          try {
+            const result = await ShareHandler.retryFailedItems();
+            console.log('🔄 Retried failed items:', result);
+            return result;
+          } catch (error) {
+            console.error('❌ Failed to retry items:', error);
+            return 0;
+          }
+        }
+        return 0;
+      },
+      getQueueStatus: async () => {
+        if (ShareHandler?.getQueueStatus) {
+          try {
+            const status = await ShareHandler.getQueueStatus();
+            console.log('📋 Queue status:', status);
+            return status;
+          } catch (error) {
+            console.error('❌ Failed to get queue status:', error);
+            return null;
+          }
+        }
+        return null;
+      }
+    })
+  };
 }

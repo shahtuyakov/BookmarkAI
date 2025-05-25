@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: 'kotlin-kapt'  // Required for Room
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -84,6 +85,16 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        
+        // Room database schema export directory
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments += [
+                    "room.schemaLocation": "$projectDir/schemas".toString(),
+                    "room.incremental": "true"
+                ]
+            }
+        }
     }
     signingConfigs {
         debug {
@@ -105,6 +116,16 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+    
+    // Enable Java 17 features (align with React Native 0.79.2)
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = '17'
+    }
 }
 
 dependencies {
@@ -116,4 +137,35 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    
+    // Android Share Intent Dependencies
+    
+    // Room database (for local queue storage)
+    def room_version = "2.6.1"
+    implementation "androidx.room:room-runtime:$room_version"
+    implementation "androidx.room:room-ktx:$room_version"
+    kapt "androidx.room:room-compiler:$room_version"
+    
+    // SQLCipher for database encryption
+    implementation "net.zetetic:android-database-sqlcipher:4.5.4"
+    implementation "androidx.sqlite:sqlite-ktx:2.4.0"
+    
+    // WorkManager for background processing
+    def work_version = "2.9.0"
+    implementation "androidx.work:work-runtime-ktx:$work_version"
+    
+    // Jetpack Security for encrypted preferences
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+    
+    // Coroutines (for async operations)
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+    
+    // HTTP client (using OkHttp that's already in RN)
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.squareup.okhttp3:logging-interceptor:4.12.0"
+    
+    // JSON parsing
+    implementation "com.squareup.moshi:moshi:1.15.0"
+    implementation "com.squareup.moshi:moshi-kotlin:1.15.0"
+    kapt "com.squareup.moshi:moshi-kotlin-codegen:1.15.0"
 }

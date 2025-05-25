@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
+import { Platform, Alert } from 'react-native';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NetworkProvider } from '../src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from '../src/services/queryClient';
@@ -18,9 +19,9 @@ interface ShareData {
 function AppContent(): React.JSX.Element {
   const { createShare } = useCreateShare();
   
-  // Process multiple shares from queue
+  // Process multiple shares from queue (cross-platform)
   const handleSharesQueue = async (shares: ShareData[], silent = true) => {
-    console.log(`📦 Processing ${shares.length} shares from queue`);
+    console.log(`📦 Processing ${shares.length} shares from queue (Platform: ${Platform.OS})`);
     
     let successCount = 0;
     let failureCount = 0;
@@ -47,54 +48,91 @@ function AppContent(): React.JSX.Element {
     
     console.log(`🎯 Queue processing complete: ${successCount} succeeded, ${failureCount} failed`);
     
-    // Optional: Show a subtle notification for multiple shares
+    // Show user feedback for multiple shares (platform-specific)
     if (!silent && shares.length > 1) {
-      console.log(`🔔 Could show notification: ${successCount}/${shares.length} bookmarks saved`);
-      // Could add a toast notification here
+      const message = `${successCount}/${shares.length} bookmarks saved successfully`;
+      
+      if (Platform.OS === 'ios') {
+        console.log(`🔔 iOS: ${message}`);
+        // Could add a toast notification here for iOS
+      } else if (Platform.OS === 'android') {
+        console.log(`🤖 Android: ${message}`);
+        // Android already shows toast in ShareActivity, so this is just for logging
+        // Could add a subtle in-app notification here
+      }
     }
   };
   
-  // Process single share
+  // Process single share (cross-platform)
   const handleSingleShare = async (url: string, silent = false) => {
-    console.log('📨 Processing single share:', url, 'Silent:', silent);
+    console.log(`📨 Processing single share (Platform: ${Platform.OS}):`, url, 'Silent:', silent);
     
     try {
       console.log('📝 About to call createShare...');
       await createShare(url);
       console.log('✅ createShare completed successfully');
       
-      // Only show feedback if NOT silent (for backward compatibility)
+      // Platform-specific feedback
       if (!silent) {
-        console.log('🔔 Showing success feedback (non-silent mode)');
-        // Could add toast here for less intrusive feedback
+        if (Platform.OS === 'ios') {
+          console.log('🍎 iOS: Showing success feedback (non-silent mode)');
+          // Could add iOS-specific toast here
+        } else if (Platform.OS === 'android') {
+          console.log('🤖 Android: Success (toast already shown by ShareActivity)');
+          // Android ShareActivity already showed toast, no additional feedback needed
+        }
       } else {
-        console.log('🤫 Silent mode - bookmark saved without user notification');
+        console.log(`🤫 Silent mode - bookmark saved without user notification (${Platform.OS})`);
       }
     } catch (err) {
       console.error('❌ createShare failed:', err);
       
       // For errors, we might still want to show feedback even in silent mode
       if (!silent) {
-        console.log('🚨 Showing error feedback');
-        // Could show error alert here
+        const errorMessage = 'Failed to save bookmark. Please try again.';
+        
+        if (Platform.OS === 'ios') {
+          console.log('🚨 iOS: Showing error feedback');
+          // Could show error alert here for iOS
+          Alert.alert('Error', errorMessage);
+        } else if (Platform.OS === 'android') {
+          console.log('🚨 Android: Error (ShareActivity handled initial feedback)');
+          // Could show in-app error notification for Android
+        }
       } else {
-        console.log('🤫 Silent mode error - bookmark failed to save');
-        // Could show a subtle toast or add to a retry queue
+        console.log(`🤫 Silent mode error - bookmark failed to save (${Platform.OS})`);
+        // Could add to a retry queue or show a subtle notification
       }
     }
   };
   
-  // Set up share extension handler
-  useShareExtension({
+  // Set up share extension handler with platform-aware callbacks
+  const shareExtensionReturn = useShareExtension({
     onShareReceived: handleSingleShare,
     onSharesQueueReceived: handleSharesQueue,
   });
+  
+  // Log available methods based on platform
+  React.useEffect(() => {
+    console.log('🔧 Share extension methods available:');
+    console.log('   Platform:', Platform.OS);
+    console.log('   checkPendingShares:', typeof shareExtensionReturn.checkPendingShares);
+    console.log('   flushQueue:', typeof shareExtensionReturn.flushQueue);
+    console.log('   getPendingCount:', typeof shareExtensionReturn.getPendingCount);
+    
+    if (Platform.OS === 'android') {
+      console.log('🤖 Android-specific methods:');
+      console.log('   retryFailedItems:', typeof shareExtensionReturn.retryFailedItems);
+      console.log('   getQueueStatus:', typeof shareExtensionReturn.getQueueStatus);
+    }
+  }, [shareExtensionReturn]);
 
   return <RootNavigator />;
 }
 
 function App(): React.JSX.Element {
   console.log('🏁 App component mounting...');
+  console.log('📱 Platform:', Platform.OS);
   const theme = useAppTheme();
 
   return (

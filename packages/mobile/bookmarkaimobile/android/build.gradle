@@ -6,6 +6,9 @@ buildscript {
         targetSdkVersion = 34
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.0.21"
+        
+        // Ensure consistent JVM target
+        javaVersion = JavaVersion.VERSION_17
     }
     repositories {
         google()
@@ -19,3 +22,12 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// Configure JVM toolchain for all subprojects
+allprojects {
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
+        }
+    }
+}

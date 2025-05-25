@@ -16,6 +16,8 @@ cd packages/api-gateway && npm run start:dev
 
 cd packages/mobile/bookmarkaimobile && npm install
 
+npm install --legacy-peer-deps 
+
 # Install ios dependencies for mobile app
 
 cd packages/mobile/bookmarkaimobile/ios && pod install
