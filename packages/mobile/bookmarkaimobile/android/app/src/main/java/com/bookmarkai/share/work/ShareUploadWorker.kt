@@ -214,7 +214,29 @@ class ShareUploadWorker(
                 android.util.Log.e("ShareUploadWorker", "Client error for bookmark: ${item.url}", result.exception)
             }
             
-            is ApiResult.ServerError, is ApiResult.Error -> {
+            is ApiResult.ServerError -> {
+                // Temporary failure - retry with exponential backoff
+                val newRetryCount = item.retryCount + 1
+                if (newRetryCount >= MAX_RETRIES) {
+                    database.bookmarkQueueDao().updateBookmarkStatus(
+                        id = itemId,
+                        status = BookmarkQueueStatus.FAILED,
+                        retryCount = newRetryCount,
+                        error = result.exception.message ?: "Server error"
+                    )
+                    android.util.Log.e("ShareUploadWorker", "Max retries exceeded for bookmark: ${item.url}")
+                } else {
+                    database.bookmarkQueueDao().updateBookmarkStatus(
+                        id = itemId,
+                        status = BookmarkQueueStatus.PENDING,
+                        retryCount = newRetryCount,
+                        error = result.exception.message ?: "Server error"
+                    )
+                    android.util.Log.w("ShareUploadWorker", "Retry ${newRetryCount}/$MAX_RETRIES for bookmark: ${item.url}")
+                }
+            }
+            
+            is ApiResult.Error -> {
                 // Temporary failure - retry with exponential backoff
                 val newRetryCount = item.retryCount + 1
                 if (newRetryCount >= MAX_RETRIES) {
@@ -266,8 +288,28 @@ class ShareUploadWorker(
                 return processPendingBookmarks()
             }
             
-            else -> {
+            is ApiResult.Error -> {
                 android.util.Log.e("ShareUploadWorker", "Failed to refresh tokens", refreshResult.exception)
+                return 0
+            }
+            
+            is ApiResult.AuthError -> {
+                android.util.Log.e("ShareUploadWorker", "Auth error during token refresh", refreshResult.exception)
+                return 0
+            }
+            
+            is ApiResult.RateLimitError -> {
+                android.util.Log.e("ShareUploadWorker", "Rate limited during token refresh", refreshResult.exception)
+                return 0
+            }
+            
+            is ApiResult.ClientError -> {
+                android.util.Log.e("ShareUploadWorker", "Client error during token refresh", refreshResult.exception)
+                return 0
+            }
+            
+            is ApiResult.ServerError -> {
+                android.util.Log.e("ShareUploadWorker", "Server error during token refresh", refreshResult.exception)
                 return 0
             }
         }

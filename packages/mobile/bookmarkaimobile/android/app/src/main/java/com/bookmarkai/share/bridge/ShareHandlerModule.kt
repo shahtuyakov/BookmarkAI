@@ -1,15 +1,12 @@
 package com.bookmarkai.share.bridge
 
 import android.content.Context
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.lifecycleScope
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.bookmarkai.share.database.BookmarkDatabase
 import com.bookmarkai.share.database.BookmarkQueueStatus
 import com.bookmarkai.share.work.ShareUploadWorker
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 
 /**
  * React Native module that bridges Android share functionality to JavaScript.
@@ -20,6 +17,7 @@ class ShareHandlerModule(
 ) : ReactContextBaseJavaModule(reactContext) {
     
     private val database = BookmarkDatabase.getDatabase(reactContext)
+    private val moduleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
     companion object {
         private const val MODULE_NAME = "ShareHandler"
@@ -47,9 +45,12 @@ class ShareHandlerModule(
             ShareUploadWorker.scheduleWork(reactContext)
             
             // Get current pending count for immediate feedback
-            Thread {
+            moduleScope.launch {
                 try {
-                    val pendingCount = database.bookmarkQueueDao().getPendingCount()
+                    val pendingCount = withContext(Dispatchers.IO) {
+                        database.bookmarkQueueDao().getPendingCount()
+                    }
+                    
                     val result = Arguments.createMap().apply {
                         putInt("pendingCount", pendingCount)
                         putString("status", "scheduled")
@@ -58,7 +59,7 @@ class ShareHandlerModule(
                 } catch (e: Exception) {
                     promise.reject("FLUSH_ERROR", "Failed to get pending count", e)
                 }
-            }.start()
+            }
             
         } catch (e: Exception) {
             promise.reject("FLUSH_ERROR", "Failed to schedule upload work", e)
@@ -70,14 +71,16 @@ class ShareHandlerModule(
      */
     @ReactMethod
     fun getPendingCount(promise: Promise) {
-        Thread {
+        moduleScope.launch {
             try {
-                val pendingCount = database.bookmarkQueueDao().getPendingCount()
+                val pendingCount = withContext(Dispatchers.IO) {
+                    database.bookmarkQueueDao().getPendingCount()
+                }
                 promise.resolve(pendingCount)
             } catch (e: Exception) {
                 promise.reject("COUNT_ERROR", "Failed to get pending count", e)
             }
-        }.start()
+        }
     }
     
     /**
@@ -85,25 +88,27 @@ class ShareHandlerModule(
      */
     @ReactMethod
     fun getQueueStatus(promise: Promise) {
-        Thread {
+        moduleScope.launch {
             try {
-                val dao = database.bookmarkQueueDao()
-                val allItems = dao.getAllBookmarks()
-                
-                val statusMap = Arguments.createMap().apply {
-                    putInt("pending", allItems.count { it.status == BookmarkQueueStatus.PENDING })
-                    putInt("uploading", allItems.count { it.status == BookmarkQueueStatus.UPLOADING })
-                    putInt("uploaded", allItems.count { it.status == BookmarkQueueStatus.UPLOADED })
-                    putInt("failed", allItems.count { it.status == BookmarkQueueStatus.FAILED })
-                    putInt("needsAuth", allItems.count { it.status == BookmarkQueueStatus.NEEDS_AUTH })
-                    putInt("total", allItems.size)
+                val statusMap = withContext(Dispatchers.IO) {
+                    val dao = database.bookmarkQueueDao()
+                    val allItems = dao.getAllBookmarks()
+                    
+                    Arguments.createMap().apply {
+                        putInt("pending", allItems.count { it.status == BookmarkQueueStatus.PENDING })
+                        putInt("uploading", allItems.count { it.status == BookmarkQueueStatus.UPLOADING })
+                        putInt("uploaded", allItems.count { it.status == BookmarkQueueStatus.UPLOADED })
+                        putInt("failed", allItems.count { it.status == BookmarkQueueStatus.FAILED })
+                        putInt("needsAuth", allItems.count { it.status == BookmarkQueueStatus.NEEDS_AUTH })
+                        putInt("total", allItems.size)
+                    }
                 }
                 
                 promise.resolve(statusMap)
             } catch (e: Exception) {
                 promise.reject("STATUS_ERROR", "Failed to get queue status", e)
             }
-        }.start()
+        }
     }
     
     /**
@@ -111,16 +116,18 @@ class ShareHandlerModule(
      */
     @ReactMethod
     fun clearCompletedItems(promise: Promise) {
-        Thread {
+        moduleScope.launch {
             try {
-                val deletedCount = database.bookmarkQueueDao().deleteOldCompletedBookmarks(
-                    cutoffTime = 0L // Delete all completed items regardless of age
-                )
+                val deletedCount = withContext(Dispatchers.IO) {
+                    database.bookmarkQueueDao().deleteOldCompletedBookmarks(
+                        cutoffTime = 0L // Delete all completed items regardless of age
+                    )
+                }
                 promise.resolve(deletedCount)
             } catch (e: Exception) {
                 promise.reject("CLEAR_ERROR", "Failed to clear completed items", e)
             }
-        }.start()
+        }
     }
     
     /**
@@ -128,33 +135,37 @@ class ShareHandlerModule(
      */
     @ReactMethod
     fun retryFailedItems(promise: Promise) {
-        Thread {
+        moduleScope.launch {
             try {
-                val dao = database.bookmarkQueueDao()
-                val failedItems = dao.getAllBookmarks().filter { 
-                    it.status == BookmarkQueueStatus.FAILED 
+                val retryCount = withContext(Dispatchers.IO) {
+                    val dao = database.bookmarkQueueDao()
+                    val failedItems = dao.getAllBookmarks().filter { 
+                        it.status == BookmarkQueueStatus.FAILED 
+                    }
+                    
+                    // Reset failed items to pending status
+                    failedItems.forEach { item ->
+                        dao.updateBookmarkStatus(
+                            id = item.id,
+                            status = BookmarkQueueStatus.PENDING,
+                            retryCount = 0,
+                            error = null
+                        )
+                    }
+                    
+                    // Schedule upload work
+                    if (failedItems.isNotEmpty()) {
+                        ShareUploadWorker.scheduleWork(reactContext)
+                    }
+                    
+                    failedItems.size
                 }
                 
-                // Reset failed items to pending status
-                failedItems.forEach { item ->
-                    dao.updateBookmarkStatus(
-                        id = item.id,
-                        status = BookmarkQueueStatus.PENDING,
-                        retryCount = 0,
-                        error = null
-                    )
-                }
-                
-                // Schedule upload work
-                if (failedItems.isNotEmpty()) {
-                    ShareUploadWorker.scheduleWork(reactContext)
-                }
-                
-                promise.resolve(failedItems.size)
+                promise.resolve(retryCount)
             } catch (e: Exception) {
                 promise.reject("RETRY_ERROR", "Failed to retry failed items", e)
             }
-        }.start()
+        }
     }
     
     /**
@@ -163,43 +174,45 @@ class ShareHandlerModule(
      */
     @ReactMethod
     fun checkPendingShares() {
-        Thread {
+        moduleScope.launch {
             try {
-                val dao = database.bookmarkQueueDao()
-                val pendingItems = dao.getPendingBookmarks()
-                val authNeededItems = dao.getBookmarksNeedingAuth()
-                val allPendingItems = pendingItems + authNeededItems
-                
-                if (allPendingItems.isNotEmpty()) {
-                    // Convert to format expected by React Native
-                    val sharesArray = Arguments.createArray()
+                withContext(Dispatchers.IO) {
+                    val dao = database.bookmarkQueueDao()
+                    val pendingItems = dao.getPendingBookmarks()
+                    val authNeededItems = dao.getBookmarksNeedingAuth()
+                    val allPendingItems = pendingItems + authNeededItems
                     
-                    allPendingItems.forEach { item ->
-                        val shareMap = Arguments.createMap().apply {
-                            putString("url", item.url)
-                            putString("id", item.id)
-                            putDouble("timestamp", item.createdAt.toDouble())
+                    if (allPendingItems.isNotEmpty()) {
+                        // Convert to format expected by React Native
+                        val sharesArray = Arguments.createArray()
+                        
+                        allPendingItems.forEach { item ->
+                            val shareMap = Arguments.createMap().apply {
+                                putString("url", item.url)
+                                putString("id", item.id)
+                                putDouble("timestamp", item.createdAt.toDouble())
+                            }
+                            sharesArray.pushMap(shareMap)
                         }
-                        sharesArray.pushMap(shareMap)
+                        
+                        // Send event to React Native using the same format as iOS
+                        val eventData = Arguments.createMap().apply {
+                            putBoolean("isQueue", true)
+                            putArray("shares", sharesArray)
+                            putBoolean("silent", true)
+                        }
+                        
+                        sendEvent(EVENT_SHARE_EXTENSION_DATA, eventData)
+                        
+                        // Schedule upload work
+                        ShareUploadWorker.scheduleWork(reactContext)
                     }
-                    
-                    // Send event to React Native using the same format as iOS
-                    val eventData = Arguments.createMap().apply {
-                        putBoolean("isQueue", true)
-                        putArray("shares", sharesArray)
-                        putBoolean("silent", true)
-                    }
-                    
-                    sendEvent(EVENT_SHARE_EXTENSION_DATA, eventData)
-                    
-                    // Schedule upload work
-                    ShareUploadWorker.scheduleWork(reactContext)
                 }
                 
             } catch (e: Exception) {
                 android.util.Log.e("ShareHandlerModule", "Error checking pending shares", e)
             }
-        }.start()
+        }
     }
     
     /**
@@ -207,40 +220,32 @@ class ShareHandlerModule(
      */
     private fun startObservingQueueChanges() {
         try {
-            // Note: In a production app, you'd want to use a proper lifecycle-aware component
-            // For now, we'll observe changes when the module is active
-            
-            Thread {
-                try {
-                    // This is a simplified approach - in production you'd want to use
-                    // proper lifecycle management and Flow collection
-                    
-                    var lastPendingCount = 0
-                    
-                    while (true) {
-                        try {
-                            val currentPendingCount = database.bookmarkQueueDao().getPendingCount()
+            moduleScope.launch {
+                var lastPendingCount = 0
+                
+                while (true) {
+                    try {
+                        val currentPendingCount = withContext(Dispatchers.IO) {
+                            database.bookmarkQueueDao().getPendingCount()
+                        }
+                        
+                        if (currentPendingCount != lastPendingCount) {
+                            lastPendingCount = currentPendingCount
                             
-                            if (currentPendingCount != lastPendingCount) {
-                                lastPendingCount = currentPendingCount
-                                
-                                val eventData = Arguments.createMap().apply {
-                                    putInt("pendingCount", currentPendingCount)
-                                }
-                                
-                                sendEvent(EVENT_PENDING_COUNT_CHANGED, eventData)
+                            val eventData = Arguments.createMap().apply {
+                                putInt("pendingCount", currentPendingCount)
                             }
                             
-                            Thread.sleep(2000) // Check every 2 seconds
-                        } catch (e: Exception) {
-                            android.util.Log.e("ShareHandlerModule", "Error observing queue changes", e)
-                            Thread.sleep(5000) // Wait longer on error
+                            sendEvent(EVENT_PENDING_COUNT_CHANGED, eventData)
                         }
+                        
+                        delay(2000) // Check every 2 seconds
+                    } catch (e: Exception) {
+                        android.util.Log.e("ShareHandlerModule", "Error observing queue changes", e)
+                        delay(5000) // Wait longer on error
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("ShareHandlerModule", "Observer thread stopped", e)
                 }
-            }.start()
+            }
             
         } catch (e: Exception) {
             android.util.Log.e("ShareHandlerModule", "Failed to start observing queue changes", e)
@@ -278,6 +283,7 @@ class ShareHandlerModule(
      */
     override fun invalidate() {
         super.invalidate()
-        // Clean up resources if needed
+        // Cancel all coroutines
+        moduleScope.cancel()
     }
 }

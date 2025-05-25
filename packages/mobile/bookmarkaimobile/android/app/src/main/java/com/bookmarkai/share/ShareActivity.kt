@@ -34,7 +34,9 @@ class ShareActivity : Activity() {
     }
     
     private fun handleShareIntent() {
-        lifecycleScope.launch {
+        // Use a simple coroutine scope instead of lifecycleScope
+        // Since Activity doesn't have lifecycleScope by default
+        kotlinx.coroutines.MainScope().launch {
             try {
                 val result = processShareIntent()
                 

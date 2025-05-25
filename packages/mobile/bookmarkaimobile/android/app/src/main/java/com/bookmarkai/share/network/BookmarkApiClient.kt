@@ -8,6 +8,8 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -42,13 +44,13 @@ class BookmarkApiClient(context: Context) {
             
             val request = Request.Builder()
                 .url("$baseUrl/v1/shares")
-                .post(RequestBody.create(MediaType.get("application/json"), json))
+                .post(json.toRequestBody("application/json".toMediaType()))
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Idempotency-Key", idempotencyKey)
                 .build()
             
             val response = client.newCall(request).execute()
-            handleResponse<ShareResponse>(response) { it.data }
+            handleResponse<ShareResponse, Share>(response) { it.data }
             
         } catch (e: Exception) {
             android.util.Log.e("BookmarkApiClient", "Error creating share", e)
@@ -69,12 +71,12 @@ class BookmarkApiClient(context: Context) {
             
             val request = Request.Builder()
                 .url("$baseUrl/auth/refresh")
-                .post(RequestBody.create(MediaType.get("application/json"), json))
+                .post(json.toRequestBody("application/json".toMediaType()))
                 .addHeader("Content-Type", "application/json")
                 .build()
             
             val response = client.newCall(request).execute()
-            val result = handleResponse<RefreshTokenResponse>(response) { it.data }
+            val result = handleResponse<RefreshTokenResponse, AuthTokens>(response) { it.data }
             
             // Save new tokens if successful
             if (result is ApiResult.Success) {
@@ -97,9 +99,9 @@ class BookmarkApiClient(context: Context) {
         transform: (T) -> R
     ): ApiResult<R> {
         return try {
-            val responseBody = response.body()?.string() ?: ""
+            val responseBody = response.body?.string() ?: ""
             
-            when (response.code()) {
+            when (response.code) {
                 in 200..299 -> {
                     val adapter = moshi.adapter(T::class.java)
                     val data = adapter.fromJson(responseBody)
@@ -111,9 +113,9 @@ class BookmarkApiClient(context: Context) {
                 }
                 401 -> ApiResult.AuthError(Exception("Authentication failed"))
                 429 -> ApiResult.RateLimitError(Exception("Rate limit exceeded"))
-                in 400..499 -> ApiResult.ClientError(Exception("Client error: ${response.code()}"))
-                in 500..599 -> ApiResult.ServerError(Exception("Server error: ${response.code()}"))
-                else -> ApiResult.Error(Exception("Unknown error: ${response.code()}"))
+                in 400..499 -> ApiResult.ClientError(Exception("Client error: ${response.code}"))
+                in 500..599 -> ApiResult.ServerError(Exception("Server error: ${response.code}"))
+                else -> ApiResult.Error(Exception("Unknown error: ${response.code}"))
             }
         } catch (e: Exception) {
             ApiResult.Error(e)
@@ -139,7 +141,7 @@ class BookmarkApiClient(context: Context) {
             val originalRequest = chain.request()
             
             // Skip auth for token refresh requests
-            if (originalRequest.url().encodedPath().contains("/auth/refresh")) {
+            if (originalRequest.url.encodedPath.contains("/auth/refresh")) {
                 return chain.proceed(originalRequest)
             }
             
