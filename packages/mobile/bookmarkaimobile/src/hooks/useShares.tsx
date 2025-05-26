@@ -24,15 +24,13 @@ export const sharesKeys = {
 // Key for pending shares queue
 const PENDING_SHARES_KEY = 'bookmarkai-pending-shares';
 
-// Interface for a pending share
 interface PendingShare {
-  id: string; // Local ID for tracking
+  id: string;
   url: string;
   idempotencyKey: string;
   timestamp: number;
 }
 
-// Hook to get a paginated list of shares
 export function useSharesList(params: GetSharesParams = {}) {
   const { isConnected } = useNetworkStatus();
   
@@ -46,25 +44,26 @@ export function useSharesList(params: GetSharesParams = {}) {
       return await sharesAPI.getShares(queryParams);
     },
     getNextPageParam: (lastPage) => lastPage.cursor,
-    enabled: isConnected, // Only actively fetch when online
-    // Mark this query for persistence
+    enabled: isConnected,
     meta: {
       persist: true,
     },
-    // Keep using cached data when offline
-    staleTime: Infinity,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    // Enable refetch on focus to catch updates from share extension
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
   
-  // Compute flat list of shares
   const shares = queryResult.data?.pages.flatMap(page => page.items) || [];
   
-  // Enhanced loading state (true when fetching first page or refreshing)
   const isLoading = queryResult.isLoading || 
     (queryResult.isFetching && !queryResult.isFetchingNextPage && shares.length === 0);
   
-  // Handle refresh (useful for pull-to-refresh)
   const refresh = useCallback(async () => {
-    return await queryResult.refetch();
+    console.log('🔄 useSharesList: Manually refreshing shares list');
+    const result = await queryResult.refetch();
+    console.log('✅ useSharesList: Manual refresh completed');
+    return result;
   }, [queryResult]);
   
   return {
@@ -76,23 +75,20 @@ export function useSharesList(params: GetSharesParams = {}) {
   };
 }
 
-// Hook to get a single share by ID
 export function useShareById(id: string) {
   const { isConnected } = useNetworkStatus();
   
   const queryResult = useQuery({
     queryKey: sharesKeys.detail(id),
     queryFn: async () => await sharesAPI.getShareById(id),
-    enabled: !!id && isConnected, // Only actively fetch when online and have ID
-    // Mark this query for persistence
+    enabled: !!id && isConnected,
     meta: {
       persist: true,
     },
-    // Keep using cached data when offline
-    staleTime: Infinity,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: true,
   });
   
-  // Handle refresh
   const refresh = useCallback(async () => {
     return await queryResult.refetch();
   }, [queryResult]);
@@ -105,14 +101,12 @@ export function useShareById(id: string) {
   };
 }
 
-// Hook to create a new share with offline support
 export function useCreateShare() {
   console.log('🏗️ useCreateShare hook initialized');
   
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   
-  // Load pending shares from AsyncStorage
   const loadPendingShares = async (): Promise<PendingShare[]> => {
     try {
       const pendingData = await AsyncStorage.getItem(PENDING_SHARES_KEY);
@@ -125,7 +119,6 @@ export function useCreateShare() {
     return [];
   };
   
-  // Save pending shares to AsyncStorage
   const savePendingShares = async (pendingShares: PendingShare[]) => {
     try {
       await AsyncStorage.setItem(PENDING_SHARES_KEY, JSON.stringify(pendingShares));
@@ -134,7 +127,6 @@ export function useCreateShare() {
     }
   };
   
-  // Add a share to the pending queue
   const addToPendingQueue = async (url: string): Promise<PendingShare> => {
     const pendingShares = await loadPendingShares();
     
@@ -149,57 +141,45 @@ export function useCreateShare() {
     return newPendingShare;
   };
   
-  // Remove a share from the pending queue
   const removeFromPendingQueue = async (id: string) => {
     const pendingShares = await loadPendingShares();
     const updatedShares = pendingShares.filter(share => share.id !== id);
     await savePendingShares(updatedShares);
   };
   
-  // Sync pending shares when back online
   const syncPendingShares = async () => {
     const pendingShares = await loadPendingShares();
     
-    // If no pending shares, nothing to do
     if (pendingShares.length === 0) return;
     
-    // Process each pending share
     for (const pendingShare of pendingShares) {
       try {
-        // Try to create the share on the server
         await sharesAPI.createShare(pendingShare.url, pendingShare.idempotencyKey);
-        
-        // If successful, remove from pending queue
         await removeFromPendingQueue(pendingShare.id);
       } catch (error) {
         console.error('Failed to sync pending share:', error);
-        // Keep in queue to retry later
       }
     }
     
-    // Refresh the shares list
+    // Invalidate and refetch after syncing
     await queryClient.invalidateQueries({ queryKey: sharesKeys.lists() });
   };
   
-  // Listen for network changes to sync when back online
   NetInfo.addEventListener(state => {
     if (state.isConnected) {
       syncPendingShares();
     }
   });
   
-  // Main mutation for creating shares
   const mutation = useMutation({
     mutationFn: async ({ url }: { url: string }) => {
       console.log(`🚀 Creating share for URL: ${url}`);
       console.log(`📶 Network connected: ${isConnected}`);
       
-      // If offline, add to pending queue
       if (!isConnected) {
         console.log('📴 Offline - adding to pending queue');
         const pendingShare = await addToPendingQueue(url);
         
-        // Return a mock share that will be replaced when online
         return {
           id: pendingShare.id,
           url: pendingShare.url,
@@ -207,12 +187,10 @@ export function useCreateShare() {
           status: 'pending',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          // Flag to indicate this is a pending offline share
           _isPending: true,
         } as Share;
       }
       
-      // If online, create directly
       console.log('🌐 Online - making API call');
       const idempotencyKey = uuidv4();
       console.log(`🔑 Idempotency key: ${idempotencyKey}`);
@@ -227,17 +205,13 @@ export function useCreateShare() {
       }
     },
     
-    // OPTIMISTIC UPDATE: Add the share to cache immediately
     onMutate: async ({ url }) => {
       console.log('🎯 onMutate: Starting optimistic update');
       
-      // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: sharesKeys.lists() });
       
-      // Snapshot the previous value
       const previousShares = queryClient.getQueryData(sharesKeys.lists());
       
-      // Create optimistic share with guaranteed unique ID
       const optimisticShare: Share & { _isOptimistic?: boolean } = {
         id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         url,
@@ -248,16 +222,13 @@ export function useCreateShare() {
         _isOptimistic: true,
       };
       
-      // Optimistically update the cache
       queryClient.setQueriesData(
         { queryKey: sharesKeys.lists() },
         (old: any) => {
           if (!old) return old;
           
-          // Add the optimistic share to the first page
           const newPages = [...old.pages];
           if (newPages[0]) {
-            // Check if URL already exists to prevent duplicates
             const existingUrls = new Set(newPages[0].items.map((item: any) => item.url));
             if (!existingUrls.has(url)) {
               newPages[0] = {
@@ -278,11 +249,9 @@ export function useCreateShare() {
       return { previousShares };
     },
     
-    // Update cache after successful creation
     onSuccess: (newShare, variables, context) => {
       console.log('🎉 Share creation successful, updating cache with real data');
       
-      // Remove optimistic share and add real share
       queryClient.setQueriesData(
         { queryKey: sharesKeys.lists() },
         (old: any) => {
@@ -290,15 +259,25 @@ export function useCreateShare() {
           
           const newPages = [...old.pages];
           if (newPages[0]) {
-            // Remove optimistic share and add real share at the beginning
             const filteredItems = newPages[0].items.filter(
-              (item: any) => !item._isOptimistic
+              (item: any) => !item._isOptimistic || item.url !== variables.url
             );
             
-            newPages[0] = {
-              ...newPages[0],
-              items: [newShare, ...filteredItems],
-            };
+            // Check if the new share already exists to avoid duplicates
+            const existingIndex = filteredItems.findIndex((item: any) => item.url === newShare.url);
+            if (existingIndex === -1) {
+              newPages[0] = {
+                ...newPages[0],
+                items: [newShare, ...filteredItems],
+              };
+            } else {
+              // Update existing item with server data
+              filteredItems[existingIndex] = newShare;
+              newPages[0] = {
+                ...newPages[0],
+                items: filteredItems,
+              };
+            }
           }
           
           return {
@@ -309,44 +288,44 @@ export function useCreateShare() {
       );
       
       console.log('✅ Cache updated with real share data');
+      
+      // Force a background refresh to ensure we have the latest server state
+      setTimeout(() => {
+        console.log('🔄 useCreateShare: Triggering background refresh after successful creation');
+        queryClient.invalidateQueries({ 
+          queryKey: sharesKeys.lists(),
+          refetchType: 'active'  // Only refetch if currently active
+        });
+      }, 1000);
     },
     
-    // Handle errors
     onError: (error, variables, context) => {
       console.error('💥 Share creation failed:', error);
       
-      // Revert optimistic update
       if (context?.previousShares) {
         queryClient.setQueryData(sharesKeys.lists(), context.previousShares);
       }
       
-      // For offline scenarios, we still want to keep the optimistic update
-      // but mark it as pending sync
       if (!isConnected) {
         console.log('📴 Offline error - keeping optimistic update as pending');
-        // The optimistic update stays, will sync when online
       }
     },
     
-    // Always run after success or error
     onSettled: () => {
       console.log('🏁 Share creation settled');
-      // We don't need to invalidate here since we're doing optimistic updates
     }
   });
   
   return {
     ...mutation,
-    // Helper to simplify API for consumers
     createShare: (url: string) => {
       console.log(`📝 createShare called with: ${url}`);
       return mutation.mutate({ url });
     },
-    pendingCount: mutation.isPending ? 1 : 0, // Simple count for UI indicators
+    pendingCount: mutation.isPending ? 1 : 0,
   };
 }
 
-// Helper to detect platform from URL
 function detectPlatformFromUrl(url: string): 'tiktok' | 'reddit' | 'twitter' | 'x' | 'unknown' {
   try {
     const urlObj = new URL(url);

@@ -2,13 +2,14 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
 import { Platform, Alert, ToastAndroid, NativeModules } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NetworkProvider } from '../src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from '../src/services/queryClient';
 import RootNavigator from '../src/navigation';
 import { useAppTheme } from '../src/theme';
 import { useShareExtension } from '../src/services/ShareExtensionHandler';
-import { useCreateShare } from '../src/hooks/useShares';
+import { useCreateShare, sharesKeys } from '../src/hooks/useShares';
 
 interface ShareData {
   url: string;
@@ -19,9 +20,27 @@ interface ShareData {
 
 function AppContent(): React.JSX.Element {
   const { createShare } = useCreateShare();
+  const queryClient = useQueryClient();
+  
+  // Helper function to invalidate shares cache and trigger UI refresh
+  const refreshSharesList = React.useCallback(() => {
+    console.log('🔄 AppContent: Invalidating shares cache to refresh UI');
+    
+    // Invalidate all shares queries to trigger refetch
+    queryClient.invalidateQueries({ 
+      queryKey: sharesKeys.lists() 
+    });
+    
+    // Also invalidate individual share details that might be cached
+    queryClient.invalidateQueries({ 
+      queryKey: sharesKeys.details() 
+    });
+    
+    console.log('✅ AppContent: Cache invalidated, UI should refresh automatically');
+  }, [queryClient]);
   
   // Process multiple shares from queue (cross-platform)
-  const handleSharesQueue = async (shares: ShareData[], silent = true, needsAuth = false) => {
+  const handleSharesQueue = React.useCallback(async (shares: ShareData[], silent = true, needsAuth = false) => {
     console.log(`📦 Processing ${shares.length} shares from queue (Platform: ${Platform.OS}, NeedsAuth: ${needsAuth})`);
     
     // Show Android toast for debugging
@@ -34,6 +53,7 @@ function AppContent(): React.JSX.Element {
     
     let successCount = 0;
     let failureCount = 0;
+    let shouldRefreshUI = false;
     
     // Process shares in sequence to avoid overwhelming the API
     for (let i = 0; i < shares.length; i++) {
@@ -41,10 +61,11 @@ function AppContent(): React.JSX.Element {
       console.log(`📝 Processing share ${i + 1}/${shares.length}: ${share.url} (status: ${share.status})`);
       
       try {
-        // If it's already uploaded on Android, just add to UI without API call
+        // If it's already uploaded on Android, just mark for UI refresh
         if (Platform.OS === 'android' && share.status === 'uploaded') {
-          console.log(`✅ Android: Share already uploaded, adding to UI: ${share.url}`);
+          console.log(`✅ Android: Share already uploaded, marking for UI refresh: ${share.url}`);
           successCount++;
+          shouldRefreshUI = true;
         } else if (Platform.OS === 'android' && (share.status === 'needs_auth' || needsAuth)) {
           // For NEEDS_AUTH items, process through React Native which has auth tokens
           console.log(`🔐 Android: Processing auth-needed share: ${share.url}`);
@@ -61,10 +82,12 @@ function AppContent(): React.JSX.Element {
           }
           
           successCount++;
+          shouldRefreshUI = true;
           console.log(`✅ Successfully processed auth-needed share ${i + 1}: ${share.url}`);
         } else {
           await createShare(share.url);
           successCount++;
+          shouldRefreshUI = true;
           console.log(`✅ Successfully processed share ${i + 1}: ${share.url}`);
         }
         
@@ -80,6 +103,16 @@ function AppContent(): React.JSX.Element {
     
     console.log(`🎯 Queue processing complete: ${successCount} succeeded, ${failureCount} failed`);
     
+    // Refresh UI if any shares were processed successfully
+    if (shouldRefreshUI && successCount > 0) {
+      console.log('🔄 AppContent: Triggering UI refresh after processing queue');
+      
+      // Small delay to ensure any optimistic updates have settled
+      setTimeout(() => {
+        refreshSharesList();
+      }, 500);
+    }
+    
     // Show user feedback for multiple shares (platform-specific)
     if (!silent && shares.length > 1) {
       const message = `${successCount}/${shares.length} bookmarks processed`;
@@ -92,16 +125,22 @@ function AppContent(): React.JSX.Element {
         ToastAndroid.show(`✅ ${message}`, ToastAndroid.LONG);
       }
     }
-  };
+  }, [createShare, queryClient, refreshSharesList]);
   
   // Process single share (cross-platform)
-  const handleSingleShare = async (url: string, silent = false) => {
+  const handleSingleShare = React.useCallback(async (url: string, silent = false) => {
     console.log(`📨 Processing single share (Platform: ${Platform.OS}):`, url, 'Silent:', silent);
     
     try {
       console.log('📝 About to call createShare...');
       await createShare(url);
       console.log('✅ createShare completed successfully');
+      
+      // Refresh UI after successful share creation
+      console.log('🔄 AppContent: Triggering UI refresh after single share');
+      setTimeout(() => {
+        refreshSharesList();
+      }, 300);
       
       // Platform-specific feedback
       if (!silent) {
@@ -133,7 +172,7 @@ function AppContent(): React.JSX.Element {
         console.log(`🤫 Silent mode error - bookmark failed to save (${Platform.OS})`);
       }
     }
-  };
+  }, [createShare, refreshSharesList]);
   
   // Set up share extension handler with platform-aware callbacks
   const shareExtensionReturn = useShareExtension({
