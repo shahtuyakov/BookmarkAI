@@ -1,11 +1,10 @@
-// src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { DeviceEventEmitter, Alert } from 'react-native';
-import { getAccessToken, clearTokens } from '../services/api/client';
+import { DeviceEventEmitter, Alert, Platform } from 'react-native';
+import { getAccessToken, clearTokens, getTokens } from '../services/api/client';
 import { authAPI, User } from '../services/api/auth';
 import * as biometricService from '../services/biometrics';
+import { androidTokenSync } from '../services/android-token-sync';
 
-// Interface for Auth Context
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -23,7 +22,6 @@ interface AuthContextType {
   disableBiometrics: () => Promise<boolean>;
 }
 
-// Create context with default values
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: false,
@@ -41,10 +39,85 @@ const AuthContext = createContext<AuthContextType>({
   disableBiometrics: async () => false,
 });
 
-// Hook to use the auth context
 export const useAuth = () => useContext(AuthContext);
 
-// Auth Provider component
+/**
+ * Sync authentication tokens to Android native storage
+ */
+async function syncTokensToAndroid(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  
+  try {
+    console.log('🔄 AuthContext: Syncing tokens to Android native storage...');
+    
+    const tokens = await getTokens();
+    if (!tokens) {
+      console.log('ℹ️ AuthContext: No tokens to sync');
+      return;
+    }
+
+    // Calculate expires in from current time
+    const currentTime = Math.floor(Date.now() / 1000);
+    const expiresIn = Math.max(0, tokens.expiresAt - currentTime);
+
+    const result = await androidTokenSync.syncTokens(
+      tokens.accessToken,
+      tokens.refreshToken,
+      expiresIn
+    );
+
+    if (result.success) {
+      console.log('✅ AuthContext: Tokens synced to Android successfully');
+    } else {
+      console.error('❌ AuthContext: Failed to sync tokens to Android:', result.message);
+    }
+  } catch (error) {
+    console.error('❌ AuthContext: Token sync error:', error);
+  }
+}
+
+/**
+ * Clear tokens from Android native storage
+ */
+async function clearAndroidTokens(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  
+  try {
+    console.log('🧹 AuthContext: Clearing Android native tokens...');
+    
+    const result = await androidTokenSync.clearTokens();
+    
+    if (result.success) {
+      console.log('✅ AuthContext: Android tokens cleared successfully');
+    } else {
+      console.error('❌ AuthContext: Failed to clear Android tokens:', result.message);
+    }
+  } catch (error) {
+    console.error('❌ AuthContext: Token clear error:', error);
+  }
+}
+
+/**
+ * Verify token synchronization status
+ */
+async function verifyTokenSync(): Promise<void> {
+  if (Platform.OS !== 'android' || !__DEV__) return;
+  
+  try {
+    const tokens = await getTokens();
+    const isValid = await androidTokenSync.verifySync(tokens?.accessToken);
+    
+    if (isValid) {
+      console.log('✅ AuthContext: Token sync verification passed');
+    } else {
+      console.warn('⚠️ AuthContext: Token sync verification failed - attempting re-sync');
+      await syncTokensToAndroid();
+    }
+  } catch (error) {
+    console.error('❌ AuthContext: Token sync verification error:', error);
+  }
+}
+
 export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -53,7 +126,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   const [isBiometricsEnabled, setIsBiometricsEnabled] = useState<boolean>(false);
   const [biometryType, setBiometryType] = useState<string | undefined>(undefined);
   
-  // Check biometric availability
   const checkBiometrics = async () => {
     const { available, biometryType } = await biometricService.checkBiometricAvailability();
     setIsBiometricsAvailable(available);
@@ -69,32 +141,42 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log('Checking for existing session...');
+        console.log('🔍 AuthContext: Checking for existing session...');
         const token = await getAccessToken();
         
         if (token) {
           try {
-            // If we have a token, fetch the user profile
             const userData = await authAPI.getUserProfile();
-            console.log('User session found:', userData);
+            console.log('✅ AuthContext: User session found:', userData);
             setUser(userData);
+            
+            // Sync tokens to Android after successful session restoration
+            await syncTokensToAndroid();
+            
+            // Verify sync in development
+            if (__DEV__) {
+              setTimeout(() => verifyTokenSync(), 1000);
+            }
+            
           } catch (err) {
-            // If token is invalid or expired, clear it
-            console.error('Failed to get user profile:', err);
+            console.error('❌ AuthContext: Failed to get user profile:', err);
             await clearTokens();
+            await clearAndroidTokens();
             setUser(null);
           }
         } else {
-          console.log('No token found, user is not authenticated');
+          console.log('ℹ️ AuthContext: No token found, user is not authenticated');
           setUser(null);
+          // Ensure Android tokens are also cleared
+          await clearAndroidTokens();
         }
         
-        // Check biometric availability
         await checkBiometrics();
       } catch (err) {
-        console.error('Auth check failed', err);
+        console.error('❌ AuthContext: Auth check failed', err);
         setError('Session expired. Please login again.');
         setUser(null);
+        await clearAndroidTokens();
       } finally {
         setIsLoading(false);
       }
@@ -102,13 +184,12 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     
     checkAuth();
     
-    // Listen for auth errors (like token refresh failures)
     const handleAuthError = () => {
       setUser(null);
       setError('Authentication failed. Please login again.');
+      clearAndroidTokens(); // Clear Android tokens on auth error
     };
     
-    // Use React Native's DeviceEventEmitter
     DeviceEventEmitter.addListener('auth-error', handleAuthError);
     
     return () => {
@@ -116,14 +197,24 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     };
   }, []);
   
-  // Login function
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     setError(null);
     
     try {
+      console.log('🔐 AuthContext: Starting login process...');
       const { user: userData } = await authAPI.login({ email, password });
       setUser(userData);
+      
+      console.log('✅ AuthContext: Login successful, syncing tokens...');
+      
+      // Sync tokens to Android immediately after successful login
+      await syncTokensToAndroid();
+      
+      // Verify sync in development
+      if (__DEV__) {
+        setTimeout(() => verifyTokenSync(), 1000);
+      }
       
       // After successful login, check if biometrics should be offered
       if (isBiometricsAvailable && !isBiometricsEnabled) {
@@ -149,7 +240,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         );
       }
     } catch (err: any) {
-      console.error('Login failed', err);
+      console.error('❌ AuthContext: Login failed', err);
       
       const errorMessage = err.response?.data?.error?.message || 
                            'Login failed. Please check your credentials.';
@@ -160,20 +251,17 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
   
-  // Login with biometrics
   const loginWithBiometrics = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // First, check if biometric login is enabled
       const enabled = await biometricService.isBiometricLoginEnabled();
       if (!enabled) {
         setError('Biometric login is not enabled');
         return;
       }
       
-      // Authenticate with biometrics
       const success = await biometricService.authenticateWithBiometrics(
         'Sign in to BookmarkAI'
       );
@@ -183,24 +271,27 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         return;
       }
       
-      // Get the stored user ID
       const userId = await biometricService.getBiometricUserId();
       if (!userId) {
         setError('User ID not found for biometric login');
         return;
       }
       
-      // Get user data
-      // This is simplified - in a real app, you'd have an endpoint to login with userId
-      // or use the stored tokens
       const userData = await authAPI.getUserProfile();
       if (userData) {
         setUser(userData);
+        
+        // Sync tokens after biometric login
+        await syncTokensToAndroid();
+        
+        if (__DEV__) {
+          setTimeout(() => verifyTokenSync(), 1000);
+        }
       } else {
         setError('Failed to retrieve user data');
       }
     } catch (err: any) {
-      console.error('Biometric login failed', err);
+      console.error('❌ AuthContext: Biometric login failed', err);
       const errorMessage = err.response?.data?.error?.message || 
                            'Biometric login failed. Please try again.';
       setError(errorMessage);
@@ -209,20 +300,26 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
   
-  // Register function
   const register = async (email: string, name: string, password: string) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      console.log('Starting registration process:', { email, name });
+      console.log('📝 AuthContext: Starting registration process...');
       const { user: userData } = await authAPI.register({ email, name, password });
-      console.log('Registration successful:', userData);
+      console.log('✅ AuthContext: Registration successful:', userData);
       setUser(userData);
-    } catch (err: any) {
-      console.error('Registration failed', err);
       
-      // Extract error message from response if available
+      // Sync tokens to Android immediately after successful registration
+      await syncTokensToAndroid();
+      
+      // Verify sync in development
+      if (__DEV__) {
+        setTimeout(() => verifyTokenSync(), 1000);
+      }
+    } catch (err: any) {
+      console.error('❌ AuthContext: Registration failed', err);
+      
       let errorMessage = 'Registration failed. Please try again.';
       
       if (err.response?.data?.error?.message) {
@@ -231,7 +328,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         errorMessage = err.message;
       }
       
-      console.log('Setting error message:', errorMessage);
       setError(errorMessage);
       throw err;
     } finally {
@@ -239,24 +335,31 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
   
-  // Logout function
   const logout = async () => {
     setIsLoading(true);
     
     try {
+      console.log('🚪 AuthContext: Starting logout process...');
+      
+      // Clear Android tokens first
+      await clearAndroidTokens();
+      
+      // Then clear React Native tokens and call server logout
       await authAPI.logout();
       setUser(null);
+      
+      console.log('✅ AuthContext: Logout completed successfully');
     } catch (err) {
-      console.error('Logout failed', err);
+      console.error('❌ AuthContext: Logout failed', err);
       // Even if the server-side logout fails, we still want to clear local data
       setUser(null);
       await clearTokens();
+      await clearAndroidTokens();
     } finally {
       setIsLoading(false);
     }
   };
   
-  // Request password reset
   const resetPassword = async (email: string) => {
     setIsLoading(true);
     setError(null);
@@ -264,7 +367,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     try {
       await authAPI.requestPasswordReset(email);
     } catch (err: any) {
-      console.error('Password reset request failed', err);
+      console.error('❌ AuthContext: Password reset request failed', err);
       
       const errorMessage = err.response?.data?.error?.message || 
                            'Password reset failed. Please try again.';
@@ -275,7 +378,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
   
-  // Enable biometric login
   const enableBiometrics = async (): Promise<boolean> => {
     if (!user) {
       setError('You must be logged in to enable biometric login');
@@ -283,7 +385,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
     
     try {
-      // Enable biometric login with the user ID
       const success = await biometricService.enableBiometricLogin(user.id);
       
       if (success) {
@@ -292,13 +393,12 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       
       return success;
     } catch (err) {
-      console.error('Failed to enable biometrics:', err);
+      console.error('❌ AuthContext: Failed to enable biometrics:', err);
       setError('Failed to enable biometric login. Please try again.');
       return false;
     }
   };
   
-  // Disable biometric login
   const disableBiometrics = async (): Promise<boolean> => {
     try {
       const success = await biometricService.disableBiometricLogin();
@@ -309,13 +409,12 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       
       return success;
     } catch (err) {
-      console.error('Failed to disable biometrics:', err);
+      console.error('❌ AuthContext: Failed to disable biometrics:', err);
       setError('Failed to disable biometric login. Please try again.');
       return false;
     }
   };
   
-  // Create context value
   const value = {
     user,
     isLoading,

@@ -6,17 +6,20 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.bookmarkai.share.database.BookmarkDatabase
 import com.bookmarkai.share.database.BookmarkQueueStatus
 import com.bookmarkai.share.work.ShareUploadWorker
+import com.bookmarkai.share.auth.TokenManager
+import com.bookmarkai.share.auth.AuthTokens
 import kotlinx.coroutines.*
 
 /**
  * React Native module that bridges Android share functionality to JavaScript.
- * Provides methods to manage the share queue and get pending counts.
+ * Enhanced with authentication token synchronization.
  */
 class ShareHandlerModule(
     private val reactContext: ReactApplicationContext
 ) : ReactContextBaseJavaModule(reactContext) {
     
     private val database = BookmarkDatabase.getDatabase(reactContext)
+    private val tokenManager = TokenManager(reactContext)
     private val moduleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
     companion object {
@@ -28,12 +31,145 @@ class ShareHandlerModule(
     override fun getName(): String = MODULE_NAME
     
     /**
-     * Initialize module and start observing queue changes
+     * Sync authentication tokens from React Native to Android native storage
      */
-    override fun initialize() {
-        super.initialize()
-        startObservingQueueChanges()
+    @ReactMethod
+    fun syncAuthTokens(
+        accessToken: String,
+        refreshToken: String,
+        expiresIn: Double,
+        promise: Promise
+    ) {
+        try {
+            android.util.Log.d("ShareHandlerModule", "Syncing auth tokens to Android native storage")
+            
+            val authTokens = AuthTokens(
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                expiresIn = expiresIn.toLong()
+            )
+            
+            tokenManager.saveTokens(authTokens)
+            
+            // Verify tokens were saved correctly
+            val savedTokens = tokenManager.getTokens()
+            val isValid = savedTokens?.accessToken == accessToken && 
+                         savedTokens.refreshToken == refreshToken
+            
+            if (isValid) {
+                android.util.Log.d("ShareHandlerModule", "✅ Auth tokens synced successfully")
+                promise.resolve(Arguments.createMap().apply {
+                    putBoolean("success", true)
+                    putString("message", "Tokens synced successfully")
+                    putBoolean("isAuthenticated", tokenManager.isAuthenticated())
+                })
+            } else {
+                android.util.Log.e("ShareHandlerModule", "❌ Token verification failed after sync")
+                promise.reject("SYNC_ERROR", "Token verification failed after sync")
+            }
+            
+        } catch (e: Exception) {
+            android.util.Log.e("ShareHandlerModule", "❌ Failed to sync auth tokens", e)
+            promise.reject("SYNC_ERROR", "Failed to sync auth tokens: ${e.message}", e)
+        }
     }
+    
+    /**
+     * Clear authentication tokens from Android native storage
+     */
+    @ReactMethod
+    fun clearAuthTokens(promise: Promise) {
+        try {
+            android.util.Log.d("ShareHandlerModule", "Clearing auth tokens from Android native storage")
+            
+            tokenManager.clearTokens()
+            
+            // Verify tokens were cleared
+            val isCleared = !tokenManager.isAuthenticated()
+            
+            if (isCleared) {
+                android.util.Log.d("ShareHandlerModule", "✅ Auth tokens cleared successfully")
+                promise.resolve(Arguments.createMap().apply {
+                    putBoolean("success", true)
+                    putString("message", "Tokens cleared successfully")
+                    putBoolean("isAuthenticated", false)
+                })
+            } else {
+                android.util.Log.e("ShareHandlerModule", "❌ Token clear verification failed")
+                promise.reject("CLEAR_ERROR", "Token clear verification failed")
+            }
+            
+        } catch (e: Exception) {
+            android.util.Log.e("ShareHandlerModule", "❌ Failed to clear auth tokens", e)
+            promise.reject("CLEAR_ERROR", "Failed to clear auth tokens: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Check if user is authenticated in Android native storage
+     */
+    @ReactMethod
+    fun isAuthenticated(promise: Promise) {
+        try {
+            val isAuth = tokenManager.isAuthenticated()
+            val hasValidToken = tokenManager.getValidAccessToken() != null
+            val hasRefreshToken = tokenManager.hasRefreshToken()
+            
+            android.util.Log.d("ShareHandlerModule", "Auth status check - Authenticated: $isAuth, Valid token: $hasValidToken, Has refresh: $hasRefreshToken")
+            
+            promise.resolve(Arguments.createMap().apply {
+                putBoolean("isAuthenticated", isAuth)
+                putBoolean("hasValidAccessToken", hasValidToken)
+                putBoolean("hasRefreshToken", hasRefreshToken)
+            })
+            
+        } catch (e: Exception) {
+            android.util.Log.e("ShareHandlerModule", "❌ Failed to check auth status", e)
+            promise.reject("AUTH_CHECK_ERROR", "Failed to check auth status: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Get detailed token information for debugging
+     */
+    @ReactMethod
+    fun getTokenDebugInfo(promise: Promise) {
+        try {
+            val tokens = tokenManager.getTokens()
+            val currentTime = System.currentTimeMillis() / 1000
+            
+            val debugInfo = Arguments.createMap().apply {
+                putBoolean("hasTokens", tokens != null)
+                putBoolean("isAuthenticated", tokenManager.isAuthenticated())
+                putBoolean("hasValidAccessToken", tokenManager.getValidAccessToken() != null)
+                putBoolean("hasRefreshToken", tokenManager.hasRefreshToken())
+                
+                if (tokens != null) {
+                    putString("accessTokenPreview", tokens.accessToken.take(20) + "...")
+                    putString("refreshTokenPreview", tokens.refreshToken.take(20) + "...")
+                    putDouble("expiresAt", tokens.expiresAt.toDouble())
+                    putDouble("currentTime", currentTime.toDouble())
+                    putBoolean("isExpired", currentTime >= tokens.expiresAt)
+                    putDouble("timeUntilExpiry", (tokens.expiresAt - currentTime).toDouble())
+                } else {
+                    putString("accessTokenPreview", "none")
+                    putString("refreshTokenPreview", "none")
+                    putDouble("expiresAt", 0.0)
+                    putDouble("currentTime", currentTime.toDouble())
+                    putBoolean("isExpired", true)
+                    putDouble("timeUntilExpiry", 0.0)
+                }
+            }
+            
+            promise.resolve(debugInfo)
+            
+        } catch (e: Exception) {
+            android.util.Log.e("ShareHandlerModule", "❌ Failed to get token debug info", e)
+            promise.reject("DEBUG_ERROR", "Failed to get token debug info: ${e.message}", e)
+        }
+    }
+
+    // [Keep all existing methods: flushQueue, getPendingCount, etc.]
     
     /**
      * Flush the queue by triggering WorkManager upload AND process completed items
@@ -93,6 +229,7 @@ class ShareHandlerModule(
                         putInt("pendingCount", pendingCount)
                         putInt("processedCount", recentlyUploaded.size)
                         putString("status", "scheduled")
+                        putBoolean("hasAuthTokens", tokenManager.isAuthenticated())
                     }
                     promise.resolve(result)
                     
@@ -122,7 +259,88 @@ class ShareHandlerModule(
             }
         }
     }
-    
+
+    /**
+     * Check for pending shares (Android equivalent of iOS checkPendingShares)
+     */
+    @ReactMethod
+    fun checkPendingShares() {
+        moduleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val dao = database.bookmarkQueueDao()
+                    val pendingItems = dao.getPendingBookmarks()
+                    val authNeededItems = dao.getBookmarksNeedingAuth()
+                    val recentlyUploaded = dao.getAllBookmarks().filter { 
+                        it.status == BookmarkQueueStatus.UPLOADED &&
+                        (System.currentTimeMillis() - it.updatedAt) < 30000 // Last 30 seconds
+                    }
+                    
+                    android.util.Log.d("ShareHandlerModule", "checkPendingShares - Pending: ${pendingItems.size}, Auth needed: ${authNeededItems.size}, Recently uploaded: ${recentlyUploaded.size}")
+                    
+                    // Process recently uploaded items first (show them in UI)
+                    if (recentlyUploaded.isNotEmpty()) {
+                        val sharesArray = Arguments.createArray()
+                        
+                        recentlyUploaded.forEach { item ->
+                            val shareMap = Arguments.createMap().apply {
+                                putString("url", item.url)
+                                putString("id", item.id)
+                                putDouble("timestamp", item.createdAt.toDouble())
+                                putString("status", "uploaded")
+                            }
+                            sharesArray.pushMap(shareMap)
+                        }
+                        
+                        val eventData = Arguments.createMap().apply {
+                            putBoolean("isQueue", true)
+                            putArray("shares", sharesArray)
+                            putBoolean("silent", true)
+                            putString("source", "android_check_completed")
+                        }
+                        
+                        sendEvent(EVENT_SHARE_EXTENSION_DATA, eventData)
+                    }
+                    
+                    // Send NEEDS_AUTH items to React Native for processing
+                    if (authNeededItems.isNotEmpty()) {
+                        val authSharesArray = Arguments.createArray()
+                        
+                        authNeededItems.forEach { item ->
+                            val shareMap = Arguments.createMap().apply {
+                                putString("url", item.url)
+                                putString("id", item.id)
+                                putDouble("timestamp", item.createdAt.toDouble())
+                                putString("status", "needs_auth")
+                            }
+                            authSharesArray.pushMap(shareMap)
+                        }
+                        
+                        val authEventData = Arguments.createMap().apply {
+                            putBoolean("isQueue", true)
+                            putArray("shares", authSharesArray)
+                            putBoolean("silent", true)
+                            putString("source", "android_needs_auth")
+                            putBoolean("needsAuth", true)
+                        }
+                        
+                        sendEvent(EVENT_SHARE_EXTENSION_DATA, authEventData)
+                        android.util.Log.d("ShareHandlerModule", "Sent ${authNeededItems.size} NEEDS_AUTH items to React Native")
+                    }
+                    
+                    // Process pending items (schedule for upload)
+                    if (pendingItems.isNotEmpty()) {
+                        ShareUploadWorker.scheduleWork(reactContext)
+                        android.util.Log.d("ShareHandlerModule", "Scheduled upload work for ${pendingItems.size} pending items")
+                    }
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("ShareHandlerModule", "Error checking pending shares", e)
+            }
+        }
+    }
+
     /**
      * Get detailed queue status including recently completed items
      */
@@ -247,89 +465,6 @@ class ShareHandlerModule(
             }
         }
     }
-    
-    /**
-     * Check for pending shares (Android equivalent of iOS checkPendingShares)
-     * This method processes any queued items and notifies React Native
-     */
-    @ReactMethod
-    fun checkPendingShares() {
-        moduleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    val dao = database.bookmarkQueueDao()
-                    val pendingItems = dao.getPendingBookmarks()
-                    val authNeededItems = dao.getBookmarksNeedingAuth()
-                    val recentlyUploaded = dao.getAllBookmarks().filter { 
-                        it.status == BookmarkQueueStatus.UPLOADED &&
-                        (System.currentTimeMillis() - it.updatedAt) < 30000 // Last 30 seconds
-                    }
-                    
-                    android.util.Log.d("ShareHandlerModule", "checkPendingShares - Pending: ${pendingItems.size}, Auth needed: ${authNeededItems.size}, Recently uploaded: ${recentlyUploaded.size}")
-                    
-                    // Process recently uploaded items first (show them in UI)
-                    if (recentlyUploaded.isNotEmpty()) {
-                        val sharesArray = Arguments.createArray()
-                        
-                        recentlyUploaded.forEach { item ->
-                            val shareMap = Arguments.createMap().apply {
-                                putString("url", item.url)
-                                putString("id", item.id)
-                                putDouble("timestamp", item.createdAt.toDouble())
-                                putString("status", "uploaded")
-                            }
-                            sharesArray.pushMap(shareMap)
-                        }
-                        
-                        val eventData = Arguments.createMap().apply {
-                            putBoolean("isQueue", true)
-                            putArray("shares", sharesArray)
-                            putBoolean("silent", true)
-                            putString("source", "android_check_completed")
-                        }
-                        
-                        sendEvent(EVENT_SHARE_EXTENSION_DATA, eventData)
-                    }
-                    
-                    // NEW: Send NEEDS_AUTH items to React Native for processing
-                    if (authNeededItems.isNotEmpty()) {
-                        val authSharesArray = Arguments.createArray()
-                        
-                        authNeededItems.forEach { item ->
-                            val shareMap = Arguments.createMap().apply {
-                                putString("url", item.url)
-                                putString("id", item.id)
-                                putDouble("timestamp", item.createdAt.toDouble())
-                                putString("status", "needs_auth")
-                            }
-                            authSharesArray.pushMap(shareMap)
-                        }
-                        
-                        val authEventData = Arguments.createMap().apply {
-                            putBoolean("isQueue", true)
-                            putArray("shares", authSharesArray)
-                            putBoolean("silent", true)
-                            putString("source", "android_needs_auth")
-                            putBoolean("needsAuth", true)
-                        }
-                        
-                        sendEvent(EVENT_SHARE_EXTENSION_DATA, authEventData)
-                        android.util.Log.d("ShareHandlerModule", "Sent ${authNeededItems.size} NEEDS_AUTH items to React Native")
-                    }
-                    
-                    // Process pending items (schedule for upload)
-                    if (pendingItems.isNotEmpty()) {
-                        // Schedule upload work
-                        ShareUploadWorker.scheduleWork(reactContext)
-                        android.util.Log.d("ShareHandlerModule", "Scheduled upload work for ${pendingItems.size} pending items")
-                    }
-                }
-                
-            } catch (e: Exception) {
-                android.util.Log.e("ShareHandlerModule", "Error checking pending shares", e)
-            }
-        }
-    }
 
     // Add a new method to mark items as processed after React Native handles them
     @ReactMethod
@@ -427,7 +562,8 @@ class ShareHandlerModule(
             "SUPPORTED_EVENTS" to arrayOf(
                 EVENT_SHARE_EXTENSION_DATA,
                 EVENT_PENDING_COUNT_CHANGED
-            )
+            ),
+            "HAS_TOKEN_SYNC" to true
         )
     }
     
@@ -436,7 +572,6 @@ class ShareHandlerModule(
      */
     override fun invalidate() {
         super.invalidate()
-        // Cancel all coroutines
         moduleScope.cancel()
     }
 }
