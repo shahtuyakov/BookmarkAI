@@ -291,18 +291,63 @@ class ShareHandlerModule(
                         sendEvent(EVENT_SHARE_EXTENSION_DATA, eventData)
                     }
                     
+                    // NEW: Send NEEDS_AUTH items to React Native for processing
+                    if (authNeededItems.isNotEmpty()) {
+                        val authSharesArray = Arguments.createArray()
+                        
+                        authNeededItems.forEach { item ->
+                            val shareMap = Arguments.createMap().apply {
+                                putString("url", item.url)
+                                putString("id", item.id)
+                                putDouble("timestamp", item.createdAt.toDouble())
+                                putString("status", "needs_auth")
+                            }
+                            authSharesArray.pushMap(shareMap)
+                        }
+                        
+                        val authEventData = Arguments.createMap().apply {
+                            putBoolean("isQueue", true)
+                            putArray("shares", authSharesArray)
+                            putBoolean("silent", true)
+                            putString("source", "android_needs_auth")
+                            putBoolean("needsAuth", true)
+                        }
+                        
+                        sendEvent(EVENT_SHARE_EXTENSION_DATA, authEventData)
+                        android.util.Log.d("ShareHandlerModule", "Sent ${authNeededItems.size} NEEDS_AUTH items to React Native")
+                    }
+                    
                     // Process pending items (schedule for upload)
-                    val allPendingItems = pendingItems + authNeededItems
-                    if (allPendingItems.isNotEmpty()) {
+                    if (pendingItems.isNotEmpty()) {
                         // Schedule upload work
                         ShareUploadWorker.scheduleWork(reactContext)
-                        
-                        android.util.Log.d("ShareHandlerModule", "Scheduled upload work for ${allPendingItems.size} pending items")
+                        android.util.Log.d("ShareHandlerModule", "Scheduled upload work for ${pendingItems.size} pending items")
                     }
                 }
                 
             } catch (e: Exception) {
                 android.util.Log.e("ShareHandlerModule", "Error checking pending shares", e)
+            }
+        }
+    }
+
+    // Add a new method to mark items as processed after React Native handles them
+    @ReactMethod
+    fun markShareAsProcessed(shareId: String, promise: Promise) {
+        moduleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    database.bookmarkQueueDao().updateBookmarkStatus(
+                        id = shareId,
+                        status = BookmarkQueueStatus.UPLOADED,
+                        error = null
+                    )
+                }
+                promise.resolve(true)
+                android.util.Log.d("ShareHandlerModule", "Marked share $shareId as processed")
+            } catch (e: Exception) {
+                android.util.Log.e("ShareHandlerModule", "Failed to mark share as processed", e)
+                promise.reject("MARK_ERROR", "Failed to mark share as processed", e)
             }
         }
     }

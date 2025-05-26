@@ -14,7 +14,7 @@ interface ShareData {
 
 interface ShareExtensionHandlerProps {
   onShareReceived: (url: string, silent?: boolean) => void;
-  onSharesQueueReceived?: (shares: ShareData[], silent?: boolean) => void;
+  onSharesQueueReceived?: (shares: ShareData[], silent?: boolean, needsAuth?: boolean) => void;
 }
 
 export function useShareExtension({ onShareReceived, onSharesQueueReceived }: ShareExtensionHandlerProps) {
@@ -229,7 +229,12 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
         if (data.isQueue && data.shares && onSharesQueueReceived) {
           // This is a queue of multiple shares
           console.log(`📦 Processing queue of ${data.shares.length} shares`);
-          onSharesQueueReceived(data.shares, data.silent);
+          
+          // Pass the needsAuth flag if present
+          const needsAuth = data.needsAuth === true;
+          console.log(`🔐 Queue needs auth: ${needsAuth}`);
+          
+          onSharesQueueReceived(data.shares, data.silent, needsAuth);
         } else if (data.url) {
           // This is a single share
           console.log('📤 Processing single share:', data.url);

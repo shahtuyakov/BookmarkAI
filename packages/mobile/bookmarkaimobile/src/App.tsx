@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
-import { Platform, Alert, ToastAndroid } from 'react-native';
+import { Platform, Alert, ToastAndroid, NativeModules } from 'react-native';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NetworkProvider } from '../src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from '../src/services/queryClient';
@@ -21,13 +21,13 @@ function AppContent(): React.JSX.Element {
   const { createShare } = useCreateShare();
   
   // Process multiple shares from queue (cross-platform)
-  const handleSharesQueue = async (shares: ShareData[], silent = true) => {
-    console.log(`📦 Processing ${shares.length} shares from queue (Platform: ${Platform.OS})`);
+  const handleSharesQueue = async (shares: ShareData[], silent = true, needsAuth = false) => {
+    console.log(`📦 Processing ${shares.length} shares from queue (Platform: ${Platform.OS}, NeedsAuth: ${needsAuth})`);
     
     // Show Android toast for debugging
-    if (Platform.OS === 'android') {
+    if (Platform.OS === 'android' && !silent) {
       ToastAndroid.show(
-        `📦 Processing ${shares.length} shared links`, 
+        `📦 Processing ${shares.length} ${needsAuth ? 'auth-needed' : 'shared'} links`, 
         ToastAndroid.SHORT
       );
     }
@@ -44,8 +44,24 @@ function AppContent(): React.JSX.Element {
         // If it's already uploaded on Android, just add to UI without API call
         if (Platform.OS === 'android' && share.status === 'uploaded') {
           console.log(`✅ Android: Share already uploaded, adding to UI: ${share.url}`);
-          // We could trigger a manual refresh here
           successCount++;
+        } else if (Platform.OS === 'android' && (share.status === 'needs_auth' || needsAuth)) {
+          // For NEEDS_AUTH items, process through React Native which has auth tokens
+          console.log(`🔐 Android: Processing auth-needed share: ${share.url}`);
+          await createShare(share.url);
+          
+          // Mark as processed in Android database
+          if (share.id && NativeModules.ShareHandler?.markShareAsProcessed) {
+            try {
+              await NativeModules.ShareHandler.markShareAsProcessed(share.id);
+              console.log(`✅ Marked share ${share.id} as processed in Android DB`);
+            } catch (err) {
+              console.error(`❌ Failed to mark share ${share.id} as processed:`, err);
+            }
+          }
+          
+          successCount++;
+          console.log(`✅ Successfully processed auth-needed share ${i + 1}: ${share.url}`);
         } else {
           await createShare(share.url);
           successCount++;

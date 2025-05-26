@@ -321,11 +321,14 @@ class ShareUploadWorker(
     private suspend fun markPendingItemsAsNeedsAuth() {
         val pendingItems = database.bookmarkQueueDao().getPendingBookmarks()
         pendingItems.forEach { item ->
-            database.bookmarkQueueDao().updateBookmarkStatus(
-                id = item.id,
-                status = BookmarkQueueStatus.NEEDS_AUTH,
-                error = "User not authenticated"
-            )
+            // Only mark as NEEDS_AUTH if not already marked
+            if (item.status != BookmarkQueueStatus.NEEDS_AUTH) {
+                database.bookmarkQueueDao().updateBookmarkStatus(
+                    id = item.id,
+                    status = BookmarkQueueStatus.NEEDS_AUTH,
+                    error = "User not authenticated"
+                )
+            }
         }
     }
     

@@ -24,7 +24,7 @@ class BookmarkApiClient(context: Context) {
     private val moshi = Moshi.Builder().build()
     
     // API configuration - matches React Native client configuration
-    private val baseUrl = "http://10.0.2.2:3001/api" // Android emulator localhost
+    private val baseUrl = "http://localhost:3001/api" // Android emulator localhost
     
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
