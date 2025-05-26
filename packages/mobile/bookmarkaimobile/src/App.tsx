@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, ToastAndroid } from 'react-native';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NetworkProvider } from '../src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from '../src/services/queryClient';
@@ -14,6 +14,7 @@ interface ShareData {
   url: string;
   timestamp?: number;
   id?: string;
+  status?: string;
 }
 
 function AppContent(): React.JSX.Element {
@@ -23,18 +24,33 @@ function AppContent(): React.JSX.Element {
   const handleSharesQueue = async (shares: ShareData[], silent = true) => {
     console.log(`📦 Processing ${shares.length} shares from queue (Platform: ${Platform.OS})`);
     
+    // Show Android toast for debugging
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(
+        `📦 Processing ${shares.length} shared links`, 
+        ToastAndroid.SHORT
+      );
+    }
+    
     let successCount = 0;
     let failureCount = 0;
     
     // Process shares in sequence to avoid overwhelming the API
     for (let i = 0; i < shares.length; i++) {
       const share = shares[i];
-      console.log(`📝 Processing share ${i + 1}/${shares.length}: ${share.url}`);
+      console.log(`📝 Processing share ${i + 1}/${shares.length}: ${share.url} (status: ${share.status})`);
       
       try {
-        await createShare(share.url);
-        successCount++;
-        console.log(`✅ Successfully processed share ${i + 1}: ${share.url}`);
+        // If it's already uploaded on Android, just add to UI without API call
+        if (Platform.OS === 'android' && share.status === 'uploaded') {
+          console.log(`✅ Android: Share already uploaded, adding to UI: ${share.url}`);
+          // We could trigger a manual refresh here
+          successCount++;
+        } else {
+          await createShare(share.url);
+          successCount++;
+          console.log(`✅ Successfully processed share ${i + 1}: ${share.url}`);
+        }
         
         // Small delay between requests to be API-friendly
         if (i < shares.length - 1) {
@@ -50,15 +66,14 @@ function AppContent(): React.JSX.Element {
     
     // Show user feedback for multiple shares (platform-specific)
     if (!silent && shares.length > 1) {
-      const message = `${successCount}/${shares.length} bookmarks saved successfully`;
+      const message = `${successCount}/${shares.length} bookmarks processed`;
       
       if (Platform.OS === 'ios') {
         console.log(`🔔 iOS: ${message}`);
         // Could add a toast notification here for iOS
       } else if (Platform.OS === 'android') {
         console.log(`🤖 Android: ${message}`);
-        // Android already shows toast in ShareActivity, so this is just for logging
-        // Could add a subtle in-app notification here
+        ToastAndroid.show(`✅ ${message}`, ToastAndroid.LONG);
       }
     }
   };
@@ -79,7 +94,7 @@ function AppContent(): React.JSX.Element {
           // Could add iOS-specific toast here
         } else if (Platform.OS === 'android') {
           console.log('🤖 Android: Success (toast already shown by ShareActivity)');
-          // Android ShareActivity already showed toast, no additional feedback needed
+          ToastAndroid.show('✅ Bookmark added!', ToastAndroid.SHORT);
         }
       } else {
         console.log(`🤫 Silent mode - bookmark saved without user notification (${Platform.OS})`);
@@ -93,15 +108,13 @@ function AppContent(): React.JSX.Element {
         
         if (Platform.OS === 'ios') {
           console.log('🚨 iOS: Showing error feedback');
-          // Could show error alert here for iOS
           Alert.alert('Error', errorMessage);
         } else if (Platform.OS === 'android') {
           console.log('🚨 Android: Error (ShareActivity handled initial feedback)');
-          // Could show in-app error notification for Android
+          ToastAndroid.show('❌ ' + errorMessage, ToastAndroid.LONG);
         }
       } else {
         console.log(`🤫 Silent mode error - bookmark failed to save (${Platform.OS})`);
-        // Could add to a retry queue or show a subtle notification
       }
     }
   };
@@ -124,6 +137,36 @@ function AppContent(): React.JSX.Element {
       console.log('🤖 Android-specific methods:');
       console.log('   retryFailedItems:', typeof shareExtensionReturn.retryFailedItems);
       console.log('   getQueueStatus:', typeof shareExtensionReturn.getQueueStatus);
+      console.log('   processAndroidQueue:', typeof shareExtensionReturn.processAndroidQueue);
+      
+      // Test Android queue status on startup
+      if (shareExtensionReturn.getQueueStatus) {
+        shareExtensionReturn.getQueueStatus().then(status => {
+          console.log('📋 Android startup queue status:', status);
+          if (status && (status.pending > 0 || status.uploaded > 0)) {
+            ToastAndroid.show(
+              `📋 Queue: ${status.pending} pending, ${status.uploaded} uploaded`, 
+              ToastAndroid.LONG
+            );
+          }
+        });
+      }
+    }
+  }, [shareExtensionReturn]);
+  
+  // Add manual test button for Android (development only)
+  React.useEffect(() => {
+    if (__DEV__ && Platform.OS === 'android') {
+      const testAndroidQueue = async () => {
+        console.log('🧪 DEV: Testing Android queue processing...');
+        if (shareExtensionReturn.processAndroidQueue) {
+          await shareExtensionReturn.processAndroidQueue();
+        }
+      };
+      
+      // Test after 3 seconds
+      const timeout = setTimeout(testAndroidQueue, 3000);
+      return () => clearTimeout(timeout);
     }
   }, [shareExtensionReturn]);
 

@@ -36,7 +36,7 @@ class ShareHandlerModule(
     }
     
     /**
-     * Flush the queue by triggering WorkManager upload
+     * Flush the queue by triggering WorkManager upload AND process completed items
      */
     @ReactMethod
     fun flushQueue(promise: Promise) {
@@ -44,20 +44,60 @@ class ShareHandlerModule(
             // Schedule immediate upload work
             ShareUploadWorker.scheduleWork(reactContext)
             
-            // Get current pending count for immediate feedback
             moduleScope.launch {
                 try {
+                    // Wait a moment for any immediate processing
+                    delay(500)
+                    
+                    // Check for recently uploaded items and notify React Native
+                    val recentlyUploaded = withContext(Dispatchers.IO) {
+                        database.bookmarkQueueDao().getAllBookmarks().filter { 
+                            it.status == BookmarkQueueStatus.UPLOADED &&
+                            (System.currentTimeMillis() - it.updatedAt) < 30000 // Last 30 seconds
+                        }
+                    }
+                    
+                    if (recentlyUploaded.isNotEmpty()) {
+                        android.util.Log.d("ShareHandlerModule", "Found ${recentlyUploaded.size} recently uploaded items")
+                        
+                        // Convert to format expected by React Native
+                        val sharesArray = Arguments.createArray()
+                        
+                        recentlyUploaded.forEach { item ->
+                            val shareMap = Arguments.createMap().apply {
+                                putString("url", item.url)
+                                putString("id", item.id)
+                                putDouble("timestamp", item.createdAt.toDouble())
+                                putString("status", "uploaded")
+                            }
+                            sharesArray.pushMap(shareMap)
+                        }
+                        
+                        // Send event to React Native
+                        val eventData = Arguments.createMap().apply {
+                            putBoolean("isQueue", true)
+                            putArray("shares", sharesArray)
+                            putBoolean("silent", true)
+                            putString("source", "android_upload_complete")
+                        }
+                        
+                        sendEvent(EVENT_SHARE_EXTENSION_DATA, eventData)
+                    }
+                    
+                    // Get current pending count for response
                     val pendingCount = withContext(Dispatchers.IO) {
                         database.bookmarkQueueDao().getPendingCount()
                     }
                     
                     val result = Arguments.createMap().apply {
                         putInt("pendingCount", pendingCount)
+                        putInt("processedCount", recentlyUploaded.size)
                         putString("status", "scheduled")
                     }
                     promise.resolve(result)
+                    
                 } catch (e: Exception) {
-                    promise.reject("FLUSH_ERROR", "Failed to get pending count", e)
+                    promise.reject("FLUSH_ERROR", "Failed to process queue", e)
                 }
             }
             
@@ -84,7 +124,7 @@ class ShareHandlerModule(
     }
     
     /**
-     * Get detailed queue status
+     * Get detailed queue status including recently completed items
      */
     @ReactMethod
     fun getQueueStatus(promise: Promise) {
@@ -93,6 +133,7 @@ class ShareHandlerModule(
                 val statusMap = withContext(Dispatchers.IO) {
                     val dao = database.bookmarkQueueDao()
                     val allItems = dao.getAllBookmarks()
+                    val now = System.currentTimeMillis()
                     
                     Arguments.createMap().apply {
                         putInt("pending", allItems.count { it.status == BookmarkQueueStatus.PENDING })
@@ -101,12 +142,51 @@ class ShareHandlerModule(
                         putInt("failed", allItems.count { it.status == BookmarkQueueStatus.FAILED })
                         putInt("needsAuth", allItems.count { it.status == BookmarkQueueStatus.NEEDS_AUTH })
                         putInt("total", allItems.size)
+                        putInt("recentlyUploaded", allItems.count { 
+                            it.status == BookmarkQueueStatus.UPLOADED && (now - it.updatedAt) < 60000 
+                        })
                     }
                 }
                 
                 promise.resolve(statusMap)
             } catch (e: Exception) {
                 promise.reject("STATUS_ERROR", "Failed to get queue status", e)
+            }
+        }
+    }
+    
+    /**
+     * Get recently completed shares (for immediate UI updates)
+     */
+    @ReactMethod
+    fun getRecentlyCompletedShares(promise: Promise) {
+        moduleScope.launch {
+            try {
+                val recentShares = withContext(Dispatchers.IO) {
+                    val dao = database.bookmarkQueueDao()
+                    val cutoffTime = System.currentTimeMillis() - 60000 // Last minute
+                    
+                    dao.getAllBookmarks().filter { 
+                        it.status == BookmarkQueueStatus.UPLOADED && it.updatedAt >= cutoffTime
+                    }
+                }
+                
+                val sharesArray = Arguments.createArray()
+                recentShares.forEach { item ->
+                    val shareMap = Arguments.createMap().apply {
+                        putString("url", item.url)
+                        putString("id", item.id)
+                        putDouble("timestamp", item.createdAt.toDouble())
+                        putDouble("completedAt", item.updatedAt.toDouble())
+                        putString("status", "uploaded")
+                    }
+                    sharesArray.pushMap(shareMap)
+                }
+                
+                promise.resolve(sharesArray)
+                
+            } catch (e: Exception) {
+                promise.reject("RECENT_ERROR", "Failed to get recent shares", e)
             }
         }
     }
@@ -180,32 +260,44 @@ class ShareHandlerModule(
                     val dao = database.bookmarkQueueDao()
                     val pendingItems = dao.getPendingBookmarks()
                     val authNeededItems = dao.getBookmarksNeedingAuth()
-                    val allPendingItems = pendingItems + authNeededItems
+                    val recentlyUploaded = dao.getAllBookmarks().filter { 
+                        it.status == BookmarkQueueStatus.UPLOADED &&
+                        (System.currentTimeMillis() - it.updatedAt) < 30000 // Last 30 seconds
+                    }
                     
-                    if (allPendingItems.isNotEmpty()) {
-                        // Convert to format expected by React Native
+                    android.util.Log.d("ShareHandlerModule", "checkPendingShares - Pending: ${pendingItems.size}, Auth needed: ${authNeededItems.size}, Recently uploaded: ${recentlyUploaded.size}")
+                    
+                    // Process recently uploaded items first (show them in UI)
+                    if (recentlyUploaded.isNotEmpty()) {
                         val sharesArray = Arguments.createArray()
                         
-                        allPendingItems.forEach { item ->
+                        recentlyUploaded.forEach { item ->
                             val shareMap = Arguments.createMap().apply {
                                 putString("url", item.url)
                                 putString("id", item.id)
                                 putDouble("timestamp", item.createdAt.toDouble())
+                                putString("status", "uploaded")
                             }
                             sharesArray.pushMap(shareMap)
                         }
                         
-                        // Send event to React Native using the same format as iOS
                         val eventData = Arguments.createMap().apply {
                             putBoolean("isQueue", true)
                             putArray("shares", sharesArray)
                             putBoolean("silent", true)
+                            putString("source", "android_check_completed")
                         }
                         
                         sendEvent(EVENT_SHARE_EXTENSION_DATA, eventData)
-                        
+                    }
+                    
+                    // Process pending items (schedule for upload)
+                    val allPendingItems = pendingItems + authNeededItems
+                    if (allPendingItems.isNotEmpty()) {
                         // Schedule upload work
                         ShareUploadWorker.scheduleWork(reactContext)
+                        
+                        android.util.Log.d("ShareHandlerModule", "Scheduled upload work for ${allPendingItems.size} pending items")
                     }
                 }
                 
@@ -222,13 +314,20 @@ class ShareHandlerModule(
         try {
             moduleScope.launch {
                 var lastPendingCount = 0
+                var lastUploadedCount = 0
                 
                 while (true) {
                     try {
-                        val currentPendingCount = withContext(Dispatchers.IO) {
-                            database.bookmarkQueueDao().getPendingCount()
+                        val (currentPendingCount, currentUploadedCount) = withContext(Dispatchers.IO) {
+                            val dao = database.bookmarkQueueDao()
+                            val pending = dao.getPendingCount()
+                            val uploaded = dao.getAllBookmarks().count { 
+                                it.status == BookmarkQueueStatus.UPLOADED 
+                            }
+                            pending to uploaded
                         }
                         
+                        // Check for pending count changes
                         if (currentPendingCount != lastPendingCount) {
                             lastPendingCount = currentPendingCount
                             
@@ -237,6 +336,15 @@ class ShareHandlerModule(
                             }
                             
                             sendEvent(EVENT_PENDING_COUNT_CHANGED, eventData)
+                        }
+                        
+                        // Check for new completed uploads
+                        if (currentUploadedCount > lastUploadedCount) {
+                            android.util.Log.d("ShareHandlerModule", "Detected new uploads: $lastUploadedCount -> $currentUploadedCount")
+                            lastUploadedCount = currentUploadedCount
+                            
+                            // Trigger a check for recent completions
+                            checkPendingShares()
                         }
                         
                         delay(2000) // Check every 2 seconds

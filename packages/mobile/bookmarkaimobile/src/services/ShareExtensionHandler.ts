@@ -88,6 +88,40 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     return 0;
   }, []);
 
+  // Android-specific: Process queue items immediately when app becomes active
+  const processAndroidQueue = useCallback(async () => {
+    if (Platform.OS !== 'android' || !ShareHandler) return;
+    
+    try {
+      console.log('🤖 Android: Processing queue on app activation');
+      
+      // First, flush the queue to trigger WorkManager
+      await flushQueue();
+      
+      // Wait a moment for database operations
+      setTimeout(async () => {
+        try {
+          // Then check for any items that were processed
+          console.log('🤖 Android: Checking for processed items');
+          const queueStatus = await ShareHandler.getQueueStatus();
+          console.log('🤖 Android: Queue status:', queueStatus);
+          
+          // If there are completed items, trigger a refresh
+          if (queueStatus && queueStatus.uploaded > 0) {
+            console.log('🤖 Android: Found uploaded items, triggering refresh');
+            // We could emit a custom event here to trigger a refresh
+            // For now, let's just log it
+          }
+        } catch (error) {
+          console.error('❌ Android: Error checking queue status:', error);
+        }
+      }, 1000);
+      
+    } catch (error) {
+      console.error('❌ Android: Error processing queue:', error);
+    }
+  }, [flushQueue]);
+
   // Start periodic checking when app is active
   const startPeriodicCheck = useCallback(() => {
     if (checkIntervalRef.current) {
@@ -95,18 +129,27 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     }
     
     console.log('🔄 Starting periodic check for pending shares');
+    
+    // Immediate check
+    if (Platform.OS === 'android') {
+      processAndroidQueue();
+    } else {
+      checkPendingShares();
+    }
+    
+    // Then periodic checks
     checkIntervalRef.current = setInterval(() => {
       if (AppState.currentState === 'active') {
         if (Platform.OS === 'android') {
-          // On Android, flush the queue
+          // On Android, just flush the queue periodically
           flushQueue();
         } else {
           // On iOS, check for pending shares
           checkPendingShares();
         }
       }
-    }, 2000); // Check every 2 seconds when active
-  }, [checkPendingShares, flushQueue]);
+    }, 3000); // Check every 3 seconds when active
+  }, [checkPendingShares, flushQueue, processAndroidQueue]);
 
   // Stop periodic checking
   const stopPeriodicCheck = useCallback(() => {
@@ -122,21 +165,22 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     console.log('📱 App state changed:', appState.current, '->', nextAppState);
     
     if (nextAppState === 'active') {
-      // App became active - start checking silently
-      console.log('🔄 App became active - starting silent background checks');
+      // App became active - start checking
+      console.log('🔄 App became active - processing pending shares');
       
-      // Immediate check
-      setTimeout(() => {
-        if (Platform.OS === 'android') {
-          flushQueue();
-        } else {
+      if (Platform.OS === 'android') {
+        // Android: Process queue immediately and start periodic checks
+        processAndroidQueue();
+        startPeriodicCheck();
+        setTimeout(stopPeriodicCheck, 10000); // Stop after 10 seconds
+      } else {
+        // iOS: Check for pending shares and start periodic checks
+        setTimeout(() => {
           checkPendingShares();
-        }
-      }, 100);
-      
-      // Start periodic checking for 10 seconds
-      startPeriodicCheck();
-      setTimeout(stopPeriodicCheck, 10000); // Stop after 10 seconds
+        }, 100);
+        startPeriodicCheck();
+        setTimeout(stopPeriodicCheck, 10000); // Stop after 10 seconds
+      }
       
     } else if (nextAppState === 'background' || nextAppState === 'inactive') {
       // App going to background - stop periodic checks
@@ -144,7 +188,7 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     }
     
     appState.current = nextAppState;
-  }, [checkPendingShares, flushQueue, startPeriodicCheck, stopPeriodicCheck]);
+  }, [checkPendingShares, flushQueue, startPeriodicCheck, stopPeriodicCheck, processAndroidQueue]);
 
   useEffect(() => {
     console.log('🚀 ShareExtension handler initializing...');
@@ -210,11 +254,11 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
         };
       }
       
-      // Single initial check
+      // Platform-specific initial check
       setTimeout(() => {
         console.log('⏰ Initial check for pending shares...');
         if (Platform.OS === 'android') {
-          flushQueue();
+          processAndroidQueue();
         } else {
           checkPendingShares();
         }
@@ -242,7 +286,7 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
         nativeSubscription.remove();
       }
     };
-  }, [handleDeepLink, handleAppStateChange, checkPendingShares, flushQueue, onShareReceived, onSharesQueueReceived, stopPeriodicCheck]);
+  }, [handleDeepLink, handleAppStateChange, checkPendingShares, flushQueue, onShareReceived, onSharesQueueReceived, stopPeriodicCheck, processAndroidQueue]);
 
   return { 
     checkPendingShares, 
@@ -250,7 +294,7 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
     getPendingCount,
     // Platform-specific methods
     ...(Platform.OS === 'android' && {
-      // Android-specific methods could be exposed here
+      // Android-specific methods
       retryFailedItems: async () => {
         if (ShareHandler?.retryFailedItems) {
           try {
@@ -276,7 +320,8 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
           }
         }
         return null;
-      }
+      },
+      processAndroidQueue // Expose for manual testing
     })
   };
 }
