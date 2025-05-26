@@ -20,7 +20,9 @@ export const API_URLS = {
 };
 
 // Select the appropriate URL based on environment
-export const API_BASE_URL = API_URLS.IOSSimulator;
+// export const API_BASE_URL = API_URLS.IOSSimulator;
+export const API_BASE_URL = API_URLS.AndroidEmulator;
+
 
 // The key for storing tokens in Keychain
 export const KEYCHAIN_SERVICE = 'com.bookmarkai.auth';
