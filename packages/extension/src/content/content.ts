@@ -1,4 +1,4 @@
-import browser from 'webextension-polyfill';
+// import browser from 'webextension-polyfill'; // TODO: Will be used in Phase 3
 
 console.log('BookmarkAI Web Clip content script loaded');
 
