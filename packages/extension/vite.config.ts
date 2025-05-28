@@ -4,35 +4,28 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  publicDir: 'public',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: resolve(__dirname, 'src/popup/popup.html'),
         'content-script': resolve(__dirname, 'src/content/content.ts'),
         'service-worker': resolve(__dirname, 'src/background/service-worker.ts'),
-        'callback': resolve(__dirname, 'src/auth/callback.html'),
+        'popup-script': resolve(__dirname, 'src/popup/popup.tsx'),
+        'callback-script': resolve(__dirname, 'src/auth/callback.ts'),
       },
       output: {
         entryFileNames: (chunkInfo) => {
           const name = chunkInfo.name;
           if (name === 'content-script') return 'content/content.js';
           if (name === 'service-worker') return 'background/service-worker.js';
-          return '[name]/[name].js';
+          if (name === 'popup-script') return 'popup/popup.js';
+          if (name === 'callback-script') return 'auth/callback.js';
+          return 'assets/[name]-[hash].js';
         },
         chunkFileNames: 'chunks/[name]-[hash].js',
-        assetFileNames: (assetInfo) => {
-          const name = assetInfo.name || '';
-          if (name.endsWith('.html')) {
-            if (name.includes('popup')) return 'popup/popup.html';
-            if (name.includes('callback')) return 'auth/callback.html';
-          }
-          if (name.endsWith('.css')) {
-            return 'styles/[name]-[hash][extname]';
-          }
-          return 'assets/[name]-[hash][extname]';
-        },
+        assetFileNames: 'assets/[name]-[hash][extname]', 
       },
     },
     target: 'esnext',
