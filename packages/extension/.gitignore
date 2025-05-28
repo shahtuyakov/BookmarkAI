@@ -11,6 +11,12 @@ artifacts/
 .env.development
 .env.production
 
+# Environment variables
+.env
+.env.*
+!.env.example
+*.local
+
 # IDE
 .vscode/
 .idea/
@@ -23,7 +29,18 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw? 

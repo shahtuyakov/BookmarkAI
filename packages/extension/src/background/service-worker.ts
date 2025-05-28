@@ -1,7 +1,8 @@
 import browser from 'webextension-polyfill';
 import { AuthService } from '../services/auth';
+import { API_BASE_URL } from '../config/oauth';
 
-console.log('BookmarkAI Web Clip service worker loaded');
+console.log('BookmarkAI Web Clip service worker loaded', API_BASE_URL);
 
 // Initialize AuthService
 const authService = AuthService.getInstance();
@@ -38,7 +39,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // Handle messages from content scripts and popup
-browser.runtime.onMessage.addListener(async (message, _sender, _sendResponse) => {
+browser.runtime.onMessage.addListener(async (message, _sender) => {
   console.log('BookmarkAI: Message received in service worker', message);
   
   switch (message.type) {
@@ -71,25 +72,73 @@ browser.runtime.onMessage.addListener(async (message, _sender, _sendResponse) =>
       try {
         const token = await authService.getValidAccessToken();
         return { success: true, token };
-      } catch (error) {
+      } catch (error: any) {
         console.error('BookmarkAI: Token retrieval failed:', error);
-        return { success: false, error: 'Failed to get access token' };
+        return { success: false, error: error.message || 'Failed to get access token' };
+      }
+    
+    case 'GET_RECENT_SHARES':
+      try {
+        const isAuthenticated = await authService.isAuthenticated();
+        if (!isAuthenticated) {
+          return { success: false, error: 'User not authenticated', data: [] };
+        }
+        const token = await authService.getValidAccessToken();
+        if (!token) {
+          return { success: false, error: 'Missing access token', data: [] };
+        }
+
+        // Construct the shares URL using API_BASE_URL and append /shares
+        // Example: VITE_API_BASE_URL=http://localhost:3001/api/v1
+        // Result: http://localhost:3001/api/v1/shares?limit=10&sort=createdAt:desc
+        const sharesUrl = `${API_BASE_URL}/shares?limit=10&sort=createdAt:desc`; 
+
+        console.log(`Service Worker: Fetching shares from ${sharesUrl}`);
+
+        const response = await fetch(sharesUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.error('BookmarkAI: Failed to fetch shares:', response.status, errorData);
+          throw new Error(`Failed to fetch shares: ${response.status} - ${errorData}`);
+        }
+        const responseData = await response.json(); 
+        
+        if (responseData.success && responseData.data && Array.isArray(responseData.data.items)) {
+            return { success: true, data: responseData.data.items };
+        } else if (Array.isArray(responseData.items)) { // Fallback for simpler { items: [] } structure
+            return { success: true, data: responseData.items };
+        } else if (responseData.success && Array.isArray(responseData.data)) { // Another common pattern { success: true, data: [] }
+            return { success: true, data: responseData.data };
+        }
+         return { success: false, error: 'Invalid response structure from shares API', data: [] };
+
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to get recent shares:', error);
+        return { success: false, error: error.message || 'Could not fetch shares', data: [] };
       }
     
     case 'BOOKMARK_PAGE':
       // Check authentication first
-      const isAuthenticated = await authService.isAuthenticated();
+      const isAuthenticatedForBookmark = await authService.isAuthenticated();
       
-      if (!isAuthenticated) {
+      if (!isAuthenticatedForBookmark) {
         return { success: false, error: 'User not authenticated' };
       }
       
       // TODO: Implement bookmark saving (Phase 4)
-      console.log('BookmarkAI: Bookmark request authenticated');
-      return { success: true };
+      // Ensure to use API_BASE_URL for constructing the bookmark/share creation endpoint
+      console.log('BookmarkAI: Bookmark request authenticated, API_BASE_URL available for use:', API_BASE_URL);
+      // Example POST URL: `${API_BASE_URL}/shares`
+      return { success: true, message: "Bookmark functionality not fully implemented yet." }; // Placeholder
     
     default:
-      console.warn('BookmarkAI: Unknown message type', message.type);
-      return { error: 'Unknown message type' };
+      console.warn('BookmarkAI: Unknown message type in service worker', message.type);
+      return { success: false, error: 'Unknown message type' };
   }
 }); 

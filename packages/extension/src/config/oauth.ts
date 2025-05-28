@@ -1,36 +1,39 @@
 import type { OAuthConfig } from '../types/auth';
 import browser from 'webextension-polyfill';
 
+// All OAuth configuration is now sourced from Vite environment variables (VITE_ prefix)
+// Vite automatically loads .env.development or .env.production based on the command (dev vs build).
+
+// Helper function to get environment variables with a fallback, primarily for type safety
+// and to make it clear where these are coming from.
+function getEnvVar(key: string, defaultValue?: string): string {
+  const value = import.meta.env[key] as string | undefined;
+  if (value === undefined) {
+    if (defaultValue !== undefined) return defaultValue;
+    throw new Error(`Missing environment variable: ${key}`);
+  }
+  return value;
+}
+
+// DEBUG: Log the VITE_OAUTH_AUTH_URL to see what Vite has loaded
+console.log('[DEBUG] VITE_OAUTH_AUTH_URL from import.meta.env:', import.meta.env.VITE_OAUTH_AUTH_URL);
+console.log('[DEBUG] All import.meta.env keys:', Object.keys(import.meta.env));
+
 /**
  * OAuth configuration for BookmarkAI
  * According to ADR-009, this should integrate with existing JWT auth
  */
 export const OAUTH_CONFIG: OAuthConfig = {
-  authUrl: 'https://api.bookmarkai.com/oauth/authorize',
-  tokenUrl: 'https://api.bookmarkai.com/oauth/token',
-  clientId: 'bookmarkai-webext', // TODO: Get from environment/manifest
+  authUrl: getEnvVar('VITE_OAUTH_AUTH_URL'),
+  tokenUrl: getEnvVar('VITE_OAUTH_TOKEN_URL'),
+  userInfoUrl: getEnvVar('VITE_OAUTH_USERINFO_URL'),
+  clientId: getEnvVar('VITE_OAUTH_CLIENT_ID'),
   redirectUri: browser.runtime.getURL('auth/callback.html'),
-  scopes: ['bookmark:write', 'bookmark:read', 'profile:read'],
+  scopes: ['openid', 'profile', 'email', 'offline_access', 'shares:read', 'shares:write'],
 };
 
-/**
- * Development configuration for local testing
- */
-export const DEV_OAUTH_CONFIG: OAuthConfig = {
-  authUrl: 'http://localhost:3000/oauth/authorize',
-  tokenUrl: 'http://localhost:3000/oauth/token',
-  clientId: 'bookmarkai-webext-dev',
-  redirectUri: browser.runtime.getURL('auth/callback.html'),
-  scopes: ['bookmark:write', 'bookmark:read', 'profile:read'],
-};
-
-/**
- * Get OAuth config based on environment
- */
-export function getOAuthConfig(): OAuthConfig {
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  return isDevelopment ? DEV_OAUTH_CONFIG : OAUTH_CONFIG;
-}
+export const API_BASE_URL = getEnvVar('VITE_API_BASE_URL');
+export const WEB_APP_URL = getEnvVar('VITE_WEB_APP_URL');
 
 /**
  * Storage keys for OAuth data

@@ -29,39 +29,75 @@ pnpm install
 
 ### Development
 
-Start the development server with hot reload:
+1. **Environment Configuration**:
+   This extension uses environment variables to manage API endpoints, OAuth credentials, and other configurable settings. Configuration is loaded based on the Vite mode (`development` or `production`).
 
-```bash
-pnpm dev:webext
-```
+   1. **Create Environment Files**:
+      * For local development, create a file named `.env.development` in the `packages/extension` directory.
+      * For production builds, create a file named `.env.production` in the `packages/extension` directory.
 
-This will:
-- Build the extension in development mode
-- Enable hot module replacement for popup components
-- Watch for changes in content scripts and service worker
+   2. **Populate Environment Variables**:
+      You can use `packages/extension/dotenv.example` (or create one based on the structure below) as a template for the required variables.
+
+      **Required Variables:**
+      * `VITE_OAUTH_AUTH_URL`: URL for your OAuth provider's authorization endpoint.
+      * `VITE_OAUTH_TOKEN_URL`: URL for your OAuth provider's token endpoint.
+      * `VITE_OAUTH_USERINFO_URL`: URL for your OAuth provider's userinfo endpoint.
+      * `VITE_OAUTH_CLIENT_ID`: The OAuth client ID registered for this extension.
+      * `VITE_API_BASE_URL`: The base URL for the BookmarkAI API (e.g., for `/shares`).
+      * `VITE_WEB_APP_URL`: The URL for your main BookmarkAI web application (for timeline links).
+
+      **Example for `.env.development`:**
+      ```env
+      VITE_OAUTH_AUTH_URL=http://localhost:3000/oauth/authorize
+      VITE_OAUTH_TOKEN_URL=http://localhost:3000/oauth/token
+      VITE_OAUTH_USERINFO_URL=http://localhost:3000/oauth/userinfo
+      VITE_OAUTH_CLIENT_ID=your-dev-client-id
+      VITE_API_BASE_URL=http://localhost:3001/api/v1
+      VITE_WEB_APP_URL=http://localhost:8080
+      ```
+
+      **Example for `.env.production`:**
+      ```env
+      VITE_OAUTH_AUTH_URL=https://api.bookmarkai.com/oauth/authorize
+      VITE_OAUTH_TOKEN_URL=https://api.bookmarkai.com/oauth/token
+      VITE_OAUTH_USERINFO_URL=https://api.bookmarkai.com/oauth/userinfo
+      VITE_OAUTH_CLIENT_ID=your-production-client-id
+      VITE_API_BASE_URL=https://api.bookmarkai.com/api/v1
+      VITE_WEB_APP_URL=https://app.bookmarkai.com
+      ```
+
+   3. **Git Ignore**:
+      Ensure that your `.env.development` and `.env.production` files (and any other `.env.*` files containing secrets) are listed in `packages/extension/.gitignore` to prevent them from being committed to the repository. The `.gitignore` in this package should already be configured for this.
+
+2. **Run Development Server**:
+   ```bash
+   pnpm dev
+   ```
+   This will start the Vite development server. Load the extension as an unpacked extension from the `packages/extension/dist` directory in your browser.
 
 ### Building
 
 Build for production:
 
 ```bash
-pnpm build:webext
+pnpm build
 ```
 
-Creates optimized extension in `dist/` directory.
+This command compiles TypeScript, builds the extension using Vite, and places the output in the `packages/extension/dist` directory.
 
 ### Testing
 
 Run unit tests:
 
 ```bash
-pnpm test:webext
+pnpm test
 ```
 
 Run tests with UI:
 
 ```bash
-pnpm test:webext --ui
+pnpm test --ui
 ```
 
 ### Packaging
@@ -69,13 +105,10 @@ pnpm test:webext --ui
 Create extension packages for distribution:
 
 ```bash
-# Generic package
 pnpm package
-
-# Browser-specific packages
-pnpm package:chrome
-pnpm package:firefox
 ```
+
+This script (defined in `package.json`) typically uses `web-ext` to package the `dist` directory into a distributable ZIP file for browser stores.
 
 ## Extension Architecture
 
