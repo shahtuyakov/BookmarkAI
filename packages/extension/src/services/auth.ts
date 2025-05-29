@@ -65,13 +65,16 @@ export class AuthService {
 
       const data: LoginResponse = await response.json();
       console.log('BookmarkAI: Login API response:', data);
+      console.log('BookmarkAI: API response data field:', data.data);
 
       // Calculate token expiration
       const expiresAt = Date.now() + 3600 * 1000; // Default 1 hour if not provided
 
+      // Extract tokens from the nested data structure
+      const tokenData = data.data || data;
       const tokens: AuthTokens = {
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken,
         expiresAt,
         tokenType: 'Bearer',
       };
@@ -81,13 +84,13 @@ export class AuthService {
       // Update auth state
       this.updateAuthState({
         isAuthenticated: true,
-        user: data.user,
+        user: tokenData.user,
         tokens,
         isLoading: false,
       });
 
       // Store auth data
-      await this.storeAuthData(tokens, data.user);
+      await this.storeAuthData(tokens, tokenData.user);
 
       // Notify other parts of the extension
       this.notifyAuthStateChange();

@@ -12,9 +12,12 @@ export interface LoginCredentials {
 }
 
 export interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: UserProfile;
+  success: boolean;
+  data: {
+    accessToken: string;
+    refreshToken: string;
+    user: UserProfile;
+  };
 }
 
 export interface RefreshTokenResponse {
