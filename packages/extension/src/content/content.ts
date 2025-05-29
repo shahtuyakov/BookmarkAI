@@ -7,6 +7,7 @@ type FABState = 'default' | 'hover' | 'loading' | 'success' | 'error';
 
 class FloatingActionButton {
   private container: HTMLDivElement | null = null;
+  private shadowRoot: ShadowRoot | null = null;
   private button: HTMLButtonElement | null = null;
   private tooltip: HTMLDivElement | null = null;
   private state: FABState = 'default';
@@ -65,85 +66,157 @@ class FloatingActionButton {
   }
 
   private createFAB() {
-    // Create container
+    // Create container (host element)
     this.container = document.createElement('div');
-    this.container.id = 'bookmarkai-fab-container';
-    this.setContainerStyles();
+    this.container.id = 'bookmarkai-fab-host';
+    
+    // Create shadow DOM
+    this.shadowRoot = this.container.attachShadow({ mode: 'closed' });
+    
+    // Create styles for shadow DOM
+    const style = document.createElement('style');
+    style.textContent = this.getShadowStyles();
+    
+    // Create wrapper div inside shadow DOM
+    const wrapper = document.createElement('div');
+    wrapper.className = 'fab-wrapper';
 
     // Create button
     this.button = document.createElement('button');
-    this.button.id = 'bookmarkai-fab-button';
+    this.button.className = 'fab-button';
     this.button.setAttribute('aria-label', 'Add to BookmarkAI');
-    this.setButtonStyles();
     this.button.innerHTML = this.getButtonIcon();
 
     // Create tooltip
     this.tooltip = document.createElement('div');
-    this.tooltip.id = 'bookmarkai-fab-tooltip';
+    this.tooltip.className = 'fab-tooltip';
     this.tooltip.textContent = 'Add to BookmarkAI';
-    this.setTooltipStyles();
 
     // Add event listeners
     this.button.addEventListener('click', this.handleClick.bind(this));
     this.button.addEventListener('mouseenter', this.handleMouseEnter.bind(this));
     this.button.addEventListener('mouseleave', this.handleMouseLeave.bind(this));
 
-    // Assemble elements
-    this.container.appendChild(this.button);
-    this.container.appendChild(this.tooltip);
+    // Assemble elements in shadow DOM
+    wrapper.appendChild(this.button);
+    wrapper.appendChild(this.tooltip);
+    this.shadowRoot.appendChild(style);
+    this.shadowRoot.appendChild(wrapper);
+    
+    // Set minimal styles on host element
+    this.setHostStyles();
   }
 
-  private setContainerStyles() {
+  private setHostStyles() {
     if (!this.container) return;
     
-    Object.assign(this.container.style, {
-      position: 'fixed',
-      bottom: '24px',
-      right: '24px',
-      zIndex: '2147483647', // Maximum z-index
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    });
+    // Set positioning styles on the host element with important flag
+    this.container.style.cssText = `
+      position: fixed !important;
+      bottom: 24px !important;
+      right: 24px !important;
+      z-index: 2147483647 !important;
+      width: auto !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      background: transparent !important;
+      display: block !important;
+      box-sizing: border-box !important;
+      transform: none !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      pointer-events: auto !important;
+      overflow: visible !important;
+    `;
   }
 
-  private setButtonStyles() {
-    if (!this.button) return;
-    
-    Object.assign(this.button.style, {
-      width: '56px',
-      height: '56px',
-      borderRadius: '50%',
-      backgroundColor: '#2563eb', // Blue-600
-      border: 'none',
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-      transition: 'all 0.3s ease',
-      padding: '0',
-      margin: '0',
-      outline: 'none',
-    });
-  }
-
-  private setTooltipStyles() {
-    if (!this.tooltip) return;
-    
-    Object.assign(this.tooltip.style, {
-      position: 'absolute',
-      bottom: '70px',
-      right: '0',
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      color: 'white',
-      padding: '8px 12px',
-      borderRadius: '6px',
-      fontSize: '14px',
-      whiteSpace: 'nowrap',
-      opacity: '0',
-      pointerEvents: 'none',
-      transition: 'opacity 0.3s ease',
-      userSelect: 'none',
-    });
+  private getShadowStyles(): string {
+    return `
+      :host {
+        all: initial;
+        display: block;
+      }
+      
+      * {
+        box-sizing: border-box;
+      }
+      
+      .fab-wrapper {
+        position: relative;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      
+      .fab-button {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background-color: #2563eb;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transition: all 0.3s ease;
+        padding: 0;
+        margin: 0;
+        outline: none;
+        position: relative;
+        overflow: visible;
+      }
+      
+      .fab-button:hover {
+        transform: scale(1.1);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+      }
+      
+      .fab-button svg {
+        pointer-events: none;
+      }
+      
+      .fab-button.loading {
+        background-color: #6b7280;
+        cursor: wait;
+      }
+      
+      .fab-button.success {
+        background-color: #10b981;
+      }
+      
+      .fab-button.error {
+        background-color: #ef4444;
+      }
+      
+      .fab-tooltip {
+        position: absolute;
+        bottom: 70px;
+        right: 0;
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 14px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+        user-select: none;
+      }
+      
+      .fab-tooltip.visible {
+        opacity: 1;
+      }
+      
+      @keyframes rotate {
+        to { transform: rotate(360deg); }
+      }
+      
+      .loading-spinner {
+        animation: rotate 1s linear infinite;
+      }
+    `;
   }
 
   private getButtonIcon(): string {
@@ -172,21 +245,13 @@ class FloatingActionButton {
 
   private handleMouseEnter() {
     if (this.tooltip && this.state !== 'loading') {
-      this.tooltip.style.opacity = '1';
-    }
-    if (this.button) {
-      this.button.style.transform = 'scale(1.1)';
-      this.button.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.2)';
+      this.tooltip.classList.add('visible');
     }
   }
 
   private handleMouseLeave() {
     if (this.tooltip) {
-      this.tooltip.style.opacity = '0';
-    }
-    if (this.button) {
-      this.button.style.transform = 'scale(1)';
-      this.button.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+      this.tooltip.classList.remove('visible');
     }
   }
 
@@ -200,10 +265,10 @@ class FloatingActionButton {
       this.setState('error');
       if (this.tooltip) {
         this.tooltip.textContent = 'Please login via extension popup';
-        this.tooltip.style.opacity = '1';
+        this.tooltip.classList.add('visible');
         setTimeout(() => {
           if (this.tooltip) {
-            this.tooltip.style.opacity = '0';
+            this.tooltip.classList.remove('visible');
             this.tooltip.textContent = 'Add to BookmarkAI';
           }
           this.setState('default');
@@ -247,37 +312,32 @@ class FloatingActionButton {
     this.state = newState;
     if (!this.button) return;
 
+    // Remove all state classes
+    this.button.classList.remove('loading', 'success', 'error');
+
     switch (newState) {
       case 'loading':
-        this.button.style.backgroundColor = '#6b7280'; // Gray
+        this.button.classList.add('loading');
         this.button.innerHTML = this.getLoadingIcon();
-        this.button.style.cursor = 'wait';
         break;
       case 'success':
-        this.button.style.backgroundColor = '#10b981'; // Green
+        this.button.classList.add('success');
         this.button.innerHTML = this.getSuccessIcon();
         break;
       case 'error':
-        this.button.style.backgroundColor = '#ef4444'; // Red
+        this.button.classList.add('error');
         this.button.innerHTML = this.getErrorIcon();
         break;
       default:
-        this.button.style.backgroundColor = '#2563eb'; // Blue
         this.button.innerHTML = this.getButtonIcon();
-        this.button.style.cursor = 'pointer';
     }
   }
 
   private getLoadingIcon(): string {
     return `
-      <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          @keyframes rotate { to { transform: rotate(360deg); } }
-        </style>
-        <g style="animation: rotate 1s linear infinite; transform-origin: center;">
-          <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2" fill="none" 
-                  stroke-dasharray="31.4" stroke-dashoffset="10" opacity="0.5"/>
-        </g>
+      <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="loading-spinner">
+        <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2" fill="none" 
+                stroke-dasharray="31.4" stroke-dashoffset="10" opacity="0.5"/>
       </svg>
     `;
   }

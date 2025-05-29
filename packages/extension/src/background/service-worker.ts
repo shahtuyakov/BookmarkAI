@@ -7,20 +7,14 @@ console.log('BookmarkAI Web Clip service worker loaded', API_BASE_URL);
 // Initialize AuthService
 const authService = AuthService.getInstance();
 
-// Generate idempotency key based on URL and current day
-function generateIdempotencyKey(url: string): string {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  const data = `${url}-${today}`;
-  
-  // Simple hash function for the browser environment
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    const char = data.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  
-  return `${Math.abs(hash)}-${today}`;
+// Generate a UUID v4 for idempotency key
+function generateIdempotencyKey(): string {
+  // Generate UUID v4
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
 // Initialize service worker
@@ -194,13 +188,9 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
         }
 
         const sharesUrl = `${API_BASE_URL}/v1/shares`;
-        const idempotencyKey = generateIdempotencyKey(metadata.url);
+        const idempotencyKey = generateIdempotencyKey();
         const requestBody = {
           url: metadata.url,
-          title: metadata.title,
-          description: metadata.description,
-          faviconUrl: metadata.favicon,
-          source: 'webext',
         };
         
         console.log('BookmarkAI: Making API call to:', sharesUrl);
