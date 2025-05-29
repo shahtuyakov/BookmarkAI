@@ -1,6 +1,16 @@
-import browser from 'webextension-polyfill';
+// Content script for BookmarkAI Web Clip
+// This version bundles everything inline to avoid ES module issues
 
 console.log('BookmarkAI Web Clip content script loaded');
+
+// Since we can't use ES modules in content scripts easily, we'll use chrome API directly
+declare const chrome: any;
+declare const browser: any;
+const browserAPI = typeof chrome !== 'undefined' ? chrome : (typeof browser !== 'undefined' ? browser : null);
+
+if (!browserAPI) {
+  console.error('BookmarkAI: No browser API available');
+}
 
 // FAB states
 type FABState = 'default' | 'hover' | 'loading' | 'success' | 'error';
@@ -18,9 +28,11 @@ class FloatingActionButton {
 
   public async checkAuthStatus() {
     try {
-      const response = await browser.runtime.sendMessage({ type: 'AUTH_GET_STATE' });
-      if (response && response.success && response.data) {
-        this.isAuthenticated = response.data.isAuthenticated;
+      if (browserAPI && browserAPI.runtime && browserAPI.runtime.sendMessage) {
+        const response = await browserAPI.runtime.sendMessage({ type: 'AUTH_GET_STATE' });
+        if (response && response.success && response.data) {
+          this.isAuthenticated = response.data.isAuthenticated;
+        }
       }
     } catch (error) {
       console.error('BookmarkAI: Failed to check auth status:', error);
@@ -191,53 +203,56 @@ class FloatingActionButton {
   }
 
   private async showAuthPrompt() {
-    // Open the extension popup to prompt login
-    try {
-      await browser.runtime.sendMessage({ type: 'OPEN_POPUP_FOR_AUTH' });
-    } catch (error) {
-      console.error('BookmarkAI: Failed to open popup:', error);
-      // Fallback: show a message
-      this.setState('error');
-      if (this.tooltip) {
-        this.tooltip.textContent = 'Please login via extension popup';
-        this.tooltip.style.opacity = '1';
-        setTimeout(() => {
-          if (this.tooltip) {
-            this.tooltip.style.opacity = '0';
-            this.tooltip.textContent = 'Add to BookmarkAI';
-          }
-          this.setState('default');
-        }, 3000);
-      }
+    // Show a message since we can't easily open the popup
+    this.setState('error');
+    if (this.tooltip) {
+      this.tooltip.textContent = 'Please login via extension popup';
+      this.tooltip.style.opacity = '1';
+      setTimeout(() => {
+        if (this.tooltip) {
+          this.tooltip.style.opacity = '0';
+          this.tooltip.textContent = 'Add to BookmarkAI';
+        }
+        this.setState('default');
+      }, 3000);
     }
   }
 
   private async bookmarkPage() {
     this.setState('loading');
+    
+    // Get page metadata
+    const metadata = {
+      url: window.location.href,
+      title: document.title,
+      description: this.getMetaDescription(),
+      favicon: this.getFaviconUrl(),
+    };
 
     try {
-      // Get page metadata
-      const metadata = {
-        url: window.location.href,
-        title: document.title,
-        description: this.getMetaDescription(),
-        favicon: this.getFaviconUrl(),
-      };
-
       // Send bookmark request to service worker
-      const response = await browser.runtime.sendMessage({
-        type: 'BOOKMARK_PAGE',
-        metadata,
-      });
+      if (browserAPI && browserAPI.runtime && browserAPI.runtime.sendMessage) {
+        const response = await browserAPI.runtime.sendMessage({
+          type: 'BOOKMARK_PAGE',
+          metadata,
+        });
 
-      if (response && response.success) {
-        this.setState('success');
-        setTimeout(() => this.setState('default'), 2000);
+        if (response && response.success) {
+          this.setState('success');
+          setTimeout(() => this.setState('default'), 2000);
+        } else {
+          throw new Error(response?.error || 'Bookmark failed');
+        }
       } else {
-        throw new Error(response?.error || 'Bookmark failed');
+        throw new Error('Browser API not available');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('BookmarkAI: Bookmark failed:', error);
+      console.error('BookmarkAI: Error details:', {
+        message: error.message,
+        stack: error.stack,
+        metadata: metadata,
+      });
       this.setState('error');
       setTimeout(() => this.setState('default'), 3000);
     }
@@ -338,14 +353,16 @@ async function init() {
     }
 
     // Listen for messages from service worker
-    browser.runtime.onMessage.addListener((message) => {
-      if (message.type === 'AUTH_STATE_CHANGED') {
-        // Re-check auth status when it changes
-        if (fab) {
-          fab.checkAuthStatus();
+    if (browserAPI && browserAPI.runtime && browserAPI.runtime.onMessage) {
+      browserAPI.runtime.onMessage.addListener((message: any) => {
+        if (message.type === 'AUTH_STATE_CHANGED') {
+          // Re-check auth status when it changes
+          if (fab) {
+            fab.checkAuthStatus();
+          }
         }
-      }
-    });
+      });
+    }
   } catch (error) {
     console.error('BookmarkAI: Content script initialization failed:', error);
   }
@@ -361,4 +378,4 @@ function injectFAB() {
 }
 
 // Initialize the content script
-init(); 
+init();

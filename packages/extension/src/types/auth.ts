@@ -6,10 +6,20 @@ export interface AuthTokens {
   scope?: string;
 }
 
-export interface PKCEData {
-  codeVerifier: string;
-  codeChallenge: string;
-  state: string;
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: UserProfile;
+}
+
+export interface RefreshTokenResponse {
+  accessToken: string;
+  refreshToken?: string;
 }
 
 export interface AuthState {
@@ -27,27 +37,10 @@ export interface UserProfile {
   avatar?: string;
 }
 
-export interface OAuthConfig {
-  authUrl: string;
-  tokenUrl: string;
-  userInfoUrl: string;
-  clientId: string;
-  redirectUri: string;
-  scopes: string[];
-}
-
-export interface TokenRefreshResponse {
-  access_token: string;
-  refresh_token?: string;
-  expires_in: number;
-  token_type: string;
-  scope?: string;
-}
-
-export interface OAuthError {
+export interface AuthError {
   error: string;
-  error_description?: string;
-  error_uri?: string;
+  message?: string;
+  statusCode?: number;
 }
 
 export interface ShareItem {

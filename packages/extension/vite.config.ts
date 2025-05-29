@@ -22,31 +22,31 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       rollupOptions: {
         input: {
-          'content': resolve(__dirname, 'src/content/content.ts'),
+          'content': resolve(__dirname, 'src/content/content-bundled.ts'),
           'service-worker': resolve(__dirname, 'src/background/service-worker.ts'),
           'popup-script': resolve(__dirname, 'src/popup/popup.tsx'),
-          'callback-script': resolve(__dirname, 'src/auth/callback.ts'),
         },
-        output: {
-          entryFileNames: (chunkInfo) => {
-            const name = chunkInfo.name;
-            if (name === 'content') return 'content/content.js';
-            if (name === 'service-worker') return 'background/service-worker.js';
-            if (name === 'popup-script') return 'popup/popup.js';
-            if (name === 'callback-script') return 'auth/callback.js';
-            return 'assets/[name]-[hash].js';
-          },
-          chunkFileNames: 'chunks/[name]-[hash].js',
-          assetFileNames: (assetInfo) => {
-            if (assetInfo.name?.endsWith('.html')) {
-              return '[name]/[name].[ext]';
-            }
-            if (assetInfo.name === 'manifest.json') {
-              return 'manifest.json';
-            }
-            return 'assets/[name]-[hash].[ext]';
-          },
-        },
+        output: [
+          {
+            entryFileNames: (chunkInfo) => {
+              const name = chunkInfo.name;
+              if (name === 'content') return 'content/content.js';
+              if (name === 'service-worker') return 'background/service-worker.js';
+              if (name === 'popup-script') return 'popup/popup.js';
+              return 'assets/[name]-[hash].js';
+            },
+            chunkFileNames: 'chunks/[name]-[hash].js',
+            assetFileNames: (assetInfo) => {
+              if (assetInfo.name?.endsWith('.html')) {
+                return '[name]/[name].[ext]';
+              }
+              if (assetInfo.name === 'manifest.json') {
+                return 'manifest.json';
+              }
+              return 'assets/[name]-[hash].[ext]';
+            },
+          }
+        ],
       },
       target: 'esnext',
       minify: false, // Disable for development, enable for production

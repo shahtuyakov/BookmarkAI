@@ -20,8 +20,9 @@ import {
   Divider,
 } from '@chakra-ui/react';
 import browserPolyfill from 'webextension-polyfill';
-import type { AuthState, UserProfile, ShareItem } from '../types/auth';
-import { WEB_APP_URL } from '../config/oauth';
+import type { AuthState, UserProfile, ShareItem, LoginCredentials } from '../types/auth';
+import { WEB_APP_URL } from '../config/auth';
+import { LoginForm } from '../components/LoginForm';
 
 // Use a type assertion as a temporary diagnostic step
 const browser: any = browserPolyfill;
@@ -43,6 +44,8 @@ interface PopupState {
   shares: ShareItem[];
   isSharesLoading: boolean;
   sharesError: string | null;
+  showDirectLogin: boolean;
+  isLoggingIn: boolean;
 }
 
 function PopupApp() {
@@ -54,6 +57,8 @@ function PopupApp() {
     shares: [],
     isSharesLoading: false,
     sharesError: null,
+    showDirectLogin: false,
+    isLoggingIn: false,
   });
 
   async function refreshAuthState() {
@@ -133,6 +138,35 @@ function PopupApp() {
     } catch (e: any) {
       console.error('Popup: Error initiating login:', e);
       setState((s) => ({ ...s, authError: e.message || 'Failed to initiate login' }));
+    }
+  }
+
+  async function handleDirectLogin(credentials: LoginCredentials) {
+    console.log('Popup: Direct login attempt...');
+    setState((s) => ({ ...s, isLoggingIn: true, authError: null }));
+    
+    try {
+      // Send login request to service worker
+      const response = await browser.runtime.sendMessage({ 
+        type: 'AUTH_DIRECT_LOGIN',
+        credentials 
+      }) as ServiceWorkerMessage;
+      
+      if (response && response.success) {
+        console.log('Popup: Direct login successful');
+        // Auth state will be updated via the AUTH_STATE_CHANGED message
+        setState((s) => ({ ...s, showDirectLogin: false, isLoggingIn: false }));
+      } else {
+        throw new Error(response?.error || 'Login failed');
+      }
+    } catch (e: any) {
+      console.error('Popup: Direct login error:', e);
+      setState((s) => ({ 
+        ...s, 
+        isLoggingIn: false, 
+        authError: e.message || 'Login failed' 
+      }));
+      throw e; // Re-throw for LoginForm to handle
     }
   }
 
@@ -250,12 +284,41 @@ function PopupApp() {
           </VStack>
         ) : (
           <VStack spacing={4} align="center">
-            <Image src="/icons/icon-128.png" alt="BookmarkAI Logo" boxSize="48px" />
-            <Text fontSize="lg" fontWeight="bold">BookmarkAI Web Clip</Text>
-            <Text>Login to save and manage your bookmarks.</Text>
-            <Button onClick={handleLogin} colorScheme="teal" size="md">
-              Login with BookmarkAI
-            </Button>
+            {state.showDirectLogin ? (
+              <LoginForm 
+                onLogin={handleDirectLogin}
+                isLoading={state.isLoggingIn}
+                error={state.authError || undefined}
+              />
+            ) : (
+              <>
+                <Image src="/icons/icon-128.png" alt="BookmarkAI Logo" boxSize="48px" />
+                <Text fontSize="lg" fontWeight="bold">BookmarkAI Web Clip</Text>
+                <Text>Login to save and manage your bookmarks.</Text>
+                <VStack spacing={2} width="full">
+                  <Button 
+                    onClick={() => setState(s => ({ ...s, showDirectLogin: true }))} 
+                    colorScheme="blue" 
+                    size="md"
+                    width="full"
+                  >
+                    Login with Email
+                  </Button>
+                  <Button onClick={handleLogin} colorScheme="teal" size="md" variant="outline" width="full">
+                    Login with BookmarkAI Web
+                  </Button>
+                </VStack>
+              </>
+            )}
+            {state.showDirectLogin && (
+              <Button 
+                onClick={() => setState(s => ({ ...s, showDirectLogin: false, authError: null }))} 
+                size="sm"
+                variant="link"
+              >
+                Back to options
+              </Button>
+            )}
           </VStack>
         )}
       </Box>

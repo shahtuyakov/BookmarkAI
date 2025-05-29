@@ -17,7 +17,8 @@
   ],
 
   "host_permissions": [
-    "https://api.bookmarkai.com/*"
+    "https://api.bookmarkai.com/*",
+    "http://localhost:3001/*"
   ],
 
   "background": {

@@ -1,11 +1,27 @@
 import browser from 'webextension-polyfill';
 import { AuthService } from '../services/auth';
-import { API_BASE_URL } from '../config/oauth';
+import { API_BASE_URL } from '../config/auth';
 
 console.log('BookmarkAI Web Clip service worker loaded', API_BASE_URL);
 
 // Initialize AuthService
 const authService = AuthService.getInstance();
+
+// Generate idempotency key based on URL and current day
+function generateIdempotencyKey(url: string): string {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const data = `${url}-${today}`;
+  
+  // Simple hash function for the browser environment
+  let hash = 0;
+  for (let i = 0; i < data.length; i++) {
+    const char = data.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  
+  return `${Math.abs(hash)}-${today}`;
+}
 
 // Initialize service worker
 browser.runtime.onInstalled.addListener(async (details) => {
@@ -25,7 +41,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
     console.log('BookmarkAI: Context menu bookmark triggered for', tab.url);
     
     // Check authentication before bookmarking
-    const isAuthenticated = await authService.isAuthenticated();
+    const isAuthenticated = authService.isAuthenticated();
     
     if (!isAuthenticated) {
       // Open popup to prompt login
@@ -45,18 +61,41 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
   switch (message.type) {
     case 'AUTH_INITIATE_LOGIN':
       try {
-        await authService.initiateLogin();
+        // This would open the web app login page in a new tab
+        // For now, we'll just open the web app URL
+        const webAppUrl = `${API_BASE_URL.replace('/api/v1', '')}/login`;
+        await browser.tabs.create({ url: webAppUrl });
         return { success: true };
       } catch (error) {
         console.error('BookmarkAI: Login initiation failed:', error);
         return { success: false, error: 'Failed to start login process' };
       }
     
+    case 'AUTH_DIRECT_LOGIN':
+      try {
+        const { credentials } = message;
+        if (!credentials || !credentials.email || !credentials.password) {
+          return { success: false, error: 'Invalid credentials' };
+        }
+        
+        console.log('BookmarkAI: Starting login for:', credentials.email);
+        await authService.login(credentials);
+        
+        // Debug: Check auth state after login
+        const postLoginState = authService.getAuthState();
+        console.log('BookmarkAI: Auth state after login:', postLoginState);
+        
+        return { success: true };
+      } catch (error: any) {
+        console.error('BookmarkAI: Direct login failed:', error);
+        return { success: false, error: error.message || 'Login failed' };
+      }
+    
     case 'AUTH_GET_STATE':
+      await authService.ensureInitialized();
       return { 
         success: true, 
-        authState: authService.getAuthState(),
-        isAuthenticated: await authService.isAuthenticated()
+        data: authService.getAuthState()
       };
     
     case 'AUTH_LOGOUT':
@@ -79,7 +118,7 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
     
     case 'GET_RECENT_SHARES':
       try {
-        const isAuthenticated = await authService.isAuthenticated();
+        const isAuthenticated = authService.isAuthenticated();
         if (!isAuthenticated) {
           return { success: false, error: 'User not authenticated', data: [] };
         }
@@ -124,18 +163,94 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
       }
     
     case 'BOOKMARK_PAGE':
-      // Check authentication first
-      const isAuthenticatedForBookmark = await authService.isAuthenticated();
+      // Ensure auth service is initialized before checking authentication
+      await authService.ensureInitialized();
+      
+      // Debug: Check authentication status and log detailed info
+      const authState = authService.getAuthState();
+      const isAuthenticatedForBookmark = authService.isAuthenticated();
+      
+      console.log('BookmarkAI: Auth state for bookmark:', authState);
+      console.log('BookmarkAI: Is authenticated:', isAuthenticatedForBookmark);
       
       if (!isAuthenticatedForBookmark) {
         return { success: false, error: 'User not authenticated' };
       }
       
-      // TODO: Implement bookmark saving (Phase 4)
-      // Ensure to use API_BASE_URL for constructing the bookmark/share creation endpoint
-      console.log('BookmarkAI: Bookmark request authenticated, API_BASE_URL available for use:', API_BASE_URL);
-      // Example POST URL: `${API_BASE_URL}/shares`
-      return { success: true, message: "Bookmark functionality not fully implemented yet." }; // Placeholder
+      try {
+        const { metadata } = message;
+        console.log('BookmarkAI: Processing bookmark request:', metadata);
+        
+        if (!metadata || !metadata.url) {
+          return { success: false, error: 'Invalid bookmark data' };
+        }
+
+        // Get access token
+        const token = await authService.getValidAccessToken();
+        console.log('BookmarkAI: Got access token:', token ? 'Yes' : 'No');
+        
+        if (!token) {
+          return { success: false, error: 'Failed to get access token' };
+        }
+
+        const sharesUrl = `${API_BASE_URL}/v1/shares`;
+        const idempotencyKey = generateIdempotencyKey(metadata.url);
+        const requestBody = {
+          url: metadata.url,
+          title: metadata.title,
+          description: metadata.description,
+          faviconUrl: metadata.favicon,
+          source: 'webext',
+        };
+        
+        console.log('BookmarkAI: Making API call to:', sharesUrl);
+        console.log('BookmarkAI: Request body:', requestBody);
+        console.log('BookmarkAI: Idempotency key:', idempotencyKey);
+
+        // Create share/bookmark
+        const response = await fetch(sharesUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Idempotency-Key': idempotencyKey,
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        console.log('BookmarkAI: API response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('BookmarkAI: API error response:', errorText);
+          
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { message: errorText };
+          }
+          
+          throw new Error(errorData.message || `Failed to create bookmark: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('BookmarkAI: Bookmark created successfully', data);
+        
+        // Notify popup to refresh shares list if it's open
+        browser.runtime.sendMessage({
+          type: 'BOOKMARK_CREATED',
+          bookmark: data.data,
+        }).catch(() => {
+          // Ignore errors if popup is not open
+        });
+
+        return { success: true, data: data.data };
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to create bookmark:', error);
+        console.error('BookmarkAI: Error stack:', error.stack);
+        return { success: false, error: error.message || 'Failed to create bookmark' };
+      }
     
     default:
       console.warn('BookmarkAI: Unknown message type in service worker', message.type);

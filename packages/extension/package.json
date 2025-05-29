@@ -16,17 +16,23 @@
     "package:firefox": "web-ext build --source-dir=dist --artifacts-dir=artifacts/firefox",
     "package:chrome": "web-ext build --source-dir=dist --artifacts-dir=artifacts/chrome"
   },
-  "keywords": ["browser-extension", "bookmarks", "web-clipper", "manifest-v3"],
+  "keywords": [
+    "browser-extension",
+    "bookmarks",
+    "web-clipper",
+    "manifest-v3"
+  ],
   "author": "BookmarkAI Team",
   "license": "MIT",
   "packageManager": "pnpm@10.11.0",
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@chakra-ui/icons": "^2.2.4",
     "@chakra-ui/react": "^2.8.2",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "framer-motion": "^10.16.16",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "webextension-polyfill": "^0.10.0"
   },
   "devDependencies": {
@@ -36,6 +42,7 @@
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/ui": "^1.1.3",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.33.2",
@@ -43,7 +50,6 @@
     "typescript": "^5.3.3",
     "vite": "^5.0.10",
     "vitest": "^1.1.3",
-    "@vitest/ui": "^1.1.3",
     "web-ext": "^7.9.0"
   }
 }
