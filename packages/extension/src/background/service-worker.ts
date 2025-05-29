@@ -17,6 +17,75 @@ function generateIdempotencyKey(): string {
   });
 }
 
+// Exponential backoff retry function
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      
+      // If it's a 5xx error, retry
+      if (response.status >= 500 && response.status < 600 && attempt < maxRetries) {
+        console.log(`BookmarkAI: Server error ${response.status}, retrying... (attempt ${attempt + 1}/${maxRetries})`);
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (attempt < maxRetries) {
+        // Calculate exponential backoff delay
+        const delay = initialDelay * Math.pow(2, attempt);
+        console.log(`BookmarkAI: Request failed, retrying in ${delay}ms... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError || new Error('Request failed after all retries');
+}
+
+// Error logging utility
+interface ErrorLog {
+  timestamp: number;
+  url: string;
+  error: string;
+  type: 'CSP' | 'NETWORK' | 'AUTH' | 'GENERAL';
+  details?: any;
+}
+
+const errorLogs: ErrorLog[] = [];
+const MAX_ERROR_LOGS = 100;
+
+function logError(type: ErrorLog['type'], url: string, error: string, details?: any) {
+  const errorLog: ErrorLog = {
+    timestamp: Date.now(),
+    url,
+    error,
+    type,
+    details
+  };
+  
+  errorLogs.push(errorLog);
+  
+  // Keep only the latest errors
+  if (errorLogs.length > MAX_ERROR_LOGS) {
+    errorLogs.shift();
+  }
+  
+  console.error(`BookmarkAI [${type}] Error:`, error, details);
+  
+  // Store errors in local storage for debugging
+  browser.storage.local.set({ errorLogs });
+}
+
 // Initialize service worker
 browser.runtime.onInstalled.addListener(async (details) => {
   console.log('BookmarkAI: Extension installed/updated', details);
@@ -156,6 +225,17 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
         return { success: false, error: error.message || 'Could not fetch shares', data: [] };
       }
     
+    case 'OPEN_TIMELINE':
+      try {
+        // Open the web app timeline in a new tab
+        const webAppUrl = import.meta.env.VITE_WEB_APP_URL || 'https://app.bookmarkai.com';
+        await browser.tabs.create({ url: `${webAppUrl}/timeline` });
+        return { success: true };
+      } catch (error) {
+        console.error('BookmarkAI: Failed to open timeline:', error);
+        return { success: false, error: 'Failed to open timeline' };
+      }
+    
     case 'BOOKMARK_PAGE':
       // Ensure auth service is initialized before checking authentication
       await authService.ensureInitialized();
@@ -197,8 +277,8 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
         console.log('BookmarkAI: Request body:', requestBody);
         console.log('BookmarkAI: Idempotency key:', idempotencyKey);
 
-        // Create share/bookmark
-        const response = await fetch(sharesUrl, {
+        // Create share/bookmark with retry logic
+        const response = await fetchWithRetry(sharesUrl, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -240,6 +320,26 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
         console.error('BookmarkAI: Failed to create bookmark:', error);
         console.error('BookmarkAI: Error stack:', error.stack);
         return { success: false, error: error.message || 'Failed to create bookmark' };
+      }
+    
+    case 'LOG_ERROR':
+      try {
+        const { url, error, details } = message;
+        const errorType = details?.errorType || 'GENERAL';
+        logError(errorType, url || 'unknown', error || 'Unknown error', details);
+        return { success: true };
+      } catch (error) {
+        console.error('BookmarkAI: Failed to log error:', error);
+        return { success: false, error: 'Failed to log error' };
+      }
+    
+    case 'GET_ERROR_LOGS':
+      try {
+        const stored = await browser.storage.local.get('errorLogs');
+        return { success: true, data: stored.errorLogs || [] };
+      } catch (error) {
+        console.error('BookmarkAI: Failed to get error logs:', error);
+        return { success: false, error: 'Failed to get error logs' };
       }
     
     default:

@@ -20,6 +20,7 @@ class FloatingActionButton {
   private shadowRoot: ShadowRoot | null = null;
   private button: HTMLButtonElement | null = null;
   private tooltip: HTMLDivElement | null = null;
+  private toast: HTMLDivElement | null = null;
   private state: FABState = 'default';
   private isAuthenticated: boolean = false;
 
@@ -104,14 +105,32 @@ class FloatingActionButton {
     this.tooltip.className = 'fab-tooltip';
     this.tooltip.textContent = 'Add to BookmarkAI';
 
+    // Create toast notification
+    this.toast = document.createElement('div');
+    this.toast.className = 'fab-toast';
+    this.toast.innerHTML = `
+      <span class="toast-text">Saved to BookmarkAI</span>
+      <a href="#" class="toast-link">View in Timeline</a>
+    `;
+
     // Add event listeners
     this.button.addEventListener('click', this.handleClick.bind(this));
     this.button.addEventListener('mouseenter', this.handleMouseEnter.bind(this));
     this.button.addEventListener('mouseleave', this.handleMouseLeave.bind(this));
 
+    // Add toast link click handler
+    const toastLink = this.toast.querySelector('.toast-link');
+    if (toastLink) {
+      toastLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.openTimeline();
+      });
+    }
+
     // Assemble elements in shadow DOM
     wrapper.appendChild(this.button);
     wrapper.appendChild(this.tooltip);
+    wrapper.appendChild(this.toast);
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(wrapper);
     
@@ -228,6 +247,49 @@ class FloatingActionButton {
       .loading-spinner {
         animation: rotate 1s linear infinite;
       }
+      
+      .fab-toast {
+        position: absolute;
+        bottom: 70px;
+        right: 0;
+        background-color: #1a1a1a;
+        color: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.3s ease;
+        transform: translateY(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 200px;
+      }
+      
+      .fab-toast.visible {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      
+      .toast-text {
+        flex: 1;
+      }
+      
+      .toast-link {
+        color: #60a5fa;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.2s ease;
+      }
+      
+      .toast-link:hover {
+        color: #93bbfc;
+        text-decoration: underline;
+      }
     `;
   }
 
@@ -304,6 +366,7 @@ class FloatingActionButton {
 
         if (response && response.success) {
           this.setState('success');
+          this.showToast();
           setTimeout(() => this.setState('default'), 2000);
         } else {
           throw new Error(response?.error || 'Bookmark failed');
@@ -390,6 +453,34 @@ class FloatingActionButton {
     return new URL(iconUrl, window.location.origin).href;
   }
 
+  private showToast() {
+    if (!this.toast) return;
+    
+    // Show the toast
+    this.toast.classList.add('visible');
+    
+    // Hide the toast after 5 seconds
+    setTimeout(() => {
+      if (this.toast) {
+        this.toast.classList.remove('visible');
+      }
+    }, 5000);
+  }
+
+  private async openTimeline() {
+    try {
+      // Get the web app URL from config
+      if (browserAPI && browserAPI.runtime && browserAPI.runtime.sendMessage) {
+        const response = await browserAPI.runtime.sendMessage({ type: 'OPEN_TIMELINE' });
+        if (!response || !response.success) {
+          console.error('BookmarkAI: Failed to open timeline');
+        }
+      }
+    } catch (error) {
+      console.error('BookmarkAI: Failed to open timeline:', error);
+    }
+  }
+
   public destroy() {
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
@@ -397,6 +488,7 @@ class FloatingActionButton {
     this.container = null;
     this.button = null;
     this.tooltip = null;
+    this.toast = null;
   }
 }
 
@@ -423,9 +515,48 @@ async function init() {
         }
       });
     }
+    
+    // Set up CSP error detection
+    setupCSPErrorDetection();
   } catch (error) {
     console.error('BookmarkAI: Content script initialization failed:', error);
+    // Log the error to service worker
+    const errorMessage = error instanceof Error ? error.message : 'Content script initialization failed';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    if (browserAPI && browserAPI.runtime && browserAPI.runtime.sendMessage) {
+      browserAPI.runtime.sendMessage({
+        type: 'LOG_ERROR',
+        error: errorMessage,
+        url: window.location.href,
+        details: { stack: errorStack }
+      }).catch(() => {});
+    }
   }
+}
+
+function setupCSPErrorDetection() {
+  // Listen for security policy violations
+  document.addEventListener('securitypolicyviolation', (e) => {
+    console.warn('BookmarkAI: CSP violation detected:', e);
+    
+    // Log CSP error to service worker
+    if (browserAPI && browserAPI.runtime && browserAPI.runtime.sendMessage) {
+      browserAPI.runtime.sendMessage({
+        type: 'LOG_ERROR',
+        error: `CSP violation: ${e.violatedDirective}`,
+        url: window.location.href,
+        details: {
+          errorType: 'CSP',
+          violatedDirective: e.violatedDirective,
+          blockedURI: e.blockedURI,
+          lineNumber: e.lineNumber,
+          columnNumber: e.columnNumber,
+          sourceFile: e.sourceFile
+        }
+      }).catch(() => {});
+    }
+  });
 }
 
 function injectFAB() {
