@@ -343,6 +343,11 @@ class FloatingActionButton {
     this.setState('loading');
 
     try {
+      // Check if extension context is still valid
+      if (!browser.runtime?.id) {
+        throw new Error('Extension context invalidated. Please refresh the page.');
+      }
+
       // Get page metadata
       const metadata = {
         url: window.location.href,
@@ -366,6 +371,22 @@ class FloatingActionButton {
       }
     } catch (error) {
       console.error('BookmarkAI: Bookmark failed:', error);
+      
+      // Handle specific error cases
+      if (error instanceof Error && error.message?.includes('Extension context invalidated')) {
+        // Show a more user-friendly message for this common error
+        if (this.tooltip) {
+          this.tooltip.textContent = 'Extension updated. Please refresh the page.';
+          this.tooltip.classList.add('visible');
+          setTimeout(() => {
+            if (this.tooltip) {
+              this.tooltip.classList.remove('visible');
+              this.tooltip.textContent = 'Add to BookmarkAI';
+            }
+          }, 4000);
+        }
+      }
+      
       this.setState('error');
       setTimeout(() => this.setState('default'), 3000);
     }

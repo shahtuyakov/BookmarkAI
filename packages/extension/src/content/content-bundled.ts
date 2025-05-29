@@ -347,16 +347,21 @@ class FloatingActionButton {
 
   private async bookmarkPage() {
     this.setState('loading');
-    
-    // Get page metadata
-    const metadata = {
-      url: window.location.href,
-      title: document.title,
-      description: this.getMetaDescription(),
-      favicon: this.getFaviconUrl(),
-    };
 
     try {
+      // Check if extension context is still valid
+      if (!browserAPI?.runtime?.id) {
+        throw new Error('Extension context invalidated. Please refresh the page.');
+      }
+
+      // Get page metadata
+      const metadata = {
+        url: window.location.href,
+        title: document.title,
+        description: this.getMetaDescription(),
+        favicon: this.getFaviconUrl(),
+      };
+
       // Send bookmark request to service worker
       if (browserAPI && browserAPI.runtime && browserAPI.runtime.sendMessage) {
         const response = await browserAPI.runtime.sendMessage({
@@ -376,11 +381,22 @@ class FloatingActionButton {
       }
     } catch (error: any) {
       console.error('BookmarkAI: Bookmark failed:', error);
-      console.error('BookmarkAI: Error details:', {
-        message: error.message,
-        stack: error.stack,
-        metadata: metadata,
-      });
+      
+      // Handle specific error cases
+      if (error.message?.includes('Extension context invalidated')) {
+        // Show a more user-friendly message for this common error
+        if (this.tooltip) {
+          this.tooltip.textContent = 'Extension updated. Please refresh the page.';
+          this.tooltip.classList.add('visible');
+          setTimeout(() => {
+            if (this.tooltip) {
+              this.tooltip.classList.remove('visible');
+              this.tooltip.textContent = 'Add to BookmarkAI';
+            }
+          }, 4000);
+        }
+      }
+      
       this.setState('error');
       setTimeout(() => this.setState('default'), 3000);
     }
