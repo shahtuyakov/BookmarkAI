@@ -348,4 +348,4 @@ const SCALING_THRESHOLDS = {
 * Cloudflare Tunnel Documentation → https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/
 * ADR-002 → JWT Authentication with KMS
 * ADR-004 → Shares Endpoint Design  
-* Task 1.11 → Mobile & Extension Integration Testing
+* Task 1.11 → Mobile & Extension Integration Testing 
