@@ -1,7 +1,8 @@
 # ADR-010: ngrok Setup for Local Testing Infrastructure
 
-* **Status**: Proposed  
+* **Status**: Accepted  
 * **Date**: 2025-05-30  
+* **Implemented**: 2025-06-02  
 * **Authors**: @shokhzodjon-tuyokov, @bookmarkai-core  
 * **Supersedes**: —  
 * **Superseded by**: —  
