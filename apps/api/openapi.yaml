@@ -1,0 +1,561 @@
+openapi: 3.0.3
+info:
+  title: BookmarkAI API
+  description: API for managing bookmarks across multiple platforms
+  version: 1.0.0
+  contact:
+    name: BookmarkAI Team
+    email: support@bookmarkai.com
+servers:
+  - url: https://api.bookmarkai.com/v1
+    description: Production server
+  - url: https://staging-api.bookmarkai.com/v1
+    description: Staging server
+  - url: http://localhost:3000/v1
+    description: Local development server
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+  
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Successfully logged out
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  
+  /shares:
+    post:
+      tags:
+        - Shares
+      summary: Create a new share
+      operationId: createShare
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Idempotency-Key
+          schema:
+            type: string
+          required: true
+          description: Unique key to prevent duplicate share creation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShareRequest'
+      responses:
+        '202':
+          description: Share accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Share'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+    
+    get:
+      tags:
+        - Shares
+      summary: List user's shares
+      operationId: listShares
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          description: Pagination cursor
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of items to return
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/ShareStatus'
+          description: Filter by status
+        - in: query
+          name: platform
+          schema:
+            $ref: '#/components/schemas/Platform'
+          description: Filter by platform
+      responses:
+        '200':
+          description: List of shares
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  
+  /shares/batch:
+    post:
+      tags:
+        - Shares
+      summary: Create multiple shares in batch
+      operationId: createSharesBatch
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSharesBatchRequest'
+      responses:
+        '202':
+          description: Shares accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharesBatchResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+  
+  /shares/{shareId}:
+    get:
+      tags:
+        - Shares
+      summary: Get a specific share
+      operationId: getShare
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: shareId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Share ID
+      responses:
+        '200':
+          description: Share details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Share'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  
+  /healthz:
+    get:
+      tags:
+        - System
+      summary: Health check endpoint
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  
+  /events:
+    get:
+      tags:
+        - System
+      summary: Server-sent events for real-time updates
+      operationId: subscribeToEvents
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: SSE stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+    
+    LoginResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - user
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+    
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+    
+    TokenPair:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+    
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    
+    CreateShareRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: ^https?://(www\.)?(tiktok\.com|reddit\.com|twitter\.com|x\.com)/.*$
+        title:
+          type: string
+          maxLength: 200
+        notes:
+          type: string
+          maxLength: 1000
+    
+    CreateSharesBatchRequest:
+      type: object
+      required:
+        - shares
+      properties:
+        shares:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required:
+              - url
+              - idempotencyKey
+            properties:
+              url:
+                type: string
+                format: uri
+              idempotencyKey:
+                type: string
+              title:
+                type: string
+              notes:
+                type: string
+    
+    Share:
+      type: object
+      required:
+        - id
+        - url
+        - status
+        - platform
+        - userId
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        notes:
+          type: string
+        status:
+          $ref: '#/components/schemas/ShareStatus'
+        platform:
+          $ref: '#/components/schemas/Platform'
+        userId:
+          type: string
+          format: uuid
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+    
+    ShareListResponse:
+      type: object
+      required:
+        - items
+        - hasMore
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Share'
+        cursor:
+          type: string
+          description: Cursor for next page
+        hasMore:
+          type: boolean
+    
+    SharesBatchResponse:
+      type: object
+      required:
+        - accepted
+        - rejected
+      properties:
+        accepted:
+          type: array
+          items:
+            $ref: '#/components/schemas/Share'
+        rejected:
+          type: array
+          items:
+            type: object
+            required:
+              - url
+              - reason
+            properties:
+              url:
+                type: string
+              reason:
+                type: string
+    
+    ShareStatus:
+      type: string
+      enum:
+        - pending
+        - processing
+        - done
+        - failed
+    
+    Platform:
+      type: string
+      enum:
+        - tiktok
+        - reddit
+        - twitter
+        - x
+        - unknown
+    
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - unhealthy
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+              message:
+                type: string
+    
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retryable:
+          type: boolean
+        retryAfter:
+          type: integer
+          description: Seconds to wait before retry
+  
+  responses:
+    ValidationError:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: VALIDATION_ERROR
+            message: Invalid request parameters
+            details:
+              field: url
+              reason: Invalid URL format
+    
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: AUTH_EXPIRED
+            message: Access token has expired
+            retryable: true
+    
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: NOT_FOUND
+            message: Share not found
+    
+    ConflictError:
+      description: Request conflicts with current state
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: DUPLICATE_SHARE
+            message: Share with this idempotency key already exists
+    
+    RateLimitError:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: RATE_LIMITED
+            message: Too many requests
+            retryable: true
+            retryAfter: 10
