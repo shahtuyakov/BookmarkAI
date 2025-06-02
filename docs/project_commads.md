@@ -96,3 +96,8 @@ npx husky install
 # Run the the metro bundler
 
 cd packages/mobile/bookmarkaimobile && npx react-native start
+
+# run tunnel for mobile app
+
+export NGROK_AUTH_TOKEN=your_token_here
+npm run dev:tunnel 

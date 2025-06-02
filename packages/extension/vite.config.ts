@@ -14,7 +14,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react(),
+      react({
+        jsxRuntime: 'classic',
+      }),
     ],
     publicDir: 'public',
     build: {
