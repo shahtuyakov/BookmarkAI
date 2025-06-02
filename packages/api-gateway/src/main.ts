@@ -7,6 +7,7 @@ import { ResponseFormatInterceptor } from './common/interceptors/response-format
 import { getQueueToken } from '@nestjs/bull';
 import { SHARE_QUEUE } from './modules/shares/queue/share-queue.constants';
 import { ConfigService } from './config/services/config.service';
+import { corsConfig } from './config/cors';
 import fastifyCookie from '@fastify/cookie';
 
 async function bootstrap() {
@@ -116,11 +117,8 @@ async function bootstrap() {
     logger.log('Bull Board UI enabled at /api/admin/queues');
   }
 
-  // Enable CORS for development
-  app.enableCors({
-    origin: true,
-    credentials: true,
-  });
+  // Enable CORS with ngrok support (ADR-010)
+  app.enableCors(corsConfig);
 
   // Start the server
   const port = process.env.PORT || 3001;
