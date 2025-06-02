@@ -13,7 +13,7 @@ export const API_URLS = {
   LocalNetworkDevice: 'http://192.168.1.X:3001/api',
   
   // For development server
-  Development: 'https://dev-api.bookmarkai.com',
+  Development: 'https://bookmarkai-dev.ngrok.io/api',
   
   // For production server
   Production: 'https://api.bookmarkai.com',
@@ -21,7 +21,7 @@ export const API_URLS = {
 
 // Select the appropriate URL based on environment
 // export const API_BASE_URL = API_URLS.IOSSimulator;
-export const API_BASE_URL = API_URLS.AndroidEmulator;
+export const API_BASE_URL = API_URLS.Development;
 
 
 // The key for storing tokens in Keychain

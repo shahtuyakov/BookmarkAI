@@ -22,7 +22,8 @@
     "seed:all": "npm run seed:build && node scripts/dist/seed/index.js --all",
     "seed:ci": "npm run seed:build && NODE_ENV=ci node scripts/dist/seed/ci.js",
     "seed:ci:local": "npm run seed:build && NODE_ENV=ci-local node scripts/dist/seed/ci.js",
-    "seed:clean": "npm run seed:build && CLEAN_SEED=true node scripts/dist/seed/ci.js"
+    "seed:clean": "npm run seed:build && CLEAN_SEED=true node scripts/dist/seed/ci.js",
+    "dev:tunnel": "node scripts/setup-ngrok.js"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -36,6 +37,7 @@
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
+    "chalk": "^4.1.2",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-import-resolver-typescript": "^3.6.1",
@@ -43,6 +45,7 @@
     "eslint-plugin-unused-imports": "^3.0.0",
     "husky": "^8.0.3",
     "lint-staged": "^15.2.0",
+    "ngrok": "^4.3.3",
     "prettier": "^3.1.1",
     "pyright": "^1.1.350",
     "ts-prune": "^0.10.3",
