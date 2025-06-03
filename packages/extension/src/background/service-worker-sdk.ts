@@ -2,43 +2,9 @@ import browser from 'webextension-polyfill';
 import { sdkClient } from '../sdk/client';
 import { authService } from '../services/auth-unified';
 import { API_BASE_URL } from '../config/auth';
-import { getFeatureFlag } from '../config/features';
+import { errorLogger } from '../services/error-logger';
 
 console.log('BookmarkAI Web Clip service worker (SDK) loaded', API_BASE_URL);
-
-// Error logging utility
-interface ErrorLog {
-  timestamp: number;
-  url: string;
-  error: string;
-  type: 'CSP' | 'NETWORK' | 'AUTH' | 'GENERAL';
-  details?: any;
-}
-
-const errorLogs: ErrorLog[] = [];
-const MAX_ERROR_LOGS = 100;
-
-function logError(type: ErrorLog['type'], url: string, error: string, details?: any) {
-  const errorLog: ErrorLog = {
-    timestamp: Date.now(),
-    url,
-    error,
-    type,
-    details
-  };
-  
-  errorLogs.push(errorLog);
-  
-  // Keep only the latest errors
-  if (errorLogs.length > MAX_ERROR_LOGS) {
-    errorLogs.shift();
-  }
-  
-  console.error(`BookmarkAI [${type}] Error:`, error, details);
-  
-  // Store errors in local storage for debugging
-  browser.storage.local.set({ errorLogs });
-}
 
 // Initialize service worker
 browser.runtime.onInstalled.addListener(async (details) => {
@@ -142,20 +108,19 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
         }
 
         // Use SDK to fetch shares
-        const sharesResponse = await sdkClient.shares.list({
-          limit: 10,
-          sort: 'createdAt:desc',
-        });
+        const sharesResponse = await errorLogger.wrapSDKCall(
+          () => sdkClient.shares.list({ limit: 10 }),
+          'GET_RECENT_SHARES'
+        );
 
         console.log('BookmarkAI: Fetched shares via SDK:', sharesResponse);
         
         return { 
           success: true, 
-          data: sharesResponse.data.items 
+          data: sharesResponse.items 
         };
       } catch (error: any) {
         console.error('BookmarkAI: Failed to get recent shares:', error);
-        logError('NETWORK', 'shares', error.message || 'Could not fetch shares', error);
         return { success: false, error: error.message || 'Could not fetch shares', data: [] };
       }
     
@@ -193,11 +158,14 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
           return { success: false, error: 'Invalid bookmark data' };
         }
 
-        // Use SDK to create share
-        const share = await sdkClient.shares.create({
-          url: metadata.url,
-          title: metadata.title,
-        });
+        // Use SDK to create share with error handling
+        const share = await errorLogger.wrapSDKCall(
+          () => sdkClient.shares.create({
+            url: metadata.url,
+            title: metadata.title,
+          }),
+          'BOOKMARK_PAGE'
+        );
 
         console.log('BookmarkAI: Bookmark created successfully via SDK', share);
         
@@ -212,7 +180,6 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
         return { success: true, data: share };
       } catch (error: any) {
         console.error('BookmarkAI: Failed to create bookmark:', error);
-        logError('NETWORK', metadata?.url || 'unknown', error.message || 'Failed to create bookmark', error);
         return { success: false, error: error.message || 'Failed to create bookmark' };
       }
     
@@ -220,7 +187,7 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
       try {
         const { url, error, details } = message;
         const errorType = details?.errorType || 'GENERAL';
-        logError(errorType, url || 'unknown', error || 'Unknown error', details);
+        await errorLogger.logError(errorType, url || 'unknown', error || 'Unknown error', details);
         return { success: true };
       } catch (error) {
         console.error('BookmarkAI: Failed to log error:', error);
@@ -229,11 +196,20 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
     
     case 'GET_ERROR_LOGS':
       try {
-        const stored = await browser.storage.local.get('errorLogs');
-        return { success: true, data: stored.errorLogs || [] };
+        const logs = await errorLogger.getErrorLogs();
+        return { success: true, data: logs };
       } catch (error) {
         console.error('BookmarkAI: Failed to get error logs:', error);
         return { success: false, error: 'Failed to get error logs' };
+      }
+    
+    case 'GET_ERROR_STATS':
+      try {
+        const stats = await errorLogger.getErrorStats();
+        return { success: true, data: stats };
+      } catch (error) {
+        console.error('BookmarkAI: Failed to get error stats:', error);
+        return { success: false, error: 'Failed to get error stats' };
       }
     
     case 'SWITCH_AUTH_MODE':
