@@ -44,8 +44,19 @@ export default defineConfig(({ mode }) => {
               }
               return 'assets/[name]-[hash].[ext]';
             },
+            // Force service worker to be a single file (no chunks)
+            manualChunks: (id) => {
+              if (id.includes('service-worker-sdk')) {
+                return undefined; // Don't create separate chunks for service worker
+              }
+            },
           }
         ],
+        // Force service worker to inline all dependencies
+        external: (id) => {
+          // Don't externalize anything for service worker
+          return false;
+        },
       },
       target: 'esnext',
       minify: false,

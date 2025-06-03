@@ -1,11 +1,8 @@
 import browser from 'webextension-polyfill';
-import { AuthService } from '../services/auth';
+import { authService } from '../services/auth-unified';
 import { API_BASE_URL } from '../config/auth';
 
 console.log('BookmarkAI Web Clip service worker loaded', API_BASE_URL);
-
-// Initialize AuthService
-const authService = AuthService.getInstance();
 
 // Generate a UUID v4 for idempotency key
 function generateIdempotencyKey(): string {
@@ -104,7 +101,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
     console.log('BookmarkAI: Context menu bookmark triggered for', tab.url);
     
     // Check authentication before bookmarking
-    const isAuthenticated = authService.isAuthenticated();
+    const isAuthenticated = await authService.isAuthenticated();
     
     if (!isAuthenticated) {
       // Open popup to prompt login
@@ -242,7 +239,7 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
       
       // Debug: Check authentication status and log detailed info
       const authState = authService.getAuthState();
-      const isAuthenticatedForBookmark = authService.isAuthenticated();
+      const isAuthenticatedForBookmark = await authService.isAuthenticated();
       
       console.log('BookmarkAI: Auth state for bookmark:', authState);
       console.log('BookmarkAI: Is authenticated:', isAuthenticatedForBookmark);

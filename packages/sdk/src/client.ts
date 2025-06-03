@@ -204,6 +204,13 @@ export class BookmarkAIClient {
   }
 
   /**
+   * Get the current access token
+   */
+  async getAccessToken(): Promise<string | null> {
+    return this.authService.getAccessToken();
+  }
+
+  /**
    * Update configuration
    */
   updateConfig(config: Partial<ClientConfig>): void {

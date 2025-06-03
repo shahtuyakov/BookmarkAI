@@ -1,6 +1,7 @@
 import { AuthService } from './auth';
 import { AuthSDKService } from './auth-sdk';
 import { getFeatureFlag } from '../config/features';
+import { sdkClient } from '../sdk/client';
 import type {
   AuthState,
   LoginCredentials,
@@ -51,13 +52,25 @@ export class UnifiedAuthService {
    */
   async ensureInitialized(): Promise<void> {
     await this.activeService.ensureInitialized();
+    
+    // If using legacy auth, sync any existing tokens to SDK
+    if (!this.useSDK) {
+      await this.syncTokensToSDK();
+    }
   }
 
   /**
    * Login with email and password
    */
   async login(credentials: LoginCredentials): Promise<void> {
-    return this.activeService.login(credentials);
+    const result = await this.activeService.login(credentials);
+    
+    // If using legacy auth, sync tokens to SDK for API calls
+    if (!this.useSDK) {
+      await this.syncTokensToSDK();
+    }
+    
+    return result;
   }
 
   /**
@@ -130,6 +143,24 @@ export class UnifiedAuthService {
       
       // Re-initialize the appropriate service
       await this.activeService.ensureInitialized();
+    }
+  }
+
+  /**
+   * Sync tokens from legacy auth to SDK client
+   */
+  private async syncTokensToSDK(): Promise<void> {
+    try {
+      const state = this.getAuthState();
+      if (state.isAuthenticated && state.tokens) {
+        await sdkClient.setTokens({
+          accessToken: state.tokens.accessToken,
+          refreshToken: state.tokens.refreshToken,
+        });
+        console.log('[UnifiedAuthService] Synced tokens to SDK client');
+      }
+    } catch (error) {
+      console.error('[UnifiedAuthService] Failed to sync tokens to SDK:', error);
     }
   }
 }
