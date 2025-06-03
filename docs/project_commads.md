@@ -16,6 +16,8 @@ cd packages/api-gateway && npm run start:dev
 
 cd packages/mobile/bookmarkaimobile && npm install
 
+npx react-native start --reset-cache
+
 npm install --legacy-peer-deps 
 
 # Install ios dependencies for mobile app
