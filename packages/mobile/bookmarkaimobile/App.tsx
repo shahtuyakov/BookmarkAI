@@ -11,7 +11,7 @@ import { useShareExtension } from './src/services/ShareExtensionHandler';
 import { useCreateShare } from './src/hooks/useShares';
 
 function AppContent(): React.JSX.Element {
-  const { createShare } = useCreateShare();
+  const { mutate: createShare } = useCreateShare();
   
   // Set up share extension handler
   useShareExtension({

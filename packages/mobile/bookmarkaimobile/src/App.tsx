@@ -6,10 +6,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NetworkProvider } from '../src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from '../src/services/queryClient';
+import { SDKProvider } from '../src/contexts/SDKContext';
 import RootNavigator from '../src/navigation';
 import { useAppTheme } from '../src/theme';
 import { useShareExtension } from '../src/services/ShareExtensionHandler';
-import { useCreateShare, sharesKeys } from '../src/hooks/useShares';
+import { useCreateShare, shareKeys } from '../src/hooks/useShares';
 
 interface ShareData {
   url: string;
@@ -19,7 +20,7 @@ interface ShareData {
 }
 
 function AppContent(): React.JSX.Element {
-  const { createShare } = useCreateShare();
+  const { mutate: createShare } = useCreateShare();
   const queryClient = useQueryClient();
   
   // Helper function to invalidate shares cache and trigger UI refresh
@@ -28,12 +29,12 @@ function AppContent(): React.JSX.Element {
     
     // Invalidate all shares queries to trigger refetch
     queryClient.invalidateQueries({ 
-      queryKey: sharesKeys.lists() 
+      queryKey: shareKeys.lists() 
     });
     
     // Also invalidate individual share details that might be cached
     queryClient.invalidateQueries({ 
-      queryKey: sharesKeys.details() 
+      queryKey: shareKeys.details() 
     });
     
     console.log('✅ AppContent: Cache invalidated, UI should refresh automatically');
@@ -235,15 +236,17 @@ function App(): React.JSX.Element {
 
   return (
     <PersistentQueryClientProvider>
-      <NetworkProvider>
-        <AuthProvider>
-          <PaperProvider theme={theme}>
-            <NavigationContainer>
-              <AppContent />
-            </NavigationContainer>
-          </PaperProvider>
-        </AuthProvider>
-      </NetworkProvider>
+      <SDKProvider>
+        <NetworkProvider>
+          <AuthProvider>
+            <PaperProvider theme={theme}>
+              <NavigationContainer>
+                <AppContent />
+              </NavigationContainer>
+            </PaperProvider>
+          </AuthProvider>
+        </NetworkProvider>
+      </SDKProvider>
     </PersistentQueryClientProvider>
   );
 }
