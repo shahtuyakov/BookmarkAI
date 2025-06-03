@@ -42,7 +42,9 @@ describe('FetchAdapter', () => {
   it('should handle request timeout', async () => {
     (global.fetch as jest.Mock).mockImplementation(() => 
       new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('AbortError')), 100);
+        const error = new Error('AbortError');
+        (error as any).name = 'AbortError';
+        setTimeout(() => reject(error), 100);
       })
     );
 
@@ -52,7 +54,7 @@ describe('FetchAdapter', () => {
         method: 'GET',
         timeout: 50,
       })
-    ).rejects.toThrow('Request timeout');
+    ).rejects.toThrow('Request timeout after 50ms');
   });
 
   it('should send POST request with data', async () => {

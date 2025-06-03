@@ -14,6 +14,10 @@ import { ConfigService, ClientConfig, DevModeConfig } from './config';
 import { InterceptorManager } from './interceptors/types';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
 import { TracingInterceptor } from './interceptors/tracing.interceptor';
+import { SharesService } from './services/shares.service';
+import { HealthService } from './services/health.service';
+import { AuthApiService } from './services/auth-api.service';
+import { EventsService } from './services/events.service';
 
 export interface BookmarkAIClientConfig extends ClientConfig {
   adapter?: NetworkAdapter | PlatformAdapter;
@@ -40,9 +44,11 @@ export class BookmarkAIClient {
   private interceptorManager: InterceptorManager;
   private devModeInterval?: NodeJS.Timeout;
 
-  // Generated service properties will be added here
-  // public auth: AuthApi;
-  // public shares: SharesApi;
+  // Public API services
+  public auth!: AuthApiService;
+  public shares!: SharesService;
+  public health!: HealthService;
+  public events!: EventsService;
 
   constructor(config: BookmarkAIClientConfig) {
     // Set up adapters
@@ -227,6 +233,9 @@ export class BookmarkAIClient {
     }
     this.authService.destroy();
     this.interceptorManager.clear();
+    this.shares.destroy();
+    this.health.destroy();
+    this.events.destroy();
   }
 
   /**
@@ -273,12 +282,26 @@ export class BookmarkAIClient {
   }
 
   /**
-   * Initialize generated API services
-   * This will be implemented when we generate the SDK
+   * Initialize API services
    */
   private initializeServices(): void {
-    // TODO: Initialize generated services
-    // this.auth = new AuthApi(this);
-    // this.shares = new SharesApi(this);
+    this.auth = new AuthApiService(this);
+    this.shares = new SharesService(this, {
+      enableBatching: true,
+      batchWindow: 2000,
+      maxBatchSize: 50,
+    });
+    this.health = new HealthService(this, {
+      enableAutoCheck: false, // Let consumer decide
+      checkInterval: 30000,
+    });
+    this.events = new EventsService(
+      this.configService,
+      this.authService,
+      {
+        reconnectInterval: 5000,
+        maxReconnectAttempts: 5,
+      }
+    );
   }
 }
