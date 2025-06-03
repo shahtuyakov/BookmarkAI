@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBookmarkClient } from '../contexts/SDKContext';
 import { LoginRequest, User } from '@bookmarkai/sdk';
-import * as LocalAuthentication from 'react-native-biometrics';
+import ReactNativeBiometrics from 'react-native-biometrics';
 
 // Query keys
 export const authKeys = {
@@ -90,7 +90,7 @@ export function useLogout() {
  * Hook for biometric authentication
  */
 export function useBiometricAuth() {
-  const biometrics = new LocalAuthentication();
+  const biometrics = new ReactNativeBiometrics();
 
   return useMutation({
     mutationFn: async () => {
