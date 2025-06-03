@@ -1,3 +1,5 @@
+import { RetryConfig } from '../utils/retry';
+
 export interface ClientConfig {
   baseUrl: string;
   environment?: 'development' | 'staging' | 'production';
@@ -6,6 +8,7 @@ export interface ClientConfig {
   retries?: number;
   retryDelay?: number;
   headers?: Record<string, string>;
+  retry?: Partial<RetryConfig>;
   onTokenRefresh?: (tokens: { accessToken: string; refreshToken: string }) => void;
 }
 

@@ -10,8 +10,8 @@
   ],
   "scripts": {
     "generate": "node scripts/generate.js",
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup && tsc --emitDeclarationOnly",
+    "dev": "tsup --watch",
     "test": "jest",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
