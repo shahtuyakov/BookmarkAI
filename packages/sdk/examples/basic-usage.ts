@@ -1,4 +1,4 @@
-import { BookmarkAIClient, BrowserStorageAdapter } from '@bookmarkai/sdk';
+import { BookmarkAIClient, BrowserStorageAdapter, ServerEvent } from '../src';
 
 async function main() {
   // Initialize the client
@@ -53,11 +53,11 @@ async function main() {
     console.log(`Created ${batchResults.length} shares in batch`);
 
     // 6. Subscribe to events
-    client.events.on('share-processed', (event) => {
+    client.events.on('share-processed', (event: ServerEvent) => {
       console.log('Share processed:', event.data);
     });
 
-    client.events.on('cache-invalidation', (event) => {
+    client.events.on('cache-invalidation', (event: ServerEvent) => {
       console.log('Cache invalidated for:', event.data.resource);
     });
 
@@ -104,7 +104,7 @@ async function main() {
 }
 
 // Development mode example
-async function developmentExample() {
+async function _developmentExample() {
   const client = new BookmarkAIClient({
     baseUrl: 'http://localhost:3000',
     environment: 'development',
@@ -118,14 +118,14 @@ async function developmentExample() {
 
   // Add custom interceptor for debugging
   client.addRequestInterceptor({
-    onRequest: (config) => {
+    onRequest: (config: any) => {
       console.log(`[DEBUG] ${config.method} ${config.url}`);
       return config;
     },
   });
 
   client.addResponseInterceptor({
-    onResponse: (response) => {
+    onResponse: (response: any) => {
       console.log(`[DEBUG] Response: ${response.status}`);
       return response;
     },
