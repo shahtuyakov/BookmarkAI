@@ -120,11 +120,9 @@ export class AuthSDKService {
         return null;
       }
 
-      // For now, we'll need to get the token from storage
-      // The SDK manages this internally
-      const stored = await browser.storage.local.get(STORAGE_KEYS.AUTH_TOKENS);
-      const tokens = stored[STORAGE_KEYS.AUTH_TOKENS] as AuthTokens | undefined;
-      return tokens?.accessToken || null;
+      // Get token directly from SDK client
+      const token = await sdkClient.getAccessToken();
+      return token;
     } catch (error) {
       console.error('Failed to get access token:', error);
       return null;

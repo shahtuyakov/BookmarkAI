@@ -24,32 +24,41 @@ export class AuthApiService {
    * Login with email and password
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const response = await this.client.request<LoginResponse>({
+    const response = await this.client.request<any>({
       url: '/auth/login',
       method: 'POST',
       data: credentials,
     });
 
+    // Handle nested response structure: { data: { data: { accessToken, refreshToken, user } } }
+    const loginData = response.data.data || response.data;
+    
+    if (!loginData.accessToken || !loginData.refreshToken) {
+      throw new Error('Invalid login response: missing tokens');
+    }
+
     // Automatically set tokens in the client
     await this.client.setTokens({
-      accessToken: response.data.accessToken,
-      refreshToken: response.data.refreshToken,
+      accessToken: loginData.accessToken,
+      refreshToken: loginData.refreshToken,
     });
 
-    return response.data;
+    return loginData;
   }
 
   /**
    * Refresh access token
    */
   async refresh(refreshToken: string): Promise<TokenPair> {
-    const response = await this.client.request<TokenPair>({
+    const response = await this.client.request<any>({
       url: '/auth/refresh',
       method: 'POST',
       data: { refreshToken },
     });
 
-    return response.data;
+    // Handle nested response structure
+    const tokenData = response.data.data || response.data;
+    return tokenData;
   }
 
   /**
@@ -71,11 +80,13 @@ export class AuthApiService {
    * Get current user info (requires authentication)
    */
   async getCurrentUser(): Promise<User> {
-    const response = await this.client.request<User>({
+    const response = await this.client.request<any>({
       url: '/auth/me',
       method: 'GET',
     });
 
-    return response.data;
+    // Handle nested response structure
+    const userData = response.data.data || response.data;
+    return userData;
   }
 }
