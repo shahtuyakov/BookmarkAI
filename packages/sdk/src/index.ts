@@ -10,9 +10,11 @@ export * from './config';
 // Adapters
 export * from './adapters/types';
 export * from './adapters/fetch.adapter';
+export * from './adapters/react-native.adapter';
 export * from './adapters/storage/memory.storage';
 export * from './adapters/storage/browser.storage';
 export * from './adapters/storage/secure.storage';
+export * from './adapters/storage/react-native.storage';
 
 // Services
 export * from './services/auth.service';
