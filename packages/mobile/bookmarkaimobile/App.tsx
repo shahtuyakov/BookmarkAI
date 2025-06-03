@@ -4,6 +4,7 @@ import { PaperProvider } from 'react-native-paper';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { NetworkProvider } from './src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from './src/services/queryClient';
+import { SDKProvider } from './src/contexts/SDKContext';
 import RootNavigator from './src/navigation';
 import { useAppTheme } from './src/theme';
 import { useShareExtension } from './src/services/ShareExtensionHandler';
@@ -31,15 +32,17 @@ function App(): React.JSX.Element {
 
   return (
     <PersistentQueryClientProvider>
-      <NetworkProvider>
-        <AuthProvider>
-          <PaperProvider theme={theme}>
-            <NavigationContainer>
-              <AppContent />
-            </NavigationContainer>
-          </PaperProvider>
-        </AuthProvider>
-      </NetworkProvider>
+      <SDKProvider>
+        <NetworkProvider>
+          <AuthProvider>
+            <PaperProvider theme={theme}>
+              <NavigationContainer>
+                <AppContent />
+              </NavigationContainer>
+            </PaperProvider>
+          </AuthProvider>
+        </NetworkProvider>
+      </SDKProvider>
     </PersistentQueryClientProvider>
   );
 }
