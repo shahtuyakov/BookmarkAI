@@ -16,6 +16,10 @@ export * from './adapters/storage/secure.storage';
 
 // Services
 export * from './services/auth.service';
+export * from './services/auth-api.service';
+export * from './services/shares.service';
+export * from './services/health.service';
+export * from './services/events.service';
 
 // Utilities
 export * from './utils/singleflight';
