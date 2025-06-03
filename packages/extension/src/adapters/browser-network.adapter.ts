@@ -127,7 +127,7 @@ export class BrowserExtensionNetworkAdapter implements NetworkAdapter {
 
     try {
       // Try to fetch a small resource
-      const response = await fetch('https://dns.google/resolve?name=example.com', {
+      await fetch('https://dns.google/resolve?name=example.com', {
         method: 'HEAD',
         mode: 'no-cors',
         cache: 'no-store',

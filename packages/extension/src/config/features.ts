@@ -4,9 +4,11 @@
  * or for gradual rollout
  */
 
+import browser from 'webextension-polyfill';
+
 export const FEATURE_FLAGS = {
   // Use SDK for authentication instead of direct API calls
-  USE_SDK_AUTH: process.env.NODE_ENV === 'development' ? true : false,
+  USE_SDK_AUTH: true, // Force SDK usage in all environments
   
   // Enable debug logging
   DEBUG_LOGGING: process.env.NODE_ENV === 'development',
