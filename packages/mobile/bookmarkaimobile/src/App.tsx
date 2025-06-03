@@ -1,12 +1,12 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
-import { Platform, Alert, ToastAndroid, NativeModules } from 'react-native';
+import { Platform, Alert, ToastAndroid, NativeModules, View, Text, ActivityIndicator } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NetworkProvider } from '../src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from '../src/services/queryClient';
-import { SDKProvider } from '../src/contexts/SDKContext';
+import { SDKProvider, useSDK } from '../src/contexts/SDKContext';
 import RootNavigator from '../src/navigation';
 import { useAppTheme } from '../src/theme';
 import { useShareExtension } from '../src/services/ShareExtensionHandler';
@@ -70,7 +70,7 @@ function AppContent(): React.JSX.Element {
         } else if (Platform.OS === 'android' && (share.status === 'needs_auth' || needsAuth)) {
           // For NEEDS_AUTH items, process through React Native which has auth tokens
           console.log(`🔐 Android: Processing auth-needed share: ${share.url}`);
-          await createShare(share.url);
+          await createShare({ url: share.url });
           
           // Mark as processed in Android database
           if (share.id && NativeModules.ShareHandler?.markShareAsProcessed) {
@@ -86,7 +86,7 @@ function AppContent(): React.JSX.Element {
           shouldRefreshUI = true;
           console.log(`✅ Successfully processed auth-needed share ${i + 1}: ${share.url}`);
         } else {
-          await createShare(share.url);
+          await createShare({ url: share.url });
           successCount++;
           shouldRefreshUI = true;
           console.log(`✅ Successfully processed share ${i + 1}: ${share.url}`);
@@ -134,7 +134,7 @@ function AppContent(): React.JSX.Element {
     
     try {
       console.log('📝 About to call createShare...');
-      await createShare(url);
+      await createShare({ url });
       console.log('✅ createShare completed successfully');
       
       // Refresh UI after successful share creation
@@ -229,6 +229,31 @@ function AppContent(): React.JSX.Element {
   return <RootNavigator />;
 }
 
+function AppWithSDK(): React.JSX.Element {
+  const { isInitialized, error } = useSDK();
+
+  if (!isInitialized) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+        <Text style={{ marginTop: 16 }}>Initializing BookmarkAI...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: 'red', textAlign: 'center', padding: 20 }}>
+          Failed to initialize SDK: {error.message}
+        </Text>
+      </View>
+    );
+  }
+
+  return <AppContent />;
+}
+
 function App(): React.JSX.Element {
   console.log('🏁 App component mounting...');
   console.log('📱 Platform:', Platform.OS);
@@ -241,7 +266,7 @@ function App(): React.JSX.Element {
           <AuthProvider>
             <PaperProvider theme={theme}>
               <NavigationContainer>
-                <AppContent />
+                <AppWithSDK />
               </NavigationContainer>
             </PaperProvider>
           </AuthProvider>

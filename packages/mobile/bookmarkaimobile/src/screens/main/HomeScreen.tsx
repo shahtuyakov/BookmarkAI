@@ -15,7 +15,7 @@ import { useSharesList, useCreateShare } from '../../hooks/useShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
-import { Share } from '../../services/api/shares';
+import { Share } from '@bookmarkai/sdk';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
@@ -30,24 +30,26 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   // Get network status
   const { isConnected } = useNetworkStatus();
   
-  // Get shares with React Query
+  // Get shares with React Query (SDK version)
   const { 
-    shares, 
+    data: sharesResponse, 
     isLoading, 
-    isRefreshing, 
     error, 
-    fetchNextPage, 
-    hasNextPage, 
-    refresh, 
-    isFetchingNextPage 
+    refetch,
+    isFetching
   } = useSharesList({ limit: 10 });
   
-  // Create share mutation
+  const shares = sharesResponse?.items || [];
+  const isRefreshing = isFetching && !isLoading;
+  
+  // Create share mutation (SDK version)
   const { 
-    createShare, 
-    isPending: isSubmitting, 
-    pendingCount 
+    mutate: createShare, 
+    isPending: isSubmitting
   } = useCreateShare();
+  
+  // For now, set pendingCount to 0 since SDK version doesn't track this the same way
+  const pendingCount = 0;
   
   // Handle search (this would be expanded in a real implementation)
   const handleSearch = (query: string) => {
@@ -78,7 +80,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
     
     try {
-      await createShare(newUrl);
+      createShare({ url: newUrl });
       
       // Hide dialog and reset form
       hideAddDialog();
@@ -93,23 +95,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   };
   
-  // Handle loading more data when reaching end of list
+  // For SDK version, we don't have infinite scroll yet
+  // TODO: Implement pagination with cursor-based loading
   const handleLoadMore = () => {
-    if (hasNextPage && !isFetchingNextPage && isConnected) {
-      fetchNextPage();
-    }
+    // Placeholder for future pagination implementation
   };
   
   // Render a loading footer when loading more items
   const renderFooter = () => {
-    if (!hasNextPage) return null;
-    if (!isConnected) return <Text style={styles.offlineFooter}>Connect to load more</Text>;
-    
-    return (
-      <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color={theme.colors.primary} />
-      </View>
-    );
+    // No pagination footer for now
+    return null;
   };
   
   // Generate unique key for each item
@@ -130,7 +125,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       );
     }
     
-    if (error && shares.length === 0) {
+    if (error && (!shares || shares.length === 0)) {
       return (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>
@@ -140,7 +135,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </Text>
           <Button 
             mode="contained" 
-            onPress={() => refresh()} 
+            onPress={() => refetch()} 
             style={styles.retryButton}
             disabled={!isConnected}>
             {isConnected ? 'Retry' : 'Offline'}
@@ -149,7 +144,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       );
     }
     
-    if (shares.length === 0) {
+    if (!shares || shares.length === 0) {
       return <EmptyState onAddBookmark={showAddDialog} />;
     }
     
@@ -162,7 +157,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
-            onRefresh={refresh}
+            onRefresh={refetch}
             colors={[theme.colors.primary]}
             tintColor={theme.colors.primary}
           />

@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { useBookmarkClient, useSyncService } from '../contexts/SDKContext';
 import { Share, CreateShareRequest, ShareListResponse } from '@bookmarkai/sdk';
+import { useNetworkStatus } from './useNetworkStatus';
+import { useCallback } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 
 // Query keys
@@ -49,6 +51,40 @@ export function useShare(
     enabled: !!shareId,
     ...options,
   });
+}
+
+/**
+ * Hook to fetch a single share by ID (alias for useShare with consistent naming)
+ */
+export function useShareById(
+  shareId: string,
+  options?: UseQueryOptions<Share>
+) {
+  const client = useBookmarkClient();
+  const { isConnected } = useNetworkStatus();
+
+  const queryResult = useQuery({
+    queryKey: shareKeys.detail(shareId),
+    queryFn: () => client.shares.get(shareId),
+    enabled: !!shareId && isConnected,
+    staleTime: 30 * 1000, // 30 seconds
+    ...options,
+  });
+
+  const refresh = useCallback(async () => {
+    console.log('🔄 useShareById: Manually refreshing share');
+    const result = await queryResult.refetch();
+    console.log('✅ useShareById: Manual refresh completed');
+    return result;
+  }, [queryResult]);
+
+  return {
+    ...queryResult,
+    share: queryResult.data,
+    isLoading: queryResult.isLoading,
+    refresh,
+    isRefreshing: queryResult.isFetching,
+  };
 }
 
 /**

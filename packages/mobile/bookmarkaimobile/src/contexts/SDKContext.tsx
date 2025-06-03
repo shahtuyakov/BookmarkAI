@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { BookmarkAIClient } from '@bookmarkai/sdk';
-import { ReactNativeStorageAdapter } from '@bookmarkai/sdk/dist/adapters/storage/react-native.storage';
-import { ReactNativeNetworkAdapter } from '@bookmarkai/sdk/dist/adapters/react-native.adapter';
-import * as Keychain from 'react-native-keychain';
+import { BookmarkAIClient, ReactNativeStorageAdapter } from '@bookmarkai/sdk';
 import { MMKV } from 'react-native-mmkv';
 import { SyncService } from '../services/SyncService';
 import Config from 'react-native-config';
+import { PlatformNetworkAdapter } from '../adapters';
+import { keychainWrapper } from '../utils/keychain-wrapper';
 
 interface SDKContextValue {
   client: BookmarkAIClient | null;
   syncService: SyncService | null;
   isInitialized: boolean;
   error: Error | null;
+  syncAuthTokens: (accessToken: string, refreshToken?: string) => Promise<void>;
 }
 
 const SDKContext = createContext<SDKContextValue>({
@@ -19,6 +19,7 @@ const SDKContext = createContext<SDKContextValue>({
   syncService: null,
   isInitialized: false,
   error: null,
+  syncAuthTokens: async () => {},
 });
 
 interface SDKProviderProps {
@@ -32,18 +33,56 @@ export function SDKProvider({ children }: SDKProviderProps) {
   const [syncService, setSyncService] = useState<SyncService | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  
+  // Create storage adapter that will be shared between initialization and token sync
+  const [storageAdapter] = useState(() => new ReactNativeStorageAdapter({
+    keychain: keychainWrapper,
+    mmkv: mmkv,
+  }));
+
+  // Function to sync auth tokens from AuthContext to SDK
+  const syncAuthTokens = async (accessToken: string, refreshToken?: string) => {
+    try {
+      if (!client) {
+        console.log('⚠️ SDK client not ready, cannot sync tokens');
+        return;
+      }
+
+      console.log('🔄 Syncing auth tokens to SDK...');
+      
+      // Store tokens using the SDK's storage adapter format
+      const tokenData = {
+        accessToken,
+        refreshToken: refreshToken || '',
+        expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours from now
+      };
+      
+      console.log('📝 Storing tokens with key "tokens":', {
+        hasAccessToken: !!tokenData.accessToken,
+        accessTokenLength: tokenData.accessToken.length
+      });
+      
+      await storageAdapter.setItem('tokens', JSON.stringify(tokenData));
+
+      console.log('✅ Auth tokens synced to SDK storage');
+      
+      // Verify SDK is now authenticated
+      const isAuthenticated = await client.isAuthenticated();
+      console.log(`🔐 SDK authentication status after sync: ${isAuthenticated}`);
+      
+    } catch (syncError) {
+      console.error('❌ Failed to sync auth tokens to SDK:', syncError);
+    }
+  };
 
   useEffect(() => {
     async function initializeSDK() {
       try {
-        // Create storage adapter with react-native-keychain
-        const storageAdapter = new ReactNativeStorageAdapter({
-          keychain: Keychain,
-          mmkv: mmkv,
-        });
+        // Use the shared storage adapter
 
-        // Create network adapter
-        const networkAdapter = new ReactNativeNetworkAdapter();
+        // Create platform-specific network adapter
+        // This will use URLSession on iOS and fetch on Android
+        const networkAdapter = new PlatformNetworkAdapter();
 
         // Determine API URL based on environment
         const apiUrl = __DEV__ 
@@ -58,13 +97,26 @@ export function SDKProvider({ children }: SDKProviderProps) {
             storage: storageAdapter,
             crypto: {
               // Basic crypto adapter - in production, use a proper crypto library
-              encrypt: async (data: string) => Buffer.from(data).toString('base64'),
-              decrypt: async (data: string) => Buffer.from(data, 'base64').toString('utf8'),
+              encrypt: async (data: string) => {
+                // Convert string to base64 in React Native compatible way
+                const bytes = new TextEncoder().encode(data);
+                const binaryString = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+                return btoa(binaryString);
+              },
+              decrypt: async (data: string) => {
+                // Convert base64 to string in React Native compatible way
+                const binaryString = atob(data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                return new TextDecoder().decode(bytes);
+              },
               generateKey: async () => Math.random().toString(36).substring(2),
             },
           },
           environment: __DEV__ ? 'development' : 'production',
-          onTokenRefresh: (tokens) => {
+          onTokenRefresh: (_tokens) => {
             console.log('Tokens refreshed in React Native app');
           },
         });
@@ -78,29 +130,76 @@ export function SDKProvider({ children }: SDKProviderProps) {
 
           // Add debug interceptors in development
           bookmarkClient.addRequestInterceptor({
-            onRequest: (config) => {
+            onRequest: (config: any) => {
               console.log(`[SDK Request] ${config.method} ${config.url}`);
+              console.log(`[SDK Request Headers]`, config.headers);
               return config;
             },
           });
 
           bookmarkClient.addResponseInterceptor({
-            onResponse: (response) => {
+            onResponse: (response: any) => {
               console.log(`[SDK Response] ${response.status} ${response.statusText}`);
               return response;
             },
-            onResponseError: (error) => {
+            onResponseError: (error: any) => {
               console.error('[SDK Error]', error);
               throw error;
             },
           });
         }
 
+        // Check SDK authentication status and manually sync tokens if needed
+        try {
+          console.log('🔐 Checking SDK authentication status...');
+          const isAuthenticated = await bookmarkClient.isAuthenticated();
+          console.log(`🔐 SDK authentication status: ${isAuthenticated}`);
+          
+          if (!isAuthenticated) {
+            console.log('⚠️ SDK not authenticated - attempting manual token sync...');
+            
+            // Try to get tokens from AuthContext keychain and sync them to SDK
+            try {
+              const authCredentials = await keychainWrapper.getInternetCredentials('com.bookmarkai.app');
+              if (authCredentials) {
+                console.log('🔄 Found AuthContext tokens, syncing to SDK...');
+                const tokenData = JSON.parse(authCredentials.password);
+                
+                // Manually store tokens in SDK storage
+                const sdkTokenData = {
+                  accessToken: tokenData.accessToken,
+                  refreshToken: tokenData.refreshToken || '',
+                  expiresAt: Date.now() + (24 * 60 * 60 * 1000)
+                };
+                
+                await storageAdapter.setItem('tokens', JSON.stringify(sdkTokenData));
+                console.log('✅ Manually synced tokens to SDK storage');
+                
+                // Check authentication again
+                const newAuthStatus = await bookmarkClient.isAuthenticated();
+                console.log(`🔐 SDK authentication after manual sync: ${newAuthStatus}`);
+                
+                // Verify what's actually stored
+                const storedTokens = await storageAdapter.getItem('tokens');
+                console.log(`🔍 Verified SDK storage:`, {
+                  hasTokens: !!storedTokens,
+                  tokenLength: storedTokens?.length || 0
+                });
+              } else {
+                console.log('⚠️ No AuthContext tokens found to sync');
+              }
+            } catch (syncError) {
+              console.error('❌ Manual token sync failed:', syncError);
+            }
+          }
+        } catch (authError) {
+          console.log('ℹ️ Could not check SDK auth status:', authError);
+        }
+
         // Initialize sync service
         const sync = SyncService.getInstance(bookmarkClient);
 
-        // Start health monitoring
-        bookmarkClient.health.startAutoHealthCheck();
+        // Health monitoring is automatically started by the SDK
 
         setClient(bookmarkClient);
         setSyncService(sync);
@@ -126,7 +225,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
   }, []);
 
   return (
-    <SDKContext.Provider value={{ client, syncService, isInitialized, error }}>
+    <SDKContext.Provider value={{ client, syncService, isInitialized, error, syncAuthTokens }}>
       {children}
     </SDKContext.Provider>
   );
