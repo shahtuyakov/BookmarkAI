@@ -152,7 +152,13 @@ export function SDKProvider({ children }: SDKProviderProps) {
         // Check SDK authentication status and manually sync tokens if needed
         try {
           console.log('🔐 Checking SDK authentication status...');
-          const isAuthenticated = await bookmarkClient.isAuthenticated();
+          let isAuthenticated = false;
+          try {
+            isAuthenticated = await bookmarkClient.isAuthenticated();
+          } catch (authCheckError) {
+            console.log('⚠️ Could not check authentication status, assuming false:', authCheckError);
+            isAuthenticated = false;
+          }
           console.log(`🔐 SDK authentication status: ${isAuthenticated}`);
           
           if (!isAuthenticated) {
@@ -176,7 +182,12 @@ export function SDKProvider({ children }: SDKProviderProps) {
                 console.log('✅ Manually synced tokens to SDK storage');
                 
                 // Check authentication again
-                const newAuthStatus = await bookmarkClient.isAuthenticated();
+                let newAuthStatus = false;
+                try {
+                  newAuthStatus = await bookmarkClient.isAuthenticated();
+                } catch (reAuthError) {
+                  console.log('⚠️ Could not recheck authentication status after sync:', reAuthError);
+                }
                 console.log(`🔐 SDK authentication after manual sync: ${newAuthStatus}`);
                 
                 // Verify what's actually stored
