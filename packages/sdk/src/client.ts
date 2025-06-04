@@ -279,13 +279,20 @@ export class BookmarkAIClient {
    * Handle token refresh
    */
   private async refreshTokenHandler(refreshToken: string): Promise<TokenPair> {
-    const response = await this.request<{ accessToken: string; refreshToken: string }>({
+    const response = await this.request<any>({
       url: '/auth/refresh',
       method: 'POST',
       data: { refreshToken },
     });
 
-    return response.data;
+    // Handle nested response structure: { data: { data: { accessToken, refreshToken } } }
+    const tokenData = response.data.data || response.data;
+    
+    if (!tokenData.accessToken || !tokenData.refreshToken) {
+      throw new Error('Invalid refresh response: missing tokens');
+    }
+
+    return tokenData;
   }
 
   /**
