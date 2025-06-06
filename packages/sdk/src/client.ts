@@ -301,7 +301,7 @@ export class BookmarkAIClient {
   private initializeServices(): void {
     this.auth = new AuthApiService(this);
     this.shares = new SharesService(this, {
-      enableBatching: true,
+      enableBatching: false,
       batchWindow: 2000,
       maxBatchSize: 50,
     });
