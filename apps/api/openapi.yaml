@@ -84,7 +84,7 @@ paths:
         - bearerAuth: []
       parameters:
         - in: header
-          name: X-Idempotency-Key
+          name: Idempotency-Key
           schema:
             type: string
           required: true
