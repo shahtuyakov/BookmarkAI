@@ -43,7 +43,6 @@ export interface SharesServiceOptions {
 
 export class SharesService {
   private batchProcessor?: ShareBatchProcessor;
-  private idempotencyKeyCounter = 0;
 
   constructor(
     private client: BookmarkAIClient,
@@ -186,10 +185,11 @@ export class SharesService {
    * Generate a unique idempotency key
    */
   private generateIdempotencyKey(): string {
-    const timestamp = Date.now();
-    const counter = this.idempotencyKeyCounter++;
-    const random = Math.random().toString(36).substring(2, 9);
-    return `share_${timestamp}_${counter}_${random}`;
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
   }
 
   /**
