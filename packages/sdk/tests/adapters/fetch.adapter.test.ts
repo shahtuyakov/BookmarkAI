@@ -77,7 +77,7 @@ describe('FetchAdapter', () => {
       url: 'https://api.example.com/shares',
       method: 'POST',
       data: { url: 'https://example.com' },
-      headers: { 'X-Idempotency-Key': 'test-key' },
+      headers: { 'Idempotency-Key': 'test-key' },
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -87,7 +87,7 @@ describe('FetchAdapter', () => {
         body: JSON.stringify({ url: 'https://example.com' }),
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': 'test-key',
+          'Idempotency-Key': 'test-key',
         }),
       })
     );

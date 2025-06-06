@@ -73,7 +73,7 @@ export class SharesService {
       url: '/shares',
       method: 'POST',
       headers: {
-        'X-Idempotency-Key': key,
+        'Idempotency-Key': key,
       },
       data: request,
     });

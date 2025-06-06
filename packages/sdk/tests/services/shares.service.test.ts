@@ -45,7 +45,7 @@ describe('SharesService', () => {
         url: '/shares',
         method: 'POST',
         headers: {
-          'X-Idempotency-Key': expect.stringMatching(/^share_\d+_\d+_[a-z0-9]+$/),
+          'Idempotency-Key': expect.stringMatching(/^share_\d+_\d+_[a-z0-9]+$/),
         },
         data: {
           url: 'https://tiktok.com/video',
@@ -67,7 +67,7 @@ describe('SharesService', () => {
       expect(mockClient.request).toHaveBeenCalledWith(
         expect.objectContaining({
           headers: {
-            'X-Idempotency-Key': 'custom-key-123',
+            'Idempotency-Key': 'custom-key-123',
           },
         })
       );
