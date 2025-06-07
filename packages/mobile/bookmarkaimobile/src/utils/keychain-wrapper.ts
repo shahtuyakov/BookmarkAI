@@ -1,7 +1,8 @@
 import * as Keychain from 'react-native-keychain';
 
-// Use the same keychain service as AuthContext
+// Shared keychain configuration for main app and share extension
 const KEYCHAIN_SERVICE = 'com.bookmarkai.auth';
+const SHARED_ACCESS_GROUP = 'com.bookmarkai'; // Matches entitlements keychain-access-groups
 
 // Helper function to check if server should use AuthContext keychain service
 const shouldUseAuthService = (server: string): boolean => {
@@ -25,7 +26,6 @@ export const keychainWrapper = {
     password: string
   ): Promise<boolean> {
     try {
-      
       // For SDK token storage, use SEPARATE storage to avoid conflicts with AuthContext
       if (shouldUseAuthService(server)) {
         // Use server-specific internet credentials instead of generic password
@@ -47,7 +47,6 @@ export const keychainWrapper = {
     server: string
   ): Promise<{ username: string; password: string } | false> {
     try {
-      
       // For SDK token storage, check for SDK-specific data first
       if (shouldUseAuthService(server)) {
         // First try to get SDK-specific token storage
@@ -62,7 +61,8 @@ export const keychainWrapper = {
         
         // Fallback: try to get AuthContext tokens and convert them
         const credentials = await Keychain.getGenericPassword({
-          service: KEYCHAIN_SERVICE
+          service: KEYCHAIN_SERVICE,
+          accessGroup: SHARED_ACCESS_GROUP
         });
         
         if (credentials) {
@@ -81,7 +81,6 @@ export const keychainWrapper = {
               password: JSON.stringify(sdkTokenFormat)
             };
           } catch (parseError) {
-            console.error(`❌ Failed to parse token data:`, parseError);
             return false;
           }
         } else {
@@ -100,11 +99,11 @@ export const keychainWrapper = {
 
   async resetInternetCredentials(server: string): Promise<boolean> {
     try {
-      
       // For SDK token storage, use the same service as AuthContext
       if (shouldUseAuthService(server)) {
         await Keychain.resetGenericPassword({
-          service: KEYCHAIN_SERVICE
+          service: KEYCHAIN_SERVICE,
+          accessGroup: SHARED_ACCESS_GROUP
         });
         return true;
       }
