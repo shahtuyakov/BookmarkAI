@@ -5,7 +5,8 @@ const KEYCHAIN_SERVICE = 'com.bookmarkai.auth';
 
 // Helper function to check if server should use AuthContext keychain service
 const shouldUseAuthService = (server: string): boolean => {
-  return server === 'bookmarkai' || 
+  return server === 'com.bookmarkai.app' || 
+         server === 'bookmarkai' || 
          server === 'tokens' || 
          server.includes('bookmarkai') || 
          server.includes('localhost') ||
@@ -24,14 +25,12 @@ export const keychainWrapper = {
     password: string
   ): Promise<boolean> {
     try {
-      console.log(`🔐 Keychain: Storing tokens for server: ${server}`);
       
-      // For SDK token storage, use the same service as AuthContext
+      // For SDK token storage, use SEPARATE storage to avoid conflicts with AuthContext
       if (shouldUseAuthService(server)) {
-        const result = await Keychain.setGenericPassword(username, password, {
-          service: KEYCHAIN_SERVICE
-        });
-        console.log(`✅ Keychain: Tokens stored using service ${KEYCHAIN_SERVICE}`);
+        // Use server-specific internet credentials instead of generic password
+        // This prevents overwriting AuthContext tokens
+        const result = await Keychain.setInternetCredentials(server, username, password);
         return !!result;
       }
       
@@ -48,46 +47,44 @@ export const keychainWrapper = {
     server: string
   ): Promise<{ username: string; password: string } | false> {
     try {
-      console.log(`🔐 Keychain: Getting tokens for server: ${server}`);
       
-      // For SDK token storage, use the same service as AuthContext
+      // For SDK token storage, check for SDK-specific data first
       if (shouldUseAuthService(server)) {
+        // First try to get SDK-specific token storage
+        try {
+          const sdkCredentials = await Keychain.getInternetCredentials(server);
+          if (sdkCredentials) {
+            return sdkCredentials;
+          }
+        } catch (error) {
+          // Silently fall back to AuthContext tokens
+        }
+        
+        // Fallback: try to get AuthContext tokens and convert them
         const credentials = await Keychain.getGenericPassword({
           service: KEYCHAIN_SERVICE
         });
         
         if (credentials) {
-          console.log(`✅ Keychain: Tokens retrieved using service ${KEYCHAIN_SERVICE}`);
-          
           // Parse the AuthContext token format
           try {
             const tokenData = JSON.parse(credentials.password);
-            console.log(`🔍 Parsed token data:`, { hasAccessToken: !!tokenData.accessToken });
             
-            // Return in format expected by SDK (access token as password, metadata as username)
+            // Return in format expected by SDK ReactNativeStorageAdapter
             const sdkTokenFormat = {
-              accessToken: tokenData.accessToken,
-              refreshToken: tokenData.refreshToken || '',
-              expiresAt: Date.now() + (24 * 60 * 60 * 1000) // Default to 24 hours
+              bookmarkai_access_token: tokenData.accessToken,
+              bookmarkai_refresh_token: tokenData.refreshToken || '',
             };
             
-            console.log(`🔄 Returning tokens to SDK in format:`, { 
-              username: 'sdk_tokens',
-              hasPassword: !!JSON.stringify(sdkTokenFormat),
-              accessTokenLength: tokenData.accessToken?.length || 0
-            });
-            
             return {
-              username: 'sdk_tokens',
+              username: 'bookmarkai_user',
               password: JSON.stringify(sdkTokenFormat)
             };
           } catch (parseError) {
             console.error(`❌ Failed to parse token data:`, parseError);
-            console.log(`🔍 Raw credentials:`, credentials);
             return false;
           }
         } else {
-          console.log(`ℹ️ Keychain: No tokens found in service ${KEYCHAIN_SERVICE}`);
           return false;
         }
       }
@@ -103,20 +100,18 @@ export const keychainWrapper = {
 
   async resetInternetCredentials(server: string): Promise<boolean> {
     try {
-      console.log(`🔐 Keychain: Resetting tokens for server: ${server}`);
       
       // For SDK token storage, use the same service as AuthContext
       if (shouldUseAuthService(server)) {
-        const result = await Keychain.resetGenericPassword({
+        await Keychain.resetGenericPassword({
           service: KEYCHAIN_SERVICE
         });
-        console.log(`✅ Keychain: Tokens reset for service ${KEYCHAIN_SERVICE}`);
-        return true; // resetGenericPassword returns void, but we'll assume success if no error
+        return true;
       }
       
       // For other servers, use internet credentials as normal
-      const result = await Keychain.resetInternetCredentials(server);
-      return result;
+      await Keychain.resetInternetCredentials(server);
+      return true;
     } catch (error) {
       console.error('Keychain resetInternetCredentials error:', error);
       return false;
