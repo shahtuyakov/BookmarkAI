@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { NetworkAdapter, ReactNativeNetworkAdapter } from '@bookmarkai/sdk';
 import { IOSURLSessionAdapter } from './ios-urlsession.adapter';
+import { AndroidOkHttpAdapter, createAndroidOkHttpAdapter } from './android-okhttp.adapter';
 
 /**
  * Platform-specific network adapter that automatically selects
@@ -14,8 +15,24 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
       try {
         const urlSessionAdapter = new IOSURLSessionAdapter();
         this.adapter = urlSessionAdapter;
+        console.log('✅ iOS URLSession adapter initialized successfully');
       } catch (error) {
-        console.warn('iOS URLSession adapter initialization failed, falling back to React Native fetch adapter:', error);
+        console.log('❌ iOS URLSession adapter initialization failed:', error);
+        console.log('🔄 Falling back to React Native fetch adapter');
+        this.adapter = new ReactNativeNetworkAdapter();
+      }
+    } else if (Platform.OS === 'android') {
+      try {
+        const okHttpAdapter = createAndroidOkHttpAdapter();
+        if (okHttpAdapter) {
+          this.adapter = okHttpAdapter;
+          console.log('✅ Android OkHttp adapter initialized successfully');
+        } else {
+          throw new Error('OkHttp adapter not available');
+        }
+      } catch (error) {
+        console.log('❌ Android OkHttp adapter initialization failed:', error);
+        console.log('🔄 Falling back to React Native fetch adapter');
         this.adapter = new ReactNativeNetworkAdapter();
       }
     } else {
@@ -35,6 +52,8 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
       return 'react-native-fetch';
     } else if (this.adapter instanceof IOSURLSessionAdapter) {
       return 'ios-urlsession';
+    } else if (this.adapter instanceof AndroidOkHttpAdapter) {
+      return 'android-okhttp';
     }
     return 'unknown';
   }
