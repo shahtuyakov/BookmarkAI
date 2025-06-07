@@ -39,6 +39,7 @@ export class AuthService {
    */
   async getAccessToken(): Promise<string | null> {
     const tokens = await this.getStoredTokens();
+    
     if (!tokens) {
       return null;
     }

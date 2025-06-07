@@ -1,6 +1,38 @@
 import { BookmarkAIClient } from '../client';
 import { ShareBatchProcessor } from '../utils/batch';
 
+/**
+ * API response wrapper used by the API gateway
+ */
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+}
+
+/**
+ * Helper function to unwrap API response data
+ */
+function unwrapApiResponse<T>(response: { data: ApiResponse<T> | T }): T {
+  const responseData = response.data;
+  
+  // If it's wrapped in ApiResponse format, extract the data
+  if (responseData && typeof responseData === 'object' && 'success' in responseData) {
+    const apiResponse = responseData as ApiResponse<T>;
+    if (!apiResponse.success || !apiResponse.data) {
+      throw new Error(apiResponse.error?.message || 'API request failed');
+    }
+    return apiResponse.data;
+  }
+  
+  // Otherwise return as-is (backwards compatibility)
+  return responseData as T;
+}
+
 export interface CreateShareRequest {
   url: string;
   title?: string;
@@ -69,16 +101,16 @@ export class SharesService {
     }
 
     // Direct API call
-    const response = await this.client.request<Share>({
+    const response = await this.client.request<ApiResponse<Share> | Share>({
       url: '/shares',
       method: 'POST',
       headers: {
-        'Idempotency-Key': key,
+        'idempotency-key': key,
       },
       data: request,
     });
 
-    return response.data;
+    return unwrapApiResponse<Share>(response);
   }
 
   /**
@@ -90,13 +122,13 @@ export class SharesService {
       idempotencyKey: this.generateIdempotencyKey(),
     }));
 
-    const response = await this.client.request<CreateSharesBatchResponse>({
+    const response = await this.client.request<ApiResponse<CreateSharesBatchResponse> | CreateSharesBatchResponse>({
       url: '/shares/batch',
       method: 'POST',
       data: { shares: sharesWithKeys },
     });
 
-    return response.data;
+    return unwrapApiResponse<CreateSharesBatchResponse>(response);
   }
 
   /**
@@ -108,25 +140,25 @@ export class SharesService {
     status?: Share['status'];
     platform?: Share['platform'];
   }): Promise<ShareListResponse> {
-    const response = await this.client.request<ShareListResponse>({
+    const response = await this.client.request<ApiResponse<ShareListResponse> | ShareListResponse>({
       url: '/shares',
       method: 'GET',
       params,
     });
 
-    return response.data;
+    return unwrapApiResponse<ShareListResponse>(response);
   }
 
   /**
    * Get a specific share
    */
   async get(shareId: string): Promise<Share> {
-    const response = await this.client.request<Share>({
+    const response = await this.client.request<ApiResponse<Share> | Share>({
       url: `/shares/${shareId}`,
       method: 'GET',
     });
 
-    return response.data;
+    return unwrapApiResponse<Share>(response);
   }
 
   /**

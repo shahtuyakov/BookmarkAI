@@ -72,14 +72,12 @@ export class SyncService {
     // Check network status
     const netInfo = await NetInfo.fetch();
     if (!netInfo.isConnected) {
-      console.log('No internet connection, skipping queue processing');
       return;
     }
 
     // Check if authenticated
     const isAuthenticated = await this.client.isAuthenticated();
     if (!isAuthenticated) {
-      console.log('Not authenticated, skipping queue processing');
       return;
     }
 
@@ -91,7 +89,6 @@ export class SyncService {
 
       for (const share of queue) {
         try {
-          console.log(`Processing queued share: ${share.url}`);
           
           // Create share via SDK
           await this.client.shares.create({
@@ -100,7 +97,6 @@ export class SyncService {
             notes: share.notes,
           });
 
-          console.log(`Successfully processed share: ${share.url}`);
           // Don't add to remaining queue - it's processed
         } catch (error: any) {
           console.error(`Failed to process share: ${share.url}`, error);
@@ -166,7 +162,6 @@ export class SyncService {
   private setupNetworkListener(): void {
     this.networkUnsubscribe = NetInfo.addEventListener(state => {
       if (state.isConnected) {
-        console.log('Network connected, processing queue...');
         // Delay to ensure network is stable
         setTimeout(() => this.processQueue(), 2000);
       }

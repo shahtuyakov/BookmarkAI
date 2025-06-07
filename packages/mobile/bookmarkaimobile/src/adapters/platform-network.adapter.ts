@@ -12,7 +12,6 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
   constructor() {
     // Temporarily use React Native adapter for all platforms
     // until we resolve the iOS URLSession adapter issues
-    console.log(`🌐 Using React Native network adapter for ${Platform.OS}`);
     this.adapter = new ReactNativeNetworkAdapter();
     
     // TODO: Re-enable iOS URLSession adapter once issues are resolved

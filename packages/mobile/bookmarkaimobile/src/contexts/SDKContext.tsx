@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { BookmarkAIClient, ReactNativeStorageAdapter } from '@bookmarkai/sdk';
 import { MMKV } from 'react-native-mmkv';
 import { SyncService } from '../services/SyncService';
-import Config from 'react-native-config';
 import { PlatformNetworkAdapter } from '../adapters';
 import { keychainWrapper } from '../utils/keychain-wrapper';
 
@@ -44,31 +43,26 @@ export function SDKProvider({ children }: SDKProviderProps) {
   const syncAuthTokens = async (accessToken: string, refreshToken?: string) => {
     try {
       if (!client) {
-        console.log('⚠️ SDK client not ready, cannot sync tokens');
         return;
       }
 
-      console.log('🔄 Syncing auth tokens to SDK...');
       
-      // Store tokens using the SDK's storage adapter format
-      const tokenData = {
-        accessToken,
-        refreshToken: refreshToken || '',
-        expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours from now
-      };
+      // Store tokens using the SDK's expected key format
+      const expiresIn = 15 * 60; // 15 minutes in seconds
+      const accessTokenExpiry = Date.now() + (expiresIn * 1000);
+      const refreshTokenExpiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
       
-      console.log('📝 Storing tokens with key "tokens":', {
-        hasAccessToken: !!tokenData.accessToken,
-        accessTokenLength: tokenData.accessToken.length
-      });
       
-      await storageAdapter.setItem('tokens', JSON.stringify(tokenData));
+      // Store tokens sequentially to avoid race conditions in ReactNativeStorageAdapter
+      await storageAdapter.setItem('bookmarkai_access_token', accessToken);
+      await storageAdapter.setItem('bookmarkai_refresh_token', refreshToken || '');
+      await storageAdapter.setItem('bookmarkai_token_expiry', JSON.stringify({
+        accessTokenExpiry,
+        refreshTokenExpiry
+      }));
 
-      console.log('✅ Auth tokens synced to SDK storage');
-      
       // Verify SDK is now authenticated
       const isAuthenticated = await client.isAuthenticated();
-      console.log(`🔐 SDK authentication status after sync: ${isAuthenticated}`);
       
     } catch (syncError) {
       console.error('❌ Failed to sync auth tokens to SDK:', syncError);
@@ -85,8 +79,9 @@ export function SDKProvider({ children }: SDKProviderProps) {
         const networkAdapter = new PlatformNetworkAdapter();
 
         // Determine API URL based on environment
+        // SDK needs the full API base URL since it only adds endpoint paths like /shares
         const apiUrl = __DEV__ 
-          ? Config.API_URL || 'http://localhost:3000/v1'
+          ? 'https://bookmarkai-dev.ngrok.io/api/v1'
           : 'https://api.bookmarkai.com/v1';
 
         // Initialize the client
@@ -117,7 +112,6 @@ export function SDKProvider({ children }: SDKProviderProps) {
           },
           environment: __DEV__ ? 'development' : 'production',
           onTokenRefresh: (_tokens) => {
-            console.log('Tokens refreshed in React Native app');
           },
         });
 
@@ -128,18 +122,9 @@ export function SDKProvider({ children }: SDKProviderProps) {
             pollInterval: 5000, // Check every 5 seconds
           });
 
-          // Add debug interceptors in development
-          bookmarkClient.addRequestInterceptor({
-            onRequest: (config: any) => {
-              console.log(`[SDK Request] ${config.method} ${config.url}`);
-              console.log(`[SDK Request Headers]`, config.headers);
-              return config;
-            },
-          });
-
+          // Add error interceptor for debugging
           bookmarkClient.addResponseInterceptor({
             onResponse: (response: any) => {
-              console.log(`[SDK Response] ${response.status} ${response.statusText}`);
               return response;
             },
             onResponseError: (error: any) => {
@@ -151,60 +136,45 @@ export function SDKProvider({ children }: SDKProviderProps) {
 
         // Check SDK authentication status and manually sync tokens if needed
         try {
-          console.log('🔐 Checking SDK authentication status...');
           let isAuthenticated = false;
           try {
             isAuthenticated = await bookmarkClient.isAuthenticated();
           } catch (authCheckError) {
-            console.log('⚠️ Could not check authentication status, assuming false:', authCheckError);
             isAuthenticated = false;
           }
-          console.log(`🔐 SDK authentication status: ${isAuthenticated}`);
           
           if (!isAuthenticated) {
-            console.log('⚠️ SDK not authenticated - attempting manual token sync...');
-            
             // Try to get tokens from AuthContext keychain and sync them to SDK
             try {
               const authCredentials = await keychainWrapper.getInternetCredentials('com.bookmarkai.app');
               if (authCredentials) {
-                console.log('🔄 Found AuthContext tokens, syncing to SDK...');
                 const tokenData = JSON.parse(authCredentials.password);
                 
-                // Manually store tokens in SDK storage
-                const sdkTokenData = {
-                  accessToken: tokenData.accessToken,
-                  refreshToken: tokenData.refreshToken || '',
-                  expiresAt: Date.now() + (24 * 60 * 60 * 1000)
-                };
+                // Manually store tokens in SDK format
+                const expiresIn = 15 * 60; // 15 minutes in seconds
+                const accessTokenExpiry = Date.now() + (expiresIn * 1000);
+                const refreshTokenExpiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
                 
-                await storageAdapter.setItem('tokens', JSON.stringify(sdkTokenData));
-                console.log('✅ Manually synced tokens to SDK storage');
-                
+                // Store tokens sequentially to avoid race conditions
+                await storageAdapter.setItem('bookmarkai_access_token', tokenData.accessToken);
+                await storageAdapter.setItem('bookmarkai_refresh_token', tokenData.refreshToken || '');
+                await storageAdapter.setItem('bookmarkai_token_expiry', JSON.stringify({
+                  accessTokenExpiry,
+                  refreshTokenExpiry
+                }));
                 // Check authentication again
-                let newAuthStatus = false;
                 try {
-                  newAuthStatus = await bookmarkClient.isAuthenticated();
+                  await bookmarkClient.isAuthenticated();
                 } catch (reAuthError) {
-                  console.log('⚠️ Could not recheck authentication status after sync:', reAuthError);
+                  // Ignore reauth errors
                 }
-                console.log(`🔐 SDK authentication after manual sync: ${newAuthStatus}`);
-                
-                // Verify what's actually stored
-                const storedTokens = await storageAdapter.getItem('tokens');
-                console.log(`🔍 Verified SDK storage:`, {
-                  hasTokens: !!storedTokens,
-                  tokenLength: storedTokens?.length || 0
-                });
-              } else {
-                console.log('⚠️ No AuthContext tokens found to sync');
               }
             } catch (syncError) {
               console.error('❌ Manual token sync failed:', syncError);
             }
           }
         } catch (authError) {
-          console.log('ℹ️ Could not check SDK auth status:', authError);
+          // Ignore auth check errors
         }
 
         // Initialize sync service

@@ -135,7 +135,7 @@ export function useCreateShare() {
       queryClient.setQueriesData<ShareListResponse>(
         { queryKey: shareKeys.lists() },
         (old) => {
-          if (!old) return old;
+          if (!old) return { items: [share], hasMore: false, cursor: undefined };
           return {
             ...old,
             items: [share, ...old.items],
