@@ -10,6 +10,7 @@ import { useAppTheme } from './src/theme';
 import { useShareExtension } from './src/services/ShareExtensionHandler';
 import { useCreateShare } from './src/hooks/useShares';
 import { View, Text, ActivityIndicator } from 'react-native';
+import './src/utils/test-token-sync'; // Import token sync test suite
 
 function AppContent(): React.JSX.Element {
   const { mutate: createShare } = useCreateShare();

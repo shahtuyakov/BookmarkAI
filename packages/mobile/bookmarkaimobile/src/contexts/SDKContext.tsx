@@ -4,6 +4,7 @@ import { MMKV } from 'react-native-mmkv';
 import { SyncService } from '../services/SyncService';
 import { PlatformNetworkAdapter } from '../adapters';
 import { keychainWrapper } from '../utils/keychain-wrapper';
+import { enhancedTokenSync } from '../services/enhanced-token-sync';
 
 interface SDKContextValue {
   client: BookmarkAIClient | null;
@@ -62,10 +63,10 @@ export function SDKProvider({ children }: SDKProviderProps) {
       }));
 
       // Verify SDK is now authenticated
-      const isAuthenticated = await client.isAuthenticated();
+      await client.isAuthenticated();
       
     } catch (syncError) {
-      console.error('Failed to sync auth tokens to SDK:', syncError);
+      // Silent error handling
     }
   };
 
@@ -128,7 +129,6 @@ export function SDKProvider({ children }: SDKProviderProps) {
               return response;
             },
             onResponseError: (error: any) => {
-              console.error('SDK Error:', error);
               throw error;
             },
           });
@@ -170,7 +170,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
                 }
               }
             } catch (syncError) {
-              console.error('Manual token sync failed:', syncError);
+              // Silent error handling
             }
           }
         } catch (authError) {
@@ -184,9 +184,14 @@ export function SDKProvider({ children }: SDKProviderProps) {
 
         setClient(bookmarkClient);
         setSyncService(sync);
+        
+        // Start enhanced token synchronization
+        if (enhancedTokenSync.isAvailable()) {
+          enhancedTokenSync.startAutomaticSync();
+        }
+        
         setIsInitialized(true);
       } catch (err) {
-        console.error('Failed to initialize SDK:', err);
         setError(err as Error);
         setIsInitialized(true);
       }
@@ -202,6 +207,8 @@ export function SDKProvider({ children }: SDKProviderProps) {
       if (syncService) {
         syncService.destroy();
       }
+      // Stop enhanced token sync
+      enhancedTokenSync.stopAutomaticSync();
     };
   }, []);
 

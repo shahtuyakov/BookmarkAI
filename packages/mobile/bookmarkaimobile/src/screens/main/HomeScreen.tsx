@@ -16,6 +16,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
 import { Share } from '@bookmarkai/sdk';
+import { TokenSyncTestSuite } from '../../utils/test-token-sync';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
@@ -26,6 +27,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogVisible, setIsAddDialogVisible] = useState(false);
   const [newUrl, setNewUrl] = useState('');
+  const [isTestDialogVisible, setIsTestDialogVisible] = useState(false);
   
   // Get network status
   const { isConnected } = useNetworkStatus();
@@ -92,6 +94,41 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                            'Failed to add bookmark. Please try again.';
       
       Alert.alert('Error', errorMessage);
+    }
+  };
+  
+  // Test functions
+  const runTokenSyncTests = async () => {
+    try {
+      await TokenSyncTestSuite.runAllTests();
+      Alert.alert('Tests Complete', 'Check the console/logs for detailed results');
+    } catch (error: any) {
+      Alert.alert('Test Error', error.message);
+    }
+  };
+  
+  const runIndividualTest = async (testName: string) => {
+    try {
+      switch (testName) {
+        case 'tokenSync':
+          await TokenSyncTestSuite.testTokenSyncFromReactNative();
+          break;
+        case 'hardwareSecurity':
+          await TokenSyncTestSuite.testHardwareSecurityCapabilities();
+          break;
+        case 'persistence':
+          await TokenSyncTestSuite.testTokenPersistence();
+          break;
+        case 'manualSync':
+          await TokenSyncTestSuite.testManualTokenSync();
+          break;
+        case 'enhancedSync':
+          await TokenSyncTestSuite.testEnhancedTokenSync();
+          break;
+      }
+      Alert.alert('Test Complete', `${testName} test finished. Check console for results.`);
+    } catch (error: any) {
+      Alert.alert('Test Error', error.message);
     }
   };
   
@@ -181,12 +218,26 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         </View>
       )}
       
-      <Searchbar
-        placeholder="Search bookmarks"
-        onChangeText={handleSearch}
-        value={searchQuery}
-        style={styles.searchBar}
-      />
+      <View style={styles.headerContainer}>
+        <Searchbar
+          placeholder="Search bookmarks"
+          onChangeText={handleSearch}
+          value={searchQuery}
+          style={styles.searchBar}
+        />
+        
+        {/* Development Test Button - Only show in debug mode */}
+        {false && (
+          <Button 
+            mode="outlined" 
+            icon="test-tube" 
+            onPress={() => setIsTestDialogVisible(true)}
+            style={styles.testButton}
+            compact>
+            Tests
+          </Button>
+        )}
+      </View>
       
       {renderContent()}
       
@@ -236,6 +287,73 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </Button>
           </Dialog.Actions>
         </Dialog>
+        
+        {/* Test Dialog */}
+        <Dialog visible={isTestDialogVisible} onDismiss={() => setIsTestDialogVisible(false)}>
+          <Dialog.Title>🧪 Development Tests</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.testDescription}>
+              Test Android native integration and token synchronization
+            </Text>
+            
+            <View style={styles.testButtonsContainer}>
+              <Button 
+                mode="contained" 
+                icon="play-circle"
+                onPress={runTokenSyncTests}
+                style={styles.testDialogButton}>
+                Run All Tests
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                icon="sync"
+                onPress={() => runIndividualTest('tokenSync')}
+                style={styles.testDialogButton}>
+                Token Sync Test
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                icon="shield-check"
+                onPress={() => runIndividualTest('hardwareSecurity')}
+                style={styles.testDialogButton}>
+                Hardware Security Test
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                icon="content-save"
+                onPress={() => runIndividualTest('persistence')}
+                style={styles.testDialogButton}>
+                Token Persistence Test
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                icon="refresh"
+                onPress={() => runIndividualTest('manualSync')}
+                style={styles.testDialogButton}>
+                Manual Sync Test
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                icon="auto-fix"
+                onPress={() => runIndividualTest('enhancedSync')}
+                style={styles.testDialogButton}>
+                Enhanced Auto Sync Test
+              </Button>
+            </View>
+            
+            <Text style={styles.testNote}>
+              💡 Check Metro console for detailed test results
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setIsTestDialogVisible(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </SafeAreaView>
   );
@@ -247,7 +365,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   searchBar: {
-    margin: 16,
+    flex: 1,
     elevation: 2,
   },
   listContent: {
@@ -315,6 +433,35 @@ const styles = StyleSheet.create({
     bottom: 80,
     alignSelf: 'center',
     borderColor: '#FF9500',
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 8,
+  },
+  testButton: {
+    minWidth: 70,
+  },
+  testDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  testButtonsContainer: {
+    gap: 8,
+  },
+  testDialogButton: {
+    marginVertical: 4,
+  },
+  testNote: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 16,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
