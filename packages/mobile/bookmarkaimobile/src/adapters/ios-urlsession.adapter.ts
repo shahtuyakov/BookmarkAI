@@ -16,7 +16,8 @@ export class IOSURLSessionAdapter implements NetworkAdapter {
     if (!this.isAvailable) {
       console.warn(
         'IOSURLSessionAdapter: Native module not available. ' +
-        'Make sure the iOS native module is properly linked.'
+        'Make sure the iOS native module is properly linked. ' +
+        `Platform: ${Platform.OS}, Module available: ${!!NativeURLSession}`
       );
     }
   }

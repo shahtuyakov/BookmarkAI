@@ -65,7 +65,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
       const isAuthenticated = await client.isAuthenticated();
       
     } catch (syncError) {
-      console.error('❌ Failed to sync auth tokens to SDK:', syncError);
+      console.error('Failed to sync auth tokens to SDK:', syncError);
     }
   };
 
@@ -77,6 +77,12 @@ export function SDKProvider({ children }: SDKProviderProps) {
         // Create platform-specific network adapter
         // This will use URLSession on iOS and fetch on Android
         const networkAdapter = new PlatformNetworkAdapter();
+        
+        // Test the adapter to ensure it's working
+        const testResult = await networkAdapter.testAdapter();
+        if (!testResult.success) {
+          console.warn('Network adapter test failed:', testResult.error);
+        }
 
         // Determine API URL based on environment
         // SDK needs the full API base URL since it only adds endpoint paths like /shares
@@ -128,7 +134,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
               return response;
             },
             onResponseError: (error: any) => {
-              console.error('[SDK Error]', error);
+              console.error('SDK Error:', error);
               throw error;
             },
           });
@@ -170,7 +176,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
                 }
               }
             } catch (syncError) {
-              console.error('❌ Manual token sync failed:', syncError);
+              console.error('Manual token sync failed:', syncError);
             }
           }
         } catch (authError) {
