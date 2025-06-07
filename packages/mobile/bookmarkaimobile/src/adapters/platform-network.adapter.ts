@@ -10,22 +10,17 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
   private adapter: NetworkAdapter;
 
   constructor() {
-    // Temporarily use React Native adapter for all platforms
-    // until we resolve the iOS URLSession adapter issues
-    this.adapter = new ReactNativeNetworkAdapter();
-    
-    // TODO: Re-enable iOS URLSession adapter once issues are resolved
-    // if (Platform.OS === 'ios') {
-    //   try {
-    //     const urlSessionAdapter = new IOSURLSessionAdapter();
-    //     this.adapter = urlSessionAdapter;
-    //   } catch (error) {
-    //     console.log('❌ iOS URLSession adapter failed, falling back to React Native adapter:', error);
-    //     this.adapter = new ReactNativeNetworkAdapter();
-    //   }
-    // } else {
-    //   this.adapter = new ReactNativeNetworkAdapter();
-    // }
+    if (Platform.OS === 'ios') {
+      try {
+        const urlSessionAdapter = new IOSURLSessionAdapter();
+        this.adapter = urlSessionAdapter;
+      } catch (error) {
+        console.warn('iOS URLSession adapter initialization failed, falling back to React Native fetch adapter:', error);
+        this.adapter = new ReactNativeNetworkAdapter();
+      }
+    } else {
+      this.adapter = new ReactNativeNetworkAdapter();
+    }
   }
 
   async request<T = any>(config: any): Promise<any> {
@@ -42,5 +37,31 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
       return 'ios-urlsession';
     }
     return 'unknown';
+  }
+
+  /**
+   * Test the adapter with a simple request
+   */
+  async testAdapter(): Promise<{ type: string; success: boolean; error?: string }> {
+    try {
+      const testUrl = 'https://httpbin.org/get';
+      
+      await this.adapter.request({
+        url: testUrl,
+        method: 'GET',
+        timeout: 10000,
+      });
+      
+      return {
+        type: this.getAdapterType(),
+        success: true,
+      };
+    } catch (error: any) {
+      return {
+        type: this.getAdapterType(),
+        success: false,
+        error: error.message,
+      };
+    }
   }
 }
