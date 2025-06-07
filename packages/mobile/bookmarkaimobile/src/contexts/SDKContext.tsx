@@ -78,12 +78,6 @@ export function SDKProvider({ children }: SDKProviderProps) {
         // This will use URLSession on iOS and fetch on Android
         const networkAdapter = new PlatformNetworkAdapter();
         
-        // Test the adapter to ensure it's working
-        const testResult = await networkAdapter.testAdapter();
-        if (!testResult.success) {
-          console.warn('Network adapter test failed:', testResult.error);
-        }
-
         // Determine API URL based on environment
         // SDK needs the full API base URL since it only adds endpoint paths like /shares
         const apiUrl = __DEV__ 

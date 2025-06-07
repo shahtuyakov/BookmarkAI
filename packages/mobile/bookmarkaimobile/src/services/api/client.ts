@@ -1,7 +1,8 @@
 import axios, { AxiosInstance } from 'axios';
 import * as Keychain from 'react-native-keychain';
 import { DeviceEventEmitter } from 'react-native';
-import { USE_REAL_SERVER, API_BASE_URL, KEYCHAIN_SERVICE } from './client-config';
+import { API_BASE_URL } from './client-config';
+import { withKeychainFallback } from '../../utils/keychain-config';
 
 
 // Create axios instance with default config
@@ -33,7 +34,6 @@ interface AuthTokens {
 // Save tokens to secure storage (Keychain)
 export const saveTokens = async (accessToken: string, refreshToken: string, expiresIn?: number): Promise<boolean> => {
   try {
-    
     // Calculate expiration timestamp (default to 15 minutes if not provided)
     const expirationSeconds = expiresIn || (15 * 60); // 15 minutes default
     const expiresAt = Date.now() + (expirationSeconds * 1000);
@@ -44,10 +44,12 @@ export const saveTokens = async (accessToken: string, refreshToken: string, expi
       expiresAt
     };
     
-    await Keychain.setGenericPassword(
-      'auth_tokens',
-      JSON.stringify(tokenData),
-      { service: KEYCHAIN_SERVICE }
+    await withKeychainFallback((options) =>
+      Keychain.setGenericPassword(
+        'auth_tokens',
+        JSON.stringify(tokenData),
+        options
+      )
     );
     return true;
   } catch (error) {
@@ -59,7 +61,9 @@ export const saveTokens = async (accessToken: string, refreshToken: string, expi
 // Get tokens from secure storage
 export const getTokens = async (): Promise<AuthTokens | null> => {
   try {
-    const credentials = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
+    const credentials = await withKeychainFallback((options) =>
+      Keychain.getGenericPassword(options)
+    );
     if (!credentials) {
       return null;
     }
@@ -79,7 +83,9 @@ export const getAccessToken = async (): Promise<string | null> => {
 // Clear tokens (logout)
 export const clearTokens = async (): Promise<boolean> => {
   try {
-    await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
+    await withKeychainFallback((options) =>
+      Keychain.resetGenericPassword(options)
+    );
     return true;
   } catch (error) {
     console.error('Error clearing tokens from Keychain:', error);
