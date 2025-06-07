@@ -84,7 +84,7 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
   };
   
   // Check if this is a pending offline share
-  const isPendingOfflineShare = share._isPending === true;
+  const isPendingOfflineShare = (share as any)._isPending === true;
   
   return (
     <ScrollView

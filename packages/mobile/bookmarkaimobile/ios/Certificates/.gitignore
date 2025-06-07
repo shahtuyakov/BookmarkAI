@@ -1,0 +1,10 @@
+# Ignore all certificate files for security
+*.cer
+*.crt
+*.pem
+*.der
+*.p12
+*.pfx
+
+# Keep the README
+!README.md

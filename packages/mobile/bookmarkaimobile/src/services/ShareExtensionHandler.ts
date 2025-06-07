@@ -1,8 +1,6 @@
 import { NativeEventEmitter, NativeModules, Linking, Platform, AppState, AppStateStatus } from 'react-native';
 import { useEffect, useCallback, useRef } from 'react';
 
-console.log('📦 Available NativeModules:', Object.keys(NativeModules));
-console.log('🔍 ShareHandler module:', NativeModules.ShareHandler);
 
 const { ShareHandler } = NativeModules;
 
@@ -45,12 +43,9 @@ export function useShareExtension({ onShareReceived, onSharesQueueReceived }: Sh
 
   // Check for pending shares (cross-platform)
   const checkPendingShares = useCallback(() => {
-    console.log('🔍 Checking for pending shares...');
     if (ShareHandler?.checkPendingShares) {
-      console.log('✅ Calling ShareHandler.checkPendingShares');
       ShareHandler.checkPendingShares();
     } else {
-      console.log('❌ ShareHandler.checkPendingShares not available');
       console.log('🔍 ShareHandler available methods:', ShareHandler ? Object.keys(ShareHandler) : 'ShareHandler is null');
     }
   }, []);

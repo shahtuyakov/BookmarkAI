@@ -1,15 +1,16 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
-import { Platform, Alert, ToastAndroid, NativeModules } from 'react-native';
+import { Platform, Alert, ToastAndroid, NativeModules, View, Text, ActivityIndicator } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NetworkProvider } from '../src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from '../src/services/queryClient';
+import { SDKProvider, useSDK } from '../src/contexts/SDKContext';
 import RootNavigator from '../src/navigation';
 import { useAppTheme } from '../src/theme';
 import { useShareExtension } from '../src/services/ShareExtensionHandler';
-import { useCreateShare, sharesKeys } from '../src/hooks/useShares';
+import { useCreateShare, shareKeys } from '../src/hooks/useShares';
 
 interface ShareData {
   url: string;
@@ -19,29 +20,26 @@ interface ShareData {
 }
 
 function AppContent(): React.JSX.Element {
-  const { createShare } = useCreateShare();
+  const { mutate: createShare } = useCreateShare();
   const queryClient = useQueryClient();
   
   // Helper function to invalidate shares cache and trigger UI refresh
   const refreshSharesList = React.useCallback(() => {
-    console.log('🔄 AppContent: Invalidating shares cache to refresh UI');
     
     // Invalidate all shares queries to trigger refetch
     queryClient.invalidateQueries({ 
-      queryKey: sharesKeys.lists() 
+      queryKey: shareKeys.lists() 
     });
     
     // Also invalidate individual share details that might be cached
     queryClient.invalidateQueries({ 
-      queryKey: sharesKeys.details() 
+      queryKey: shareKeys.details() 
     });
     
-    console.log('✅ AppContent: Cache invalidated, UI should refresh automatically');
   }, [queryClient]);
   
   // Process multiple shares from queue (cross-platform)
   const handleSharesQueue = React.useCallback(async (shares: ShareData[], silent = true, needsAuth = false) => {
-    console.log(`📦 Processing ${shares.length} shares from queue (Platform: ${Platform.OS}, NeedsAuth: ${needsAuth})`);
     
     // Show Android toast for debugging
     if (Platform.OS === 'android' && !silent) {
@@ -58,24 +56,20 @@ function AppContent(): React.JSX.Element {
     // Process shares in sequence to avoid overwhelming the API
     for (let i = 0; i < shares.length; i++) {
       const share = shares[i];
-      console.log(`📝 Processing share ${i + 1}/${shares.length}: ${share.url} (status: ${share.status})`);
       
       try {
         // If it's already uploaded on Android, just mark for UI refresh
         if (Platform.OS === 'android' && share.status === 'uploaded') {
-          console.log(`✅ Android: Share already uploaded, marking for UI refresh: ${share.url}`);
           successCount++;
           shouldRefreshUI = true;
         } else if (Platform.OS === 'android' && (share.status === 'needs_auth' || needsAuth)) {
           // For NEEDS_AUTH items, process through React Native which has auth tokens
-          console.log(`🔐 Android: Processing auth-needed share: ${share.url}`);
-          await createShare(share.url);
+          await createShare({ url: share.url });
           
           // Mark as processed in Android database
           if (share.id && NativeModules.ShareHandler?.markShareAsProcessed) {
             try {
               await NativeModules.ShareHandler.markShareAsProcessed(share.id);
-              console.log(`✅ Marked share ${share.id} as processed in Android DB`);
             } catch (err) {
               console.error(`❌ Failed to mark share ${share.id} as processed:`, err);
             }
@@ -83,12 +77,10 @@ function AppContent(): React.JSX.Element {
           
           successCount++;
           shouldRefreshUI = true;
-          console.log(`✅ Successfully processed auth-needed share ${i + 1}: ${share.url}`);
         } else {
-          await createShare(share.url);
+          await createShare({ url: share.url });
           successCount++;
           shouldRefreshUI = true;
-          console.log(`✅ Successfully processed share ${i + 1}: ${share.url}`);
         }
         
         // Small delay between requests to be API-friendly
@@ -101,11 +93,9 @@ function AppContent(): React.JSX.Element {
       }
     }
     
-    console.log(`🎯 Queue processing complete: ${successCount} succeeded, ${failureCount} failed`);
     
     // Refresh UI if any shares were processed successfully
     if (shouldRefreshUI && successCount > 0) {
-      console.log('🔄 AppContent: Triggering UI refresh after processing queue');
       
       // Small delay to ensure any optimistic updates have settled
       setTimeout(() => {
@@ -118,10 +108,8 @@ function AppContent(): React.JSX.Element {
       const message = `${successCount}/${shares.length} bookmarks processed`;
       
       if (Platform.OS === 'ios') {
-        console.log(`🔔 iOS: ${message}`);
         // Could add a toast notification here for iOS
       } else if (Platform.OS === 'android') {
-        console.log(`🤖 Android: ${message}`);
         ToastAndroid.show(`✅ ${message}`, ToastAndroid.LONG);
       }
     }
@@ -129,15 +117,11 @@ function AppContent(): React.JSX.Element {
   
   // Process single share (cross-platform)
   const handleSingleShare = React.useCallback(async (url: string, silent = false) => {
-    console.log(`📨 Processing single share (Platform: ${Platform.OS}):`, url, 'Silent:', silent);
     
     try {
-      console.log('📝 About to call createShare...');
-      await createShare(url);
-      console.log('✅ createShare completed successfully');
+      await createShare({ url });
       
       // Refresh UI after successful share creation
-      console.log('🔄 AppContent: Triggering UI refresh after single share');
       setTimeout(() => {
         refreshSharesList();
       }, 300);
@@ -145,14 +129,11 @@ function AppContent(): React.JSX.Element {
       // Platform-specific feedback
       if (!silent) {
         if (Platform.OS === 'ios') {
-          console.log('🍎 iOS: Showing success feedback (non-silent mode)');
           // Could add iOS-specific toast here
         } else if (Platform.OS === 'android') {
-          console.log('🤖 Android: Success (toast already shown by ShareActivity)');
           ToastAndroid.show('✅ Bookmark added!', ToastAndroid.SHORT);
         }
       } else {
-        console.log(`🤫 Silent mode - bookmark saved without user notification (${Platform.OS})`);
       }
     } catch (err) {
       console.error('❌ createShare failed:', err);
@@ -162,14 +143,11 @@ function AppContent(): React.JSX.Element {
         const errorMessage = 'Failed to save bookmark. Please try again.';
         
         if (Platform.OS === 'ios') {
-          console.log('🚨 iOS: Showing error feedback');
           Alert.alert('Error', errorMessage);
         } else if (Platform.OS === 'android') {
-          console.log('🚨 Android: Error (ShareActivity handled initial feedback)');
           ToastAndroid.show('❌ ' + errorMessage, ToastAndroid.LONG);
         }
       } else {
-        console.log(`🤫 Silent mode error - bookmark failed to save (${Platform.OS})`);
       }
     }
   }, [createShare, refreshSharesList]);
@@ -182,22 +160,12 @@ function AppContent(): React.JSX.Element {
   
   // Log available methods based on platform
   React.useEffect(() => {
-    console.log('🔧 Share extension methods available:');
-    console.log('   Platform:', Platform.OS);
-    console.log('   checkPendingShares:', typeof shareExtensionReturn.checkPendingShares);
-    console.log('   flushQueue:', typeof shareExtensionReturn.flushQueue);
-    console.log('   getPendingCount:', typeof shareExtensionReturn.getPendingCount);
     
     if (Platform.OS === 'android') {
-      console.log('🤖 Android-specific methods:');
-      console.log('   retryFailedItems:', typeof shareExtensionReturn.retryFailedItems);
-      console.log('   getQueueStatus:', typeof shareExtensionReturn.getQueueStatus);
-      console.log('   processAndroidQueue:', typeof shareExtensionReturn.processAndroidQueue);
       
       // Test Android queue status on startup
       if (shareExtensionReturn.getQueueStatus) {
         shareExtensionReturn.getQueueStatus().then(status => {
-          console.log('📋 Android startup queue status:', status);
           if (status && (status.pending > 0 || status.uploaded > 0)) {
             ToastAndroid.show(
               `📋 Queue: ${status.pending} pending, ${status.uploaded} uploaded`, 
@@ -213,7 +181,6 @@ function AppContent(): React.JSX.Element {
   React.useEffect(() => {
     if (__DEV__ && Platform.OS === 'android') {
       const testAndroidQueue = async () => {
-        console.log('🧪 DEV: Testing Android queue processing...');
         if (shareExtensionReturn.processAndroidQueue) {
           await shareExtensionReturn.processAndroidQueue();
         }
@@ -228,22 +195,47 @@ function AppContent(): React.JSX.Element {
   return <RootNavigator />;
 }
 
+function AppWithSDK(): React.JSX.Element {
+  const { isInitialized, error } = useSDK();
+
+  if (!isInitialized) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+        <Text style={{ marginTop: 16 }}>Initializing BookmarkAI...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: 'red', textAlign: 'center', padding: 20 }}>
+          Failed to initialize SDK: {error.message}
+        </Text>
+      </View>
+    );
+  }
+
+  return <AppContent />;
+}
+
 function App(): React.JSX.Element {
-  console.log('🏁 App component mounting...');
-  console.log('📱 Platform:', Platform.OS);
   const theme = useAppTheme();
 
   return (
     <PersistentQueryClientProvider>
-      <NetworkProvider>
-        <AuthProvider>
-          <PaperProvider theme={theme}>
-            <NavigationContainer>
-              <AppContent />
-            </NavigationContainer>
-          </PaperProvider>
-        </AuthProvider>
-      </NetworkProvider>
+      <SDKProvider>
+        <NetworkProvider>
+          <AuthProvider>
+            <PaperProvider theme={theme}>
+              <NavigationContainer>
+                <AppWithSDK />
+              </NavigationContainer>
+            </PaperProvider>
+          </AuthProvider>
+        </NetworkProvider>
+      </SDKProvider>
     </PersistentQueryClientProvider>
   );
 }

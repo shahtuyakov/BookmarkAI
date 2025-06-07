@@ -14,7 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 const readline = require('readline');
 
 // Configuration
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'https://bookmarkai-dev.ngrok.io/api';
 
 // Create readline interface for user input
 const rl = readline.createInterface({
