@@ -29,10 +29,10 @@ interface BookmarkQueueDao {
     suspend fun getPendingBookmarks(status: String = BookmarkQueueStatus.PENDING): List<BookmarkQueueEntity>
     
     /**
-     * Get all bookmarks that need authentication refresh
+     * Get all bookmarks that are currently being processed
      */
     @Query("SELECT * FROM bookmark_queue WHERE status = :status ORDER BY created_at ASC")
-    suspend fun getBookmarksNeedingAuth(status: String = BookmarkQueueStatus.NEEDS_AUTH): List<BookmarkQueueEntity>
+    suspend fun getProcessingBookmarks(status: String = BookmarkQueueStatus.PROCESSING): List<BookmarkQueueEntity>
     
     /**
      * Get all failed bookmarks that haven't exceeded max retries
@@ -44,13 +44,18 @@ interface BookmarkQueueDao {
     ): List<BookmarkQueueEntity>
     
     /**
+     * Get all bookmarks that need authentication
+     */
+    @Query("SELECT * FROM bookmark_queue WHERE status = :status ORDER BY created_at ASC")
+    suspend fun getBookmarksNeedingAuth(status: String = BookmarkQueueStatus.NEEDS_AUTH): List<BookmarkQueueEntity>
+    
+    /**
      * Get count of pending items (for UI badge)
      */
     @Query("SELECT COUNT(*) FROM bookmark_queue WHERE status IN (:statuses)")
     suspend fun getPendingCount(statuses: List<String> = listOf(
         BookmarkQueueStatus.PENDING, 
-        BookmarkQueueStatus.UPLOADING, 
-        BookmarkQueueStatus.NEEDS_AUTH,
+        BookmarkQueueStatus.PROCESSING, 
         BookmarkQueueStatus.FAILED
     )): Int
     
@@ -60,8 +65,7 @@ interface BookmarkQueueDao {
     @Query("SELECT COUNT(*) FROM bookmark_queue WHERE status IN (:statuses)")
     fun getPendingCountFlow(statuses: List<String> = listOf(
         BookmarkQueueStatus.PENDING, 
-        BookmarkQueueStatus.UPLOADING, 
-        BookmarkQueueStatus.NEEDS_AUTH,
+        BookmarkQueueStatus.PROCESSING, 
         BookmarkQueueStatus.FAILED
     )): Flow<Int>
     
@@ -70,7 +74,7 @@ interface BookmarkQueueDao {
      */
     @Query("DELETE FROM bookmark_queue WHERE status = :status AND updated_at < :cutoffTime")
     suspend fun deleteOldCompletedBookmarks(
-        status: String = BookmarkQueueStatus.UPLOADED,
+        status: String = BookmarkQueueStatus.COMPLETED,
         cutoffTime: Long = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L) // 7 days
     ): Int
     
@@ -89,7 +93,7 @@ interface BookmarkQueueDao {
     @Query("SELECT COUNT(*) FROM bookmark_queue WHERE url = :url AND status NOT IN (:excludeStatuses)")
     suspend fun isUrlAlreadyQueued(
         url: String, 
-        excludeStatuses: List<String> = listOf(BookmarkQueueStatus.UPLOADED, BookmarkQueueStatus.FAILED)
+        excludeStatuses: List<String> = listOf(BookmarkQueueStatus.COMPLETED, BookmarkQueueStatus.FAILED)
     ): Int
     
     /**
@@ -123,7 +127,7 @@ interface BookmarkQueueDao {
         DELETE FROM bookmark_queue 
         WHERE id IN (
             SELECT id FROM bookmark_queue 
-            WHERE status = 'UPLOADED' 
+            WHERE status = 'completed' 
             ORDER BY updated_at ASC 
             LIMIT :deleteCount
         )

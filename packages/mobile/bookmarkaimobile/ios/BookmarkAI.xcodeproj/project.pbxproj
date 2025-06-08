@@ -16,6 +16,12 @@
 		6D16053C2DDE0FA800B2DB92 /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6D1605362DDE0FA800B2DB92 /* MainInterface.storyboard */; };
 		6D9ADC342DDFE4720087F390 /* ShareHandler.m in Sources */ = {isa = PBXBuildFile; fileRef = 6D9ADC322DDFE4720087F390 /* ShareHandler.m */; };
 		6D9ADC352DDFE4720087F390 /* ShareHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9ADC332DDFE4720087F390 /* ShareHandler.swift */; };
+		6DQUEUEI12DDFE4720087F390 /* QueueItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DQUEUEI02DDFE4720087F390 /* QueueItem.swift */; };
+		6DQUEUEI22DDFE4720087F390 /* QueueItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DQUEUEI02DDFE4720087F390 /* QueueItem.swift */; };
+		6DSQLITE12DDFE4720087F390 /* SQLiteQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DSQLITE02DDFE4720087F390 /* SQLiteQueueManager.swift */; };
+		6DSQLITE22DDFE4720087F390 /* SQLiteQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DSQLITE02DDFE4720087F390 /* SQLiteQueueManager.swift */; };
+		6DURLSESS12DDFE4720087F390 /* URLSessionNetworkAdapter.m in Sources */ = {isa = PBXBuildFile; fileRef = 6DURLSESS02DDFE4720087F390 /* URLSessionNetworkAdapter.m */; };
+		6DURLSESS22DDFE4720087F390 /* URLSessionNetworkAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DURLSESS03DDFE4720087F390 /* URLSessionNetworkAdapter.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B37C5222F1456698DE4D3D62 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
@@ -64,6 +70,10 @@
 		6D9ADC322DDFE4720087F390 /* ShareHandler.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ShareHandler.m; sourceTree = "<group>"; };
 		6D9ADC332DDFE4720087F390 /* ShareHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareHandler.swift; sourceTree = "<group>"; };
 		6D9ADC362DDFE4A10087F390 /* BookmarkAI-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "BookmarkAI-Bridging-Header.h"; sourceTree = "<group>"; };
+		6DQUEUEI02DDFE4720087F390 /* QueueItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueItem.swift; sourceTree = "<group>"; };
+		6DSQLITE02DDFE4720087F390 /* SQLiteQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLiteQueueManager.swift; sourceTree = "<group>"; };
+		6DURLSESS02DDFE4720087F390 /* URLSessionNetworkAdapter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = URLSessionNetworkAdapter.m; sourceTree = "<group>"; };
+		6DURLSESS03DDFE4720087F390 /* URLSessionNetworkAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLSessionNetworkAdapter.swift; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = BookmarkAI/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = BookmarkAI/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -135,6 +145,10 @@
 			children = (
 				6D9ADC322DDFE4720087F390 /* ShareHandler.m */,
 				6D9ADC332DDFE4720087F390 /* ShareHandler.swift */,
+				6DSQLITE02DDFE4720087F390 /* SQLiteQueueManager.swift */,
+				6DQUEUEI02DDFE4720087F390 /* QueueItem.swift */,
+				6DURLSESS02DDFE4720087F390 /* URLSessionNetworkAdapter.m */,
+				6DURLSESS03DDFE4720087F390 /* URLSessionNetworkAdapter.swift */,
 				13B07FAE1A68108700A75B9A /* BookmarkAI */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				6D1605382DDE0FA800B2DB92 /* BookmarkAIShare */,
@@ -350,6 +364,10 @@
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 				6D9ADC342DDFE4720087F390 /* ShareHandler.m in Sources */,
 				6D9ADC352DDFE4720087F390 /* ShareHandler.swift in Sources */,
+				6DSQLITE12DDFE4720087F390 /* SQLiteQueueManager.swift in Sources */,
+				6DQUEUEI12DDFE4720087F390 /* QueueItem.swift in Sources */,
+				6DURLSESS12DDFE4720087F390 /* URLSessionNetworkAdapter.m in Sources */,
+				6DURLSESS22DDFE4720087F390 /* URLSessionNetworkAdapter.swift in Sources */,
 				6D0974C92DDDEEA500966E22 /* KeychainHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -360,6 +378,8 @@
 			files = (
 				6D1605392DDE0FA800B2DB92 /* KeychainHelper.swift in Sources */,
 				6D16053A2DDE0FA800B2DB92 /* ShareViewController.swift in Sources */,
+				6DSQLITE22DDFE4720087F390 /* SQLiteQueueManager.swift in Sources */,
+				6DQUEUEI22DDFE4720087F390 /* QueueItem.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

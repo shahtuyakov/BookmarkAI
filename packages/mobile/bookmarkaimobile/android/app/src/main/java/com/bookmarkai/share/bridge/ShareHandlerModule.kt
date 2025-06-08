@@ -8,7 +8,9 @@ import com.bookmarkai.share.database.BookmarkQueueStatus
 import com.bookmarkai.share.work.ShareUploadWorker
 import com.bookmarkai.share.auth.TokenManager
 import com.bookmarkai.share.auth.AuthTokens
+import com.bookmarkai.share.database.BookmarkQueueEntity
 import kotlinx.coroutines.*
+import java.util.*
 
 /**
  * React Native module that bridges Android share functionality to JavaScript.
@@ -41,8 +43,6 @@ class ShareHandlerModule(
         promise: Promise
     ) {
         try {
-            android.util.Log.d("ShareHandlerModule", "Syncing auth tokens to Android native storage")
-            
             val authTokens = AuthTokens(
                 accessToken = accessToken,
                 refreshToken = refreshToken,
@@ -57,19 +57,16 @@ class ShareHandlerModule(
                          savedTokens.refreshToken == refreshToken
             
             if (isValid) {
-                android.util.Log.d("ShareHandlerModule", "✅ Auth tokens synced successfully")
                 promise.resolve(Arguments.createMap().apply {
                     putBoolean("success", true)
                     putString("message", "Tokens synced successfully")
                     putBoolean("isAuthenticated", tokenManager.isAuthenticated())
                 })
             } else {
-                android.util.Log.e("ShareHandlerModule", "❌ Token verification failed after sync")
                 promise.reject("SYNC_ERROR", "Token verification failed after sync")
             }
             
         } catch (e: Exception) {
-            android.util.Log.e("ShareHandlerModule", "❌ Failed to sync auth tokens", e)
             promise.reject("SYNC_ERROR", "Failed to sync auth tokens: ${e.message}", e)
         }
     }
@@ -80,27 +77,22 @@ class ShareHandlerModule(
     @ReactMethod
     fun clearAuthTokens(promise: Promise) {
         try {
-            android.util.Log.d("ShareHandlerModule", "Clearing auth tokens from Android native storage")
-            
             tokenManager.clearTokens()
             
             // Verify tokens were cleared
             val isCleared = !tokenManager.isAuthenticated()
             
             if (isCleared) {
-                android.util.Log.d("ShareHandlerModule", "✅ Auth tokens cleared successfully")
                 promise.resolve(Arguments.createMap().apply {
                     putBoolean("success", true)
                     putString("message", "Tokens cleared successfully")
                     putBoolean("isAuthenticated", false)
                 })
             } else {
-                android.util.Log.e("ShareHandlerModule", "❌ Token clear verification failed")
                 promise.reject("CLEAR_ERROR", "Token clear verification failed")
             }
             
         } catch (e: Exception) {
-            android.util.Log.e("ShareHandlerModule", "❌ Failed to clear auth tokens", e)
             promise.reject("CLEAR_ERROR", "Failed to clear auth tokens: ${e.message}", e)
         }
     }
@@ -115,8 +107,6 @@ class ShareHandlerModule(
             val hasValidToken = tokenManager.getValidAccessToken() != null
             val hasRefreshToken = tokenManager.hasRefreshToken()
             
-            android.util.Log.d("ShareHandlerModule", "Auth status check - Authenticated: $isAuth, Valid token: $hasValidToken, Has refresh: $hasRefreshToken")
-            
             promise.resolve(Arguments.createMap().apply {
                 putBoolean("isAuthenticated", isAuth)
                 putBoolean("hasValidAccessToken", hasValidToken)
@@ -124,7 +114,6 @@ class ShareHandlerModule(
             })
             
         } catch (e: Exception) {
-            android.util.Log.e("ShareHandlerModule", "❌ Failed to check auth status", e)
             promise.reject("AUTH_CHECK_ERROR", "Failed to check auth status: ${e.message}", e)
         }
     }
@@ -164,7 +153,6 @@ class ShareHandlerModule(
             promise.resolve(debugInfo)
             
         } catch (e: Exception) {
-            android.util.Log.e("ShareHandlerModule", "❌ Failed to get token debug info", e)
             promise.reject("DEBUG_ERROR", "Failed to get token debug info: ${e.message}", e)
         }
     }
@@ -194,8 +182,6 @@ class ShareHandlerModule(
                     }
                     
                     if (recentlyUploaded.isNotEmpty()) {
-                        android.util.Log.d("ShareHandlerModule", "Found ${recentlyUploaded.size} recently uploaded items")
-                        
                         // Convert to format expected by React Native
                         val sharesArray = Arguments.createArray()
                         
@@ -276,7 +262,6 @@ class ShareHandlerModule(
                         (System.currentTimeMillis() - it.updatedAt) < 30000 // Last 30 seconds
                     }
                     
-                    android.util.Log.d("ShareHandlerModule", "checkPendingShares - Pending: ${pendingItems.size}, Auth needed: ${authNeededItems.size}, Recently uploaded: ${recentlyUploaded.size}")
                     
                     // Process recently uploaded items first (show them in UI)
                     if (recentlyUploaded.isNotEmpty()) {
@@ -325,18 +310,16 @@ class ShareHandlerModule(
                         }
                         
                         sendEvent(EVENT_SHARE_EXTENSION_DATA, authEventData)
-                        android.util.Log.d("ShareHandlerModule", "Sent ${authNeededItems.size} NEEDS_AUTH items to React Native")
                     }
                     
                     // Process pending items (schedule for upload)
                     if (pendingItems.isNotEmpty()) {
                         ShareUploadWorker.scheduleWork(reactContext)
-                        android.util.Log.d("ShareHandlerModule", "Scheduled upload work for ${pendingItems.size} pending items")
                     }
                 }
                 
             } catch (e: Exception) {
-                android.util.Log.e("ShareHandlerModule", "Error checking pending shares", e)
+                // Critical error handling for production debugging
             }
         }
     }
@@ -479,12 +462,190 @@ class ShareHandlerModule(
                     )
                 }
                 promise.resolve(true)
-                android.util.Log.d("ShareHandlerModule", "Marked share $shareId as processed")
             } catch (e: Exception) {
-                android.util.Log.e("ShareHandlerModule", "Failed to mark share as processed", e)
                 promise.reject("MARK_ERROR", "Failed to mark share as processed", e)
             }
         }
+    }
+    
+    /**
+     * Get all queue items (for AndroidRoomQueueService)
+     */
+    @ReactMethod
+    fun getAllQueueItems(promise: Promise) {
+        moduleScope.launch {
+            try {
+                val items = withContext(Dispatchers.IO) {
+                    database.bookmarkQueueDao().getAllBookmarks()
+                }
+                
+                val itemsArray = Arguments.createArray()
+                items.forEach { item ->
+                    val itemMap = Arguments.createMap().apply {
+                        putString("id", item.id)
+                        putString("url", item.url)
+                        putString("title", item.title)
+                        putString("notes", item.notes)
+                        putDouble("createdAt", item.createdAt.toDouble())
+                        putString("status", item.status)
+                        putInt("retryCount", item.retryCount)
+                        putString("lastError", item.lastError)
+                        putDouble("updatedAt", item.updatedAt.toDouble())
+                    }
+                    itemsArray.pushMap(itemMap)
+                }
+                
+                promise.resolve(itemsArray)
+            } catch (e: Exception) {
+                promise.reject("GET_ALL_ERROR", "Failed to get all queue items: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
+     * Get pending queue items (for AndroidRoomQueueService)
+     */
+    @ReactMethod
+    fun getPendingQueueItems(promise: Promise) {
+        moduleScope.launch {
+            try {
+                val items = withContext(Dispatchers.IO) {
+                    database.bookmarkQueueDao().getPendingBookmarks()
+                }
+                
+                val itemsArray = Arguments.createArray()
+                items.forEach { item ->
+                    val itemMap = Arguments.createMap().apply {
+                        putString("id", item.id)
+                        putString("url", item.url)
+                        putString("title", item.title)
+                        putString("notes", item.notes)
+                        putDouble("createdAt", item.createdAt.toDouble())
+                        putString("status", item.status)
+                        putInt("retryCount", item.retryCount)
+                        putString("lastError", item.lastError)
+                        putDouble("updatedAt", item.updatedAt.toDouble())
+                    }
+                    itemsArray.pushMap(itemMap)
+                }
+                
+                promise.resolve(itemsArray)
+            } catch (e: Exception) {
+                promise.reject("GET_PENDING_ERROR", "Failed to get pending queue items: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
+     * Add item to queue (for AndroidRoomQueueService)
+     */
+    @ReactMethod
+    fun addQueueItem(
+        url: String,
+        title: String?,
+        notes: String?,
+        status: String,
+        promise: Promise
+    ) {
+        moduleScope.launch {
+            try {
+                val itemId = withContext(Dispatchers.IO) {
+                    val dao = database.bookmarkQueueDao()
+                    
+                    // Check if URL already exists to prevent duplicates
+                    val existingCount = dao.isUrlAlreadyQueued(url)
+                    if (existingCount > 0) {
+                        return@withContext null
+                    }
+                    
+                    // Generate ULID for consistent cross-platform sorting
+                    val id = generateULID()
+                    val now = System.currentTimeMillis()
+                    
+                    val entity = BookmarkQueueEntity(
+                        id = id,
+                        url = url,
+                        title = title,
+                        notes = notes,
+                        createdAt = now,
+                        status = status,
+                        retryCount = 0,
+                        lastError = null,
+                        updatedAt = now
+                    )
+                    
+                    dao.insertBookmark(entity)
+                    id
+                }
+                
+                if (itemId != null) {
+                    promise.resolve(itemId)
+                } else {
+                    promise.resolve(false) // Already exists
+                }
+            } catch (e: Exception) {
+                promise.reject("ADD_ERROR", "Failed to add queue item: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
+     * Remove queue item (for AndroidRoomQueueService)
+     */
+    @ReactMethod
+    fun removeQueueItem(itemId: String, promise: Promise) {
+        moduleScope.launch {
+            try {
+                val removed = withContext(Dispatchers.IO) {
+                    val dao = database.bookmarkQueueDao()
+                    val item = dao.getAllBookmarks().find { it.id == itemId }
+                    if (item != null) {
+                        // Room doesn't have direct delete by ID, so we'll mark as deleted
+                        // or use a direct SQL query
+                        dao.updateBookmarkStatus(
+                            id = itemId,
+                            status = "deleted", // Custom status for removal
+                            error = "Removed by user"
+                        )
+                        true
+                    } else {
+                        false
+                    }
+                }
+                
+                promise.resolve(removed)
+            } catch (e: Exception) {
+                promise.reject("REMOVE_ERROR", "Failed to remove queue item: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
+     * Clear all items from queue (for testing)
+     */
+    @ReactMethod
+    fun clearAllItems(promise: Promise) {
+        moduleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    database.bookmarkQueueDao().clearAll()
+                }
+                
+                promise.resolve(true)
+            } catch (e: Exception) {
+                promise.reject("CLEAR_ALL_ERROR", "Failed to clear all items: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
+     * Generate ULID (Universally Unique Lexicographically Sortable Identifier)
+     * Compatible with iOS implementation for cross-platform consistency
+     */
+    private fun generateULID(): String {
+        val timestamp = System.currentTimeMillis()
+        val random = UUID.randomUUID().toString().replace("-", "")
+        return "${timestamp.toString(36)}${random.substring(0, 16)}".uppercase()
     }
     
     /**
@@ -520,7 +681,6 @@ class ShareHandlerModule(
                         
                         // Check for new completed uploads
                         if (currentUploadedCount > lastUploadedCount) {
-                            android.util.Log.d("ShareHandlerModule", "Detected new uploads: $lastUploadedCount -> $currentUploadedCount")
                             lastUploadedCount = currentUploadedCount
                             
                             // Trigger a check for recent completions
@@ -529,14 +689,13 @@ class ShareHandlerModule(
                         
                         delay(2000) // Check every 2 seconds
                     } catch (e: Exception) {
-                        android.util.Log.e("ShareHandlerModule", "Error observing queue changes", e)
                         delay(5000) // Wait longer on error
                     }
                 }
             }
             
         } catch (e: Exception) {
-            android.util.Log.e("ShareHandlerModule", "Failed to start observing queue changes", e)
+            // Critical error handling for production debugging
         }
     }
     
@@ -549,7 +708,7 @@ class ShareHandlerModule(
                 .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
                 .emit(eventName, params)
         } catch (e: Exception) {
-            android.util.Log.e("ShareHandlerModule", "Failed to send event: $eventName", e)
+            // Critical error handling for production debugging
         }
     }
     

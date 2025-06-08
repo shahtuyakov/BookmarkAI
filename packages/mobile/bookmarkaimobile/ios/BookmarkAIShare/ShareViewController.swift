@@ -40,29 +40,30 @@ class ShareViewController: SLComposeServiceViewController {
     }
     
     private func addToQueueAndClose(url: URL) {
-        // Add to pending shares queue instead of overwriting
-        if let groupDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
+        
+        // Create queue item with extracted title
+        let urlString = url.absoluteString
+        let title = extractTitleFromURL(url)
+        let notes = contentText
+        
+        
+        let queueItem = QueueItem.create(
+            url: urlString,
+            title: title,
+            notes: notes
+        )
+        
+        
+        // Add to SQLite queue
+        let success = SQLiteQueueManager.shared.addToQueue(queueItem)
+        
+        if success {
             
-            // Create new share entry
-            let newShare: [String: Any] = [
-                "url": url.absoluteString,
-                "timestamp": Date().timeIntervalSince1970,
-                "id": UUID().uuidString
-            ]
-            
-            // Get existing queue or create new one
-            var sharesQueue = groupDefaults.array(forKey: "pendingSharesQueue") as? [[String: Any]] ?? []
-            
-            // Add new share to queue
-            sharesQueue.append(newShare)
-            
-            // Save updated queue
-            groupDefaults.set(sharesQueue, forKey: "pendingSharesQueue")
-            groupDefaults.set(true, forKey: "hasNewPendingShares") // Flag to trigger processing
-            groupDefaults.synchronize()
-            
-            print("📤 Added share to queue. Queue size: \(sharesQueue.count)")
-            print("🔗 Share URL: \(url.absoluteString)")
+            // Set flag in UserDefaults for backward compatibility with existing ShareHandler
+            if let groupDefaults = UserDefaults(suiteName: "group.com.bookmarkai") {
+                groupDefaults.set(true, forKey: "hasNewPendingShares")
+                groupDefaults.synchronize()
+            }
         }
         
         // Create deep link URL and open main app silently (in background)
@@ -156,5 +157,34 @@ class ShareViewController: SLComposeServiceViewController {
     
     @objc private func openURL(_ url: URL) {
         // This is handled by the system
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Extract title from URL for better bookmark organization
+    private func extractTitleFromURL(_ url: URL) -> String? {
+        guard let host = url.host else { return nil }
+        
+        // Platform-specific title extraction
+        if host.contains("tiktok.com") {
+            return "TikTok: \(url.pathComponents.last ?? "Video")"
+        } else if host.contains("reddit.com") {
+            // Extract subreddit and post info from Reddit URLs
+            let components = url.pathComponents
+            if components.count >= 3 && components[1] == "r" {
+                return "Reddit: r/\(components[2])"
+            }
+            return "Reddit Post"
+        } else if host.contains("twitter.com") || host.contains("x.com") {
+            // Extract username from Twitter/X URLs
+            let components = url.pathComponents
+            if components.count >= 2 {
+                return "\(host.contains("x.com") ? "X" : "Twitter"): @\(components[1])"
+            }
+            return host.contains("x.com") ? "X Post" : "Twitter Post"
+        }
+        
+        // Fallback to domain name
+        return host.replacingOccurrences(of: "www.", with: "").capitalized
     }
 }

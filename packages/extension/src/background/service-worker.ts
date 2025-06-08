@@ -1,11 +1,13 @@
 import browser from 'webextension-polyfill';
-import { AuthService } from '../services/auth';
+import { authService } from '../services/auth-unified';
 import { API_BASE_URL } from '../config/auth';
+import { queueManager } from '../services/queue-manager.service';
+import { createNetworkStatusService } from '../services/network-status.service';
 
 console.log('BookmarkAI Web Clip service worker loaded', API_BASE_URL);
 
-// Initialize AuthService
-const authService = AuthService.getInstance();
+// Initialize network status service
+const networkStatus = createNetworkStatusService(API_BASE_URL);
 
 // Generate a UUID v4 for idempotency key
 function generateIdempotencyKey(): string {
@@ -96,6 +98,32 @@ browser.runtime.onInstalled.addListener(async (details) => {
     title: 'Bookmark this page',
     contexts: ['page']
   });
+  
+  // Initialize auth service
+  await authService.ensureInitialized();
+  
+  // Initialize queue manager (will setup IndexedDB)
+  const isQueueAvailable = await queueManager.isAvailable();
+  console.log('BookmarkAI: Queue system available:', isQueueAvailable);
+  
+  // Setup network status monitoring
+  networkStatus.addListener((status) => {
+    console.log(`BookmarkAI: Network status changed to ${status}`);
+    
+    // When coming online, try to process queue
+    if (status === 'online') {
+      setTimeout(async () => {
+        try {
+          const result = await queueManager.processQueue();
+          console.log('BookmarkAI: Auto-queue processing result:', result);
+        } catch (error) {
+          console.error('BookmarkAI: Auto-queue processing failed:', error);
+        }
+      }, 2000); // Wait 2 seconds for network to stabilize
+    }
+  });
+  
+  console.log('BookmarkAI: Service worker initialization complete');
 });
 
 // Handle context menu clicks
@@ -104,7 +132,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
     console.log('BookmarkAI: Context menu bookmark triggered for', tab.url);
     
     // Check authentication before bookmarking
-    const isAuthenticated = authService.isAuthenticated();
+    const isAuthenticated = await authService.isAuthenticated();
     
     if (!isAuthenticated) {
       // Open popup to prompt login
@@ -240,9 +268,16 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
       // Ensure auth service is initialized before checking authentication
       await authService.ensureInitialized();
       
-      // Debug: Check authentication status and log detailed info
+      const { metadata } = message;
+      console.log('BookmarkAI: Processing bookmark request:', metadata);
+      
+      if (!metadata || !metadata.url) {
+        return { success: false, error: 'Invalid bookmark data' };
+      }
+
+      // Check authentication status
       const authState = authService.getAuthState();
-      const isAuthenticatedForBookmark = authService.isAuthenticated();
+      const isAuthenticatedForBookmark = await authService.isAuthenticated();
       
       console.log('BookmarkAI: Auth state for bookmark:', authState);
       console.log('BookmarkAI: Is authenticated:', isAuthenticatedForBookmark);
@@ -250,27 +285,70 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
       if (!isAuthenticatedForBookmark) {
         return { success: false, error: 'User not authenticated' };
       }
-      
-      try {
-        const { metadata } = message;
-        console.log('BookmarkAI: Processing bookmark request:', metadata);
-        
-        if (!metadata || !metadata.url) {
-          return { success: false, error: 'Invalid bookmark data' };
-        }
 
+      // Check network status
+      const isOnline = networkStatus.isOnline();
+      console.log('BookmarkAI: Network status:', isOnline ? 'online' : 'offline');
+
+      // If offline, add to queue immediately
+      if (!isOnline) {
+        console.log('BookmarkAI: Network offline - adding to queue');
+        try {
+          const queueResult = await queueManager.addToQueue(
+            metadata.url,
+            metadata.title,
+            metadata.notes
+          );
+          
+          if (queueResult.success) {
+            console.log('BookmarkAI: Successfully added to offline queue:', queueResult.data?.id);
+            return { 
+              success: true, 
+              data: queueResult.data,
+              queued: true,
+              message: 'Bookmark saved offline. Will sync when online.'
+            };
+          } else {
+            throw new Error(queueResult.error || 'Failed to add to queue');
+          }
+        } catch (error: any) {
+          console.error('BookmarkAI: Failed to add to queue:', error);
+          return { success: false, error: error.message || 'Failed to save bookmark offline' };
+        }
+      }
+
+      // Online - try to create bookmark directly, fallback to queue
+      try {
         // Get access token
         const token = await authService.getValidAccessToken();
         console.log('BookmarkAI: Got access token:', token ? 'Yes' : 'No');
         
         if (!token) {
-          return { success: false, error: 'Failed to get access token' };
+          // No token - add to queue for retry when auth is restored
+          console.log('BookmarkAI: No access token - adding to queue');
+          const queueResult = await queueManager.addToQueue(
+            metadata.url,
+            metadata.title,
+            metadata.notes
+          );
+          
+          if (queueResult.success) {
+            return { 
+              success: true, 
+              data: queueResult.data,
+              queued: true,
+              message: 'Bookmark queued. Please log in to sync.'
+            };
+          } else {
+            return { success: false, error: 'Failed to get access token and failed to queue' };
+          }
         }
 
         const sharesUrl = `${API_BASE_URL}/v1/shares`;
         const idempotencyKey = generateIdempotencyKey();
         const requestBody = {
           url: metadata.url,
+          title: metadata.title,
         };
         
         console.log('BookmarkAI: Making API call to:', sharesUrl);
@@ -317,9 +395,36 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
 
         return { success: true, data: data.data };
       } catch (error: any) {
-        console.error('BookmarkAI: Failed to create bookmark:', error);
-        console.error('BookmarkAI: Error stack:', error.stack);
-        return { success: false, error: error.message || 'Failed to create bookmark' };
+        console.error('BookmarkAI: Failed to create bookmark online:', error);
+        
+        // Fallback to queue if online API call fails
+        console.log('BookmarkAI: API failed - falling back to queue');
+        try {
+          const queueResult = await queueManager.addToQueue(
+            metadata.url,
+            metadata.title,
+            metadata.notes
+          );
+          
+          if (queueResult.success) {
+            console.log('BookmarkAI: Successfully queued after API failure:', queueResult.data?.id);
+            return { 
+              success: true, 
+              data: queueResult.data,
+              queued: true,
+              message: 'Bookmark saved offline. Will retry sync later.',
+              originalError: error.message
+            };
+          } else {
+            throw new Error(queueResult.error || 'Failed to add to queue after API error');
+          }
+        } catch (queueError: any) {
+          console.error('BookmarkAI: Both API and queue failed:', queueError);
+          return { 
+            success: false, 
+            error: `API failed: ${error.message}. Queue failed: ${queueError.message}` 
+          };
+        }
       }
     
     case 'LOG_ERROR':
@@ -340,6 +445,102 @@ browser.runtime.onMessage.addListener(async (message, _sender) => {
       } catch (error) {
         console.error('BookmarkAI: Failed to get error logs:', error);
         return { success: false, error: 'Failed to get error logs' };
+      }
+    
+    // Queue management endpoints
+    case 'QUEUE_GET_STATS':
+      try {
+        const stats = await queueManager.getQueueStats();
+        return { success: true, data: stats };
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to get queue stats:', error);
+        return { success: false, error: error.message || 'Failed to get queue stats' };
+      }
+    
+    case 'QUEUE_GET_ITEMS':
+      try {
+        const items = await queueManager.getAllQueueItems();
+        return { success: true, data: items };
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to get queue items:', error);
+        return { success: false, error: error.message || 'Failed to get queue items' };
+      }
+    
+    case 'QUEUE_GET_PENDING':
+      try {
+        const pendingItems = await queueManager.getPendingItems();
+        return { success: true, data: pendingItems };
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to get pending items:', error);
+        return { success: false, error: error.message || 'Failed to get pending items' };
+      }
+    
+    case 'QUEUE_PROCESS':
+      try {
+        console.log('BookmarkAI: Manual queue processing triggered');
+        const result = await queueManager.processQueue();
+        return result;
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to process queue:', error);
+        return { success: false, error: error.message || 'Failed to process queue' };
+      }
+    
+    case 'QUEUE_RETRY_FAILED':
+      try {
+        const result = await queueManager.retryFailedItems();
+        return result;
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to retry failed items:', error);
+        return { success: false, error: error.message || 'Failed to retry failed items' };
+      }
+    
+    case 'QUEUE_CLEANUP':
+      try {
+        const result = await queueManager.cleanupCompletedItems();
+        return result;
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to cleanup queue:', error);
+        return { success: false, error: error.message || 'Failed to cleanup queue' };
+      }
+    
+    case 'QUEUE_REMOVE_ITEM':
+      try {
+        const { itemId } = message;
+        if (!itemId) {
+          return { success: false, error: 'Missing itemId parameter' };
+        }
+        const result = await queueManager.removeQueueItem(itemId);
+        return result;
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to remove queue item:', error);
+        return { success: false, error: error.message || 'Failed to remove queue item' };
+      }
+    
+    case 'NETWORK_STATUS':
+      try {
+        const status = networkStatus.getStatus();
+        const isOnline = networkStatus.isOnline();
+        const networkInfo = networkStatus.getNetworkInfo();
+        return { 
+          success: true, 
+          data: { 
+            status, 
+            isOnline, 
+            info: networkInfo 
+          } 
+        };
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to get network status:', error);
+        return { success: false, error: error.message || 'Failed to get network status' };
+      }
+    
+    case 'FORCE_NETWORK_CHECK':
+      try {
+        const status = await networkStatus.forceCheck();
+        return { success: true, data: { status } };
+      } catch (error: any) {
+        console.error('BookmarkAI: Failed to force network check:', error);
+        return { success: false, error: error.message || 'Failed to check network status' };
       }
     
     default:

@@ -2,7 +2,7 @@ import Foundation
 
 class KeychainHelper {
     static let shared = KeychainHelper()
-    private let service = "com.bookmarkai"
+    private let service = "com.bookmarkai.auth" // Match React Native Keychain service
     private let accessGroup = "$(AppIdentifierPrefix)com.bookmarkai"
     
     func getAuthTokens() -> (accessToken: String?, refreshToken: String?) {
@@ -16,7 +16,7 @@ class KeychainHelper {
                         tokenDict["refreshToken"] as? String)
             }
         } catch {
-            print("Failed to parse tokens: \(error)")
+            // Silent error handling for production
         }
         return (nil, nil)
     }

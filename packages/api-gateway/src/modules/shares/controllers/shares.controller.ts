@@ -61,7 +61,8 @@ import {
     async createShare(
       @Body() createShareDto: CreateShareDto,
       @CurrentUser() user: { id: string },
-      @Headers('idempotency-key') idempotencyKey: string,
+      @Headers('Idempotency-Key') idempotencyKey: string,
+      @Headers() allHeaders: Record<string, any>,
     ): Promise<ApiResponse<ShareDto>> {
       return this.sharesService.createShare(createShareDto, user.id, idempotencyKey);
     }

@@ -4,6 +4,7 @@ import { getAccessToken, clearTokens, getTokens } from '../services/api/client';
 import { authAPI, User } from '../services/api/auth';
 import * as biometricService from '../services/biometrics';
 import { androidTokenSync } from '../services/android-token-sync';
+import { useSDK } from './SDKContext';
 
 interface AuthContextType {
   user: User | null;
@@ -42,34 +43,39 @@ const AuthContext = createContext<AuthContextType>({
 export const useAuth = () => useContext(AuthContext);
 
 /**
- * Sync authentication tokens to Android native storage
+ * Sync authentication tokens to both Android native storage and SDK
  */
-async function syncTokensToAndroid(): Promise<void> {
-  if (Platform.OS !== 'android') return;
-  
+async function syncTokensToNative(sdkSyncFn?: (accessToken: string, refreshToken?: string) => Promise<void>): Promise<void> {
   try {
-    console.log('🔄 AuthContext: Syncing tokens to Android native storage...');
-    
     const tokens = await getTokens();
     if (!tokens) {
-      console.log('ℹ️ AuthContext: No tokens to sync');
       return;
     }
 
-    // Calculate expires in from current time
-    const currentTime = Math.floor(Date.now() / 1000);
-    const expiresIn = Math.max(0, tokens.expiresAt - currentTime);
+    // Sync to Android native storage
+    if (Platform.OS === 'android') {
+      // Calculate expires in from current time
+      const currentTime = Math.floor(Date.now() / 1000);
+      const expiresIn = Math.max(0, tokens.expiresAt - currentTime);
 
-    const result = await androidTokenSync.syncTokens(
-      tokens.accessToken,
-      tokens.refreshToken,
-      expiresIn
-    );
+      const result = await androidTokenSync.syncTokens(
+        tokens.accessToken,
+        tokens.refreshToken,
+        expiresIn
+      );
 
-    if (result.success) {
-      console.log('✅ AuthContext: Tokens synced to Android successfully');
-    } else {
-      console.error('❌ AuthContext: Failed to sync tokens to Android:', result.message);
+      if (!result.success) {
+        console.error('❌ AuthContext: Failed to sync tokens to Android:', result.message);
+      }
+    }
+
+    // Sync to SDK if available
+    if (sdkSyncFn) {
+      try {
+        await sdkSyncFn(tokens.accessToken, tokens.refreshToken);
+      } catch (error) {
+        console.error('❌ AuthContext: Failed to sync tokens to SDK:', error);
+      }
     }
   } catch (error) {
     console.error('❌ AuthContext: Token sync error:', error);
@@ -83,13 +89,9 @@ async function clearAndroidTokens(): Promise<void> {
   if (Platform.OS !== 'android') return;
   
   try {
-    console.log('🧹 AuthContext: Clearing Android native tokens...');
-    
     const result = await androidTokenSync.clearTokens();
     
-    if (result.success) {
-      console.log('✅ AuthContext: Android tokens cleared successfully');
-    } else {
+    if (!result.success) {
       console.error('❌ AuthContext: Failed to clear Android tokens:', result.message);
     }
   } catch (error) {
@@ -108,10 +110,18 @@ async function verifyTokenSync(): Promise<void> {
     const isValid = await androidTokenSync.verifySync(tokens?.accessToken);
     
     if (isValid) {
-      console.log('✅ AuthContext: Token sync verification passed');
     } else {
       console.warn('⚠️ AuthContext: Token sync verification failed - attempting re-sync');
-      await syncTokensToAndroid();
+      // Note: We can't access SDK context here since this is outside the component
+      // Only re-sync to Android for now
+      if (Platform.OS === 'android') {
+        const tokens = await getTokens();
+        if (tokens) {
+          const currentTime = Math.floor(Date.now() / 1000);
+          const expiresIn = Math.max(0, tokens.expiresAt - currentTime);
+          await androidTokenSync.syncTokens(tokens.accessToken, tokens.refreshToken, expiresIn);
+        }
+      }
     }
   } catch (error) {
     console.error('❌ AuthContext: Token sync verification error:', error);
@@ -125,6 +135,9 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   const [isBiometricsAvailable, setIsBiometricsAvailable] = useState<boolean>(false);
   const [isBiometricsEnabled, setIsBiometricsEnabled] = useState<boolean>(false);
   const [biometryType, setBiometryType] = useState<string | undefined>(undefined);
+  
+  // Get SDK for token synchronization
+  const { syncAuthTokens, isInitialized } = useSDK();
   
   const checkBiometrics = async () => {
     const { available, biometryType } = await biometricService.checkBiometricAvailability();
@@ -141,17 +154,15 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log('🔍 AuthContext: Checking for existing session...');
         const token = await getAccessToken();
         
         if (token) {
           try {
             const userData = await authAPI.getUserProfile();
-            console.log('✅ AuthContext: User session found:', userData);
             setUser(userData);
             
-            // Sync tokens to Android after successful session restoration
-            await syncTokensToAndroid();
+            // Sync tokens to Android and SDK after successful session restoration
+            await syncTokensToNative(isInitialized ? syncAuthTokens : undefined);
             
             // Verify sync in development
             if (__DEV__) {
@@ -163,9 +174,10 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
             await clearTokens();
             await clearAndroidTokens();
             setUser(null);
+            // Emit auth-error to trigger proper logout flow
+            DeviceEventEmitter.emit('auth-error');
           }
         } else {
-          console.log('ℹ️ AuthContext: No token found, user is not authenticated');
           setUser(null);
           // Ensure Android tokens are also cleared
           await clearAndroidTokens();
@@ -202,14 +214,11 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     setError(null);
     
     try {
-      console.log('🔐 AuthContext: Starting login process...');
       const { user: userData } = await authAPI.login({ email, password });
       setUser(userData);
       
-      console.log('✅ AuthContext: Login successful, syncing tokens...');
-      
-      // Sync tokens to Android immediately after successful login
-      await syncTokensToAndroid();
+      // Sync tokens to Android and SDK immediately after successful login
+      await syncTokensToNative(isInitialized ? syncAuthTokens : undefined);
       
       // Verify sync in development
       if (__DEV__) {
@@ -282,7 +291,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         setUser(userData);
         
         // Sync tokens after biometric login
-        await syncTokensToAndroid();
+        await syncTokensToNative(isInitialized ? syncAuthTokens : undefined);
         
         if (__DEV__) {
           setTimeout(() => verifyTokenSync(), 1000);
@@ -305,13 +314,11 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     setError(null);
     
     try {
-      console.log('📝 AuthContext: Starting registration process...');
       const { user: userData } = await authAPI.register({ email, name, password });
-      console.log('✅ AuthContext: Registration successful:', userData);
       setUser(userData);
       
-      // Sync tokens to Android immediately after successful registration
-      await syncTokensToAndroid();
+      // Sync tokens to Android and SDK immediately after successful registration
+      await syncTokensToNative(isInitialized ? syncAuthTokens : undefined);
       
       // Verify sync in development
       if (__DEV__) {
@@ -339,7 +346,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     setIsLoading(true);
     
     try {
-      console.log('🚪 AuthContext: Starting logout process...');
       
       // Clear Android tokens first
       await clearAndroidTokens();
@@ -348,7 +354,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       await authAPI.logout();
       setUser(null);
       
-      console.log('✅ AuthContext: Logout completed successfully');
     } catch (err) {
       console.error('❌ AuthContext: Logout failed', err);
       // Even if the server-side logout fails, we still want to clear local data
