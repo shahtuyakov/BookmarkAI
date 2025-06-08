@@ -1,7 +1,46 @@
 openapi: 3.0.3
 info:
   title: BookmarkAI API
-  description: API for managing bookmarks across multiple platforms
+  description: |
+    API for managing bookmarks across multiple platforms.
+
+    ## ADR-012 Compliance
+
+    This API follows the BookmarkAI API Style Guide (ADR-012):
+    - All responses wrapped in standard envelope format
+    - Consistent error taxonomy with structured details
+    - Request ID tracking via X-Request-ID header
+    - Cursor-based pagination for feeds
+    - Idempotency key support for mutations
+
+    ## Response Format
+
+    All successful responses follow this structure:
+    ```json
+    {
+      "success": true,
+      "data": <response_data>,
+      "meta": {
+        "requestId": "uuid",
+        "version": "1.0.0",
+        "deprecation": "optional"
+      }
+    }
+    ```
+
+    All error responses follow this structure:
+    ```json
+    {
+      "success": false,
+      "error": {
+        "code": "ERROR_CATEGORY_SPECIFIC",
+        "message": "Human readable message",
+        "details": { "optional": "context" },
+        "timestamp": "2025-06-09T14:30:00.000Z",
+        "traceId": "uuid"
+      }
+    }
+    ```
   version: 1.0.0
   contact:
     name: BookmarkAI Team
@@ -11,15 +50,71 @@ servers:
     description: Production server
   - url: https://staging-api.bookmarkai.com/v1
     description: Staging server
-  - url: http://localhost:3000/v1
+  - url: http://localhost:3001/api/v1
     description: Local development server
+
 paths:
+  # Health Check (updated path from /healthz to /health)
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health check endpoint
+      operationId: healthCheck
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      responses:
+        '200':
+          description: Service is healthy
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Feature flags endpoint (new)
+  /features:
+    get:
+      tags:
+        - System
+      summary: Get feature flags
+      operationId: getFeatures
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      responses:
+        '200':
+          description: Feature flags
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeaturesResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
   /auth/login:
     post:
       tags:
         - Authentication
       summary: Login user
       operationId: login
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
       requestBody:
         required: true
         content:
@@ -29,21 +124,28 @@ paths:
       responses:
         '200':
           description: Successful login
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '429':
           $ref: '#/components/responses/RateLimitError'
-  
+
   /auth/refresh:
     post:
       tags:
         - Authentication
       summary: Refresh access token
       operationId: refreshToken
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
       requestBody:
         required: true
         content:
@@ -53,13 +155,16 @@ paths:
       responses:
         '200':
           description: Token refreshed successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenPair'
+                $ref: '#/components/schemas/TokenResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
-  
+
   /auth/logout:
     post:
       tags:
@@ -68,12 +173,17 @@ paths:
       operationId: logout
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
       responses:
         '204':
           description: Successfully logged out
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
-  
+
   /shares:
     post:
       tags:
@@ -83,12 +193,8 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - in: header
-          name: Idempotency-Key
-          schema:
-            type: string
-          required: true
-          description: Unique key to prevent duplicate share creation
+        - $ref: '#/components/parameters/X-Request-ID'
+        - $ref: '#/components/parameters/Idempotency-Key'
       requestBody:
         required: true
         content:
@@ -98,10 +204,13 @@ paths:
       responses:
         '202':
           description: Share accepted for processing
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Share'
+                $ref: '#/components/schemas/ShareResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -110,7 +219,7 @@ paths:
           $ref: '#/components/responses/ConflictError'
         '429':
           $ref: '#/components/responses/RateLimitError'
-    
+
     get:
       tags:
         - Shares
@@ -119,39 +228,86 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - in: query
-          name: cursor
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: cursor
+          in: query
+          description: |
+            Pagination cursor in format: `{timestamp}_{id}`
+            Use the cursor from previous response to get next page
           schema:
             type: string
-          description: Pagination cursor
-        - in: query
-          name: limit
+          example: '2025-06-09T12:00:00.000Z_abc123'
+        - name: limit
+          in: query
+          description: Number of items to return (1-100)
           schema:
             type: integer
             minimum: 1
             maximum: 100
             default: 20
-          description: Number of items to return
-        - in: query
-          name: status
+        - name: status
+          in: query
+          description: Filter by processing status
           schema:
             $ref: '#/components/schemas/ShareStatus'
-          description: Filter by status
-        - in: query
-          name: platform
+        - name: platform
+          in: query
+          description: Filter by platform (comma-separated for OR)
+          style: form
+          explode: false
           schema:
-            $ref: '#/components/schemas/Platform'
-          description: Filter by platform
+            type: array
+            items:
+              $ref: '#/components/schemas/Platform'
+          example: ['tiktok', 'reddit']
+        - name: createdAfter
+          in: query
+          description: Filter shares created after this date
+          schema:
+            type: string
+            format: date-time
+          example: '2025-06-01T00:00:00.000Z'
+        - name: createdBefore
+          in: query
+          description: Filter shares created before this date
+          schema:
+            type: string
+            format: date-time
+          example: '2025-06-09T23:59:59.999Z'
+        - name: sort
+          in: query
+          description: |
+            Sort fields (comma-separated). Prefix with `-` for descending order.
+            Available fields: createdAt, platform, status
+          schema:
+            type: string
+            default: '-createdAt'
+          example: '-createdAt,platform'
+        - name: fields
+          in: query
+          description: |
+            Select specific fields (comma-separated) to reduce response size.
+            Available fields: id, url, platform, status, createdAt, updatedAt, title, notes
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+          example: ['id', 'url', 'platform', 'status', 'createdAt']
       responses:
         '200':
           description: List of shares
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ShareListResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
-  
+
   /shares/batch:
     post:
       tags:
@@ -160,6 +316,8 @@ paths:
       operationId: createSharesBatch
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
       requestBody:
         required: true
         content:
@@ -168,7 +326,10 @@ paths:
               $ref: '#/components/schemas/CreateSharesBatchRequest'
       responses:
         '202':
-          description: Shares accepted for processing
+          description: Batch operation accepted
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
           content:
             application/json:
               schema:
@@ -179,7 +340,7 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '429':
           $ref: '#/components/responses/RateLimitError'
-  
+
   /shares/{shareId}:
     get:
       tags:
@@ -189,45 +350,40 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - in: path
-          name: shareId
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: shareId
+          in: path
           required: true
+          description: Share UUID
           schema:
             type: string
             format: uuid
-          description: Share ID
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        - name: fields
+          in: query
+          description: Select specific fields to return
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+          example: ['id', 'url', 'platform', 'status', 'metadata']
       responses:
         '200':
           description: Share details
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Share'
+                $ref: '#/components/schemas/ShareResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
           $ref: '#/components/responses/NotFoundError'
-  
-  /healthz:
-    get:
-      tags:
-        - System
-      summary: Health check endpoint
-      operationId: healthCheck
-      responses:
-        '200':
-          description: Service is healthy
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-        '503':
-          description: Service is unhealthy
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-  
+
   /events:
     get:
       tags:
@@ -236,15 +392,73 @@ paths:
       operationId: subscribeToEvents
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
       responses:
         '200':
           description: SSE stream established
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+            Cache-Control:
+              schema:
+                type: string
+                example: 'no-cache'
+            Connection:
+              schema:
+                type: string
+                example: 'keep-alive'
           content:
             text/event-stream:
               schema:
                 type: string
+                description: |
+                  Server-sent events in format:
+                  ```
+                  event: {resource}.{action}
+                  data: {"shareId": "123", "status": "done"}
+                  ```
+              examples:
+                shareProcessed:
+                  summary: Share processing completed
+                  value: |
+                    event: share.processed
+                    data: {"shareId": "123e4567-e89b-12d3-a456-426614174000", "status": "done"}
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+
+  # Async Operations (new)
+  /operations/{operationId}:
+    get:
+      tags:
+        - System
+      summary: Check async operation status
+      operationId: getOperationStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+        - name: operationId
+          in: path
+          required: true
+          description: Operation ID returned from async endpoint
+          schema:
+            type: string
+          example: 'op_123e4567'
+      responses:
+        '200':
+          description: Operation status
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncOperationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
 
 components:
   securitySchemes:
@@ -252,8 +466,208 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-  
+      description: JWT access token
+
+  parameters:
+    X-Request-ID:
+      name: X-Request-ID
+      in: header
+      description: Optional request ID for tracing. If not provided, one will be generated.
+      schema:
+        type: string
+        format: uuid
+      example: '123e4567-e89b-12d3-a456-426614174000'
+
+    Idempotency-Key:
+      name: Idempotency-Key
+      in: header
+      description: Unique key to prevent duplicate operations
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: '550e8400-e29b-41d4-a716-446655440000'
+
+  headers:
+    X-Request-ID:
+      description: Unique request identifier for tracing
+      schema:
+        type: string
+        format: uuid
+      example: '123e4567-e89b-12d3-a456-426614174000'
+
+    X-Rate-Limit-Limit:
+      description: Maximum number of requests allowed in window
+      schema:
+        type: integer
+      example: 100
+
+    X-Rate-Limit-Remaining:
+      description: Number of requests remaining in current window
+      schema:
+        type: integer
+      example: 45
+
+    X-Rate-Limit-Reset:
+      description: Unix timestamp when rate limit window resets
+      schema:
+        type: integer
+      example: 1623456789
+
+    Retry-After:
+      description: Seconds to wait before retry (for retryable errors)
+      schema:
+        type: integer
+      example: 60
+
   schemas:
+    # Standard Response Envelope
+    SuccessResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          description: Response payload (varies by endpoint)
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/schemas/ApiError'
+
+    ResponseMeta:
+      type: object
+      required:
+        - requestId
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Request correlation ID
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        version:
+          type: string
+          description: API version
+          example: '1.0.0'
+        deprecation:
+          type: string
+          format: date-time
+          description: Deprecation date (if applicable)
+          example: '2026-01-01T00:00:00.000Z'
+
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+        - timestamp
+        - traceId
+      properties:
+        code:
+          type: string
+          description: Hierarchical error code
+          example: 'INVALID_URL'
+        message:
+          type: string
+          description: Human-readable error message
+          example: 'The provided URL is not valid'
+        details:
+          type: object
+          description: Additional error context
+          properties:
+            field:
+              type: string
+              description: Field that caused validation error
+              example: 'url'
+            constraint:
+              type: string
+              description: Validation rule that was violated
+              example: 'must be HTTPS URL from supported platform'
+            suggestion:
+              type: string
+              description: How to fix the error
+              example: 'Supported platforms: tiktok.com, reddit.com, twitter.com, x.com'
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+          example: '2025-06-09T14:30:00.000Z'
+        traceId:
+          type: string
+          format: uuid
+          description: Trace ID for debugging
+          example: 'trace_123e4567'
+
+    # Health Check (updated to envelope format)
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - status
+                - timestamp
+              properties:
+                status:
+                  type: string
+                  enum: [healthy, unhealthy]
+                  example: 'healthy'
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: '2025-06-09T14:30:00.000Z'
+                version:
+                  type: string
+                  example: '1.0.0'
+                checks:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [up, down]
+                      message:
+                        type: string
+                  example:
+                    database:
+                      status: 'up'
+                      message: 'Connected'
+                    redis:
+                      status: 'up'
+                      message: 'Connected'
+
+    # Feature Flags (new)
+    FeaturesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties: true
+              example:
+                enableBulkImport: true
+                maxUploadSize: 52428800
+                vectorSearchEnabled: false
+
     LoginRequest:
       type: object
       required:
@@ -263,25 +677,37 @@ components:
         email:
           type: string
           format: email
+          example: 'user@example.com'
         password:
           type: string
           format: password
           minLength: 8
-    
+          example: 'securePassword123'
+
+    # Updated to envelope format
     LoginResponse:
-      type: object
-      required:
-        - accessToken
-        - refreshToken
-        - user
-      properties:
-        accessToken:
-          type: string
-        refreshToken:
-          type: string
-        user:
-          $ref: '#/components/schemas/User'
-    
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - accessToken
+                - refreshToken
+                - user
+              properties:
+                accessToken:
+                  type: string
+                  description: JWT access token
+                  example: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'
+                refreshToken:
+                  type: string
+                  description: Refresh token for getting new access tokens
+                  example: 'rt_123e4567-e89b-12d3-a456-426614174000'
+                user:
+                  $ref: '#/components/schemas/User'
+
     RefreshTokenRequest:
       type: object
       required:
@@ -289,18 +715,27 @@ components:
       properties:
         refreshToken:
           type: string
-    
-    TokenPair:
-      type: object
-      required:
-        - accessToken
-        - refreshToken
-      properties:
-        accessToken:
-          type: string
-        refreshToken:
-          type: string
-    
+          example: 'rt_123e4567-e89b-12d3-a456-426614174000'
+
+    # Updated to envelope format
+    TokenResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - accessToken
+                - refreshToken
+              properties:
+                accessToken:
+                  type: string
+                  example: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'
+                refreshToken:
+                  type: string
+                  example: 'rt_456e7890-e89b-12d3-a456-426614174001'
+
     User:
       type: object
       required:
@@ -311,15 +746,19 @@ components:
         id:
           type: string
           format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
         email:
           type: string
           format: email
+          example: 'user@example.com'
         name:
           type: string
+          example: 'John Doe'
         createdAt:
           type: string
           format: date-time
-    
+          example: '2025-06-09T14:30:00.000Z'
+
     CreateShareRequest:
       type: object
       required:
@@ -329,19 +768,26 @@ components:
           type: string
           format: uri
           pattern: ^https?://(www\.)?(tiktok\.com|reddit\.com|twitter\.com|x\.com)/.*$
+          description: URL from supported platform
+          example: 'https://www.tiktok.com/@user/video/123'
         title:
           type: string
           maxLength: 200
+          description: Optional custom title
+          example: 'Interesting TikTok video'
         notes:
           type: string
           maxLength: 1000
-    
+          description: Optional notes
+          example: 'Remember to check this later'
+
+    # Updated batch request format
     CreateSharesBatchRequest:
       type: object
       required:
-        - shares
+        - operations
       properties:
-        shares:
+        operations:
           type: array
           minItems: 1
           maxItems: 50
@@ -354,13 +800,18 @@ components:
               url:
                 type: string
                 format: uri
+                example: 'https://www.tiktok.com/@user/video/123'
               idempotencyKey:
                 type: string
+                format: uuid
+                example: '550e8400-e29b-41d4-a716-446655440000'
               title:
                 type: string
+                maxLength: 200
               notes:
                 type: string
-    
+                maxLength: 1000
+
     Share:
       type: object
       required:
@@ -375,13 +826,19 @@ components:
         id:
           type: string
           format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
         url:
           type: string
           format: uri
+          example: 'https://www.tiktok.com/@user/video/123'
         title:
           type: string
+          nullable: true
+          example: 'Interesting TikTok video'
         notes:
           type: string
+          nullable: true
+          example: 'Remember to check this later'
         status:
           $ref: '#/components/schemas/ShareStatus'
         platform:
@@ -389,58 +846,114 @@ components:
         userId:
           type: string
           format: uuid
+          example: 'user123e4567-e89b-12d3-a456-426614174000'
         metadata:
           type: object
+          nullable: true
+          description: Platform-specific metadata (when processed)
           additionalProperties: true
+          example:
+            duration: 30
+            viewCount: 1000000
+            author: '@username'
         createdAt:
           type: string
           format: date-time
+          example: '2025-06-09T14:30:00.000Z'
         updatedAt:
           type: string
           format: date-time
+          example: '2025-06-09T14:30:00.000Z'
         processedAt:
           type: string
           format: date-time
-    
+          nullable: true
+          description: When processing completed (if status is 'done')
+          example: '2025-06-09T14:35:00.000Z'
+
+    # Updated to envelope format
+    ShareResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Share'
+
+    # Updated to envelope format with enhanced pagination
     ShareListResponse:
-      type: object
-      required:
-        - items
-        - hasMore
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Share'
-        cursor:
-          type: string
-          description: Cursor for next page
-        hasMore:
-          type: boolean
-    
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - items
+                - hasMore
+                - limit
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Share'
+                cursor:
+                  type: string
+                  description: Cursor for next page (if hasMore is true)
+                  example: '2025-06-09T10:00:00.000Z_789'
+                hasMore:
+                  type: boolean
+                  description: Whether more items are available
+                  example: true
+                limit:
+                  type: integer
+                  description: Number of items requested
+                  example: 20
+                total:
+                  type: integer
+                  nullable: true
+                  description: Total count (only if efficiently countable)
+                  example: 156
+
+    # Updated to envelope format with proper batch response
     SharesBatchResponse:
-      type: object
-      required:
-        - accepted
-        - rejected
-      properties:
-        accepted:
-          type: array
-          items:
-            $ref: '#/components/schemas/Share'
-        rejected:
-          type: array
-          items:
-            type: object
-            required:
-              - url
-              - reason
-            properties:
-              url:
-                type: string
-              reason:
-                type: string
-    
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - succeeded
+                - failed
+              properties:
+                succeeded:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Share'
+                failed:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - index
+                      - error
+                    properties:
+                      index:
+                        type: integer
+                        description: Index in original request array
+                        example: 1
+                      error:
+                        $ref: '#/components/schemas/ApiError'
+                      item:
+                        type: object
+                        description: Original request item that failed
+                        properties:
+                          url:
+                            type: string
+                          idempotencyKey:
+                            type: string
+
     ShareStatus:
       type: string
       enum:
@@ -448,7 +961,14 @@ components:
         - processing
         - done
         - failed
-    
+      description: |
+        Processing status:
+        - `pending`: Queued for processing
+        - `processing`: Currently being processed
+        - `done`: Successfully processed
+        - `failed`: Processing failed
+      example: 'done'
+
     Platform:
       type: string
       enum:
@@ -457,105 +977,195 @@ components:
         - twitter
         - x
         - unknown
-    
-    HealthResponse:
-      type: object
-      required:
-        - status
-        - timestamp
-      properties:
-        status:
-          type: string
-          enum:
-            - healthy
-            - unhealthy
-        timestamp:
-          type: string
-          format: date-time
-        version:
-          type: string
-        checks:
-          type: object
-          additionalProperties:
-            type: object
-            properties:
-              status:
-                type: string
-              message:
-                type: string
-    
-    ErrorResponse:
-      type: object
-      required:
-        - code
-        - message
-      properties:
-        code:
-          type: string
-        message:
-          type: string
-        details:
-          type: object
-          additionalProperties: true
-        retryable:
-          type: boolean
-        retryAfter:
-          type: integer
-          description: Seconds to wait before retry
-  
+      description: |
+        Detected platform from URL:
+        - `tiktok`: TikTok videos
+        - `reddit`: Reddit posts
+        - `twitter`: Twitter posts
+        - `x`: X (formerly Twitter) posts
+        - `unknown`: Unsupported or undetected platform
+      example: 'tiktok'
+
+    # Async Operations (new)
+    AsyncOperationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - id
+                - status
+                - statusUrl
+              properties:
+                id:
+                  type: string
+                  description: Operation identifier
+                  example: 'op_123e4567'
+                status:
+                  type: string
+                  enum: [pending, processing, completed, failed]
+                  example: 'processing'
+                statusUrl:
+                  type: string
+                  format: uri
+                  description: URL to check operation status
+                  example: '/v1/operations/op_123e4567'
+                progress:
+                  type: object
+                  nullable: true
+                  properties:
+                    current:
+                      type: integer
+                      example: 45
+                    total:
+                      type: integer
+                      example: 100
+                result:
+                  type: object
+                  nullable: true
+                  description: Operation result (when status is 'completed')
+                  additionalProperties: true
+                error:
+                  allOf:
+                    - $ref: '#/components/schemas/ApiError'
+                    - description: Error details (when status is 'failed')
+
   responses:
     ValidationError:
       description: Invalid request parameters
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: VALIDATION_ERROR
-            message: Invalid request parameters
-            details:
-              field: url
-              reason: Invalid URL format
-    
+          examples:
+            invalidUrl:
+              summary: Invalid URL format
+              value:
+                success: false
+                error:
+                  code: 'INVALID_URL'
+                  message: 'The provided URL is not valid'
+                  details:
+                    field: 'url'
+                    constraint: 'must be HTTPS URL from supported platform'
+                    suggestion: 'Supported platforms: tiktok.com, reddit.com, twitter.com, x.com'
+                  timestamp: '2025-06-09T14:30:00.000Z'
+                  traceId: 'trace_123e4567'
+            invalidEmail:
+              summary: Invalid email format
+              value:
+                success: false
+                error:
+                  code: 'INVALID_EMAIL_FORMAT'
+                  message: 'Invalid email format'
+                  details:
+                    field: 'email'
+                    constraint: 'must be valid email address'
+                  timestamp: '2025-06-09T14:30:00.000Z'
+                  traceId: 'trace_123e4567'
+
     UnauthorizedError:
-      description: Authentication required
+      description: Authentication required or invalid
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: AUTH_EXPIRED
-            message: Access token has expired
-            retryable: true
-    
+          examples:
+            tokenExpired:
+              summary: Access token expired
+              value:
+                success: false
+                error:
+                  code: 'AUTH_TOKEN_EXPIRED'
+                  message: 'Access token has expired'
+                  timestamp: '2025-06-09T14:30:00.000Z'
+                  traceId: 'trace_123e4567'
+            invalidCredentials:
+              summary: Invalid login credentials
+              value:
+                success: false
+                error:
+                  code: 'AUTH_INVALID_CREDENTIALS'
+                  message: 'Invalid email or password'
+                  timestamp: '2025-06-09T14:30:00.000Z'
+                  traceId: 'trace_123e4567'
+
     NotFoundError:
       description: Resource not found
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: NOT_FOUND
-            message: Share not found
-    
+          examples:
+            shareNotFound:
+              summary: Share not found
+              value:
+                success: false
+                error:
+                  code: 'NOT_FOUND_SHARE'
+                  message: 'Share not found'
+                  timestamp: '2025-06-09T14:30:00.000Z'
+                  traceId: 'trace_123e4567'
+
     ConflictError:
       description: Request conflicts with current state
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: DUPLICATE_SHARE
-            message: Share with this idempotency key already exists
-    
+          examples:
+            duplicateIdempotencyKey:
+              summary: Duplicate idempotency key
+              value:
+                success: false
+                error:
+                  code: 'CONFLICT_DUPLICATE_IDEMPOTENCY_KEY'
+                  message: 'Request with this idempotency key already processed'
+                  details:
+                    idempotencyKey: '550e8400-e29b-41d4-a716-446655440000'
+                  timestamp: '2025-06-09T14:30:00.000Z'
+                  traceId: 'trace_123e4567'
+
     RateLimitError:
       description: Too many requests
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/X-Request-ID'
+        X-Rate-Limit-Limit:
+          $ref: '#/components/headers/X-Rate-Limit-Limit'
+        X-Rate-Limit-Remaining:
+          $ref: '#/components/headers/X-Rate-Limit-Remaining'
+        X-Rate-Limit-Reset:
+          $ref: '#/components/headers/X-Rate-Limit-Reset'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: RATE_LIMITED
-            message: Too many requests
-            retryable: true
-            retryAfter: 10
+          examples:
+            rateLimitExceeded:
+              summary: Rate limit exceeded
+              value:
+                success: false
+                error:
+                  code: 'RATE_LIMIT_EXCEEDED'
+                  message: 'Too many requests'
+                  details:
+                    retryAfter: 60
+                  timestamp: '2025-06-09T14:30:00.000Z'
+                  traceId: 'trace_123e4567'
