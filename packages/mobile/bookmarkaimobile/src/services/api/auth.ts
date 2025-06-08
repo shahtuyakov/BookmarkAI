@@ -42,12 +42,10 @@ export interface ConfirmResetRequest {
 export const authAPI = {
   // Login
   login: async (credentials: LoginRequest) => {
-    console.log('Attempting login with:', credentials.email);
     try {
       const response = await apiClient.post<{data: AuthResponse}>('/auth/login', credentials);
-      console.log('Full login response:', response.data);
       
-      const { accessToken, refreshToken } = response.data.data;
+      const { accessToken, refreshToken, expiresIn } = response.data.data;
       
       // If the server doesn't return user info directly, we'll fetch it
       let user: User;
@@ -55,16 +53,13 @@ export const authAPI = {
       if (response.data.data.user) {
         // If user data is included in the response
         user = response.data.data.user;
-        console.log('Login successful with user data from response:', user);
       } else {
         // If user data isn't included, fetch it separately using the new token
-        console.log('No user data in response, fetching profile...');
-        await saveTokens(accessToken, refreshToken);
+        await saveTokens(accessToken, refreshToken, expiresIn);
         user = await authAPI.getUserProfile();
-        console.log('Fetched user profile:', user);
       }
       
-      await saveTokens(accessToken, refreshToken);
+      await saveTokens(accessToken, refreshToken, expiresIn);
       return { user };
     } catch (error) {
       console.error('Login error:', error);
@@ -74,12 +69,10 @@ export const authAPI = {
   
   // Register
   register: async (userData: RegisterRequest) => {
-    console.log('Attempting registration with:', userData.email);
     try {
       const response = await apiClient.post<{data: AuthResponse}>('/auth/register', userData);
-      console.log('Full registration response:', response.data);
       
-      const { accessToken, refreshToken } = response.data.data;
+      const { accessToken, refreshToken, expiresIn } = response.data.data;
       
       // If the server doesn't return user info directly, we'll fetch it
       let user: User;
@@ -87,16 +80,13 @@ export const authAPI = {
       if (response.data.data.user) {
         // If user data is included in the response
         user = response.data.data.user;
-        console.log('Registration successful with user data from response:', user);
       } else {
         // If user data isn't included, fetch it separately
-        console.log('No user data in response, fetching profile...');
-        await saveTokens(accessToken, refreshToken);
+        await saveTokens(accessToken, refreshToken, expiresIn);
         user = await authAPI.getUserProfile();
-        console.log('Fetched user profile:', user);
       }
       
-      await saveTokens(accessToken, refreshToken);
+      await saveTokens(accessToken, refreshToken, expiresIn);
       return { user };
     } catch (error) {
       console.error('Registration error:', error);
@@ -126,9 +116,7 @@ export const authAPI = {
   
   // Get user profile
   getUserProfile: async () => {
-    console.log('Fetching user profile...');
     const response = await apiClient.get<{data: User}>('/auth/profile');
-    console.log('User profile response:', response.data);
     return response.data.data;
   },
   
@@ -145,8 +133,8 @@ export const authAPI = {
   // Refresh token
   refreshToken: async (refreshToken: string) => {
     const response = await apiClient.post<{data: AuthResponse}>('/auth/refresh', { refreshToken });
-    const { accessToken, refreshToken: newRefreshToken } = response.data.data;
-    await saveTokens(accessToken, newRefreshToken);
+    const { accessToken, refreshToken: newRefreshToken, expiresIn } = response.data.data;
+    await saveTokens(accessToken, newRefreshToken, expiresIn);
     return { accessToken, refreshToken: newRefreshToken };
   },
 };

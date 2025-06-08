@@ -27,7 +27,3 @@ export const API_BASE_URL = API_URLS.Development;
 // The key for storing tokens in Keychain
 export const KEYCHAIN_SERVICE = 'com.bookmarkai.auth';
 
-// Debug logging
-console.log('📡 API Configuration:');
-console.log(`   Base URL: ${API_BASE_URL}`);
-console.log(`   Use Real Server: ${USE_REAL_SERVER}`);

@@ -1,10 +1,9 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import * as Keychain from 'react-native-keychain';
 import { DeviceEventEmitter } from 'react-native';
-import { USE_REAL_SERVER, API_BASE_URL, KEYCHAIN_SERVICE } from './client-config';
+import { API_BASE_URL } from './client-config';
+import { withKeychainFallback } from '../../utils/keychain-config';
 
-console.log(`🔧 API MODE: ${USE_REAL_SERVER ? 'REAL SERVER' : 'MOCK DATA'}`);
-console.log(`🔧 API URL: ${API_BASE_URL}`);
 
 // Create axios instance with default config
 const axiosInstance: AxiosInstance = axios.create({
@@ -15,31 +14,12 @@ const axiosInstance: AxiosInstance = axios.create({
   },
 });
 
-// Add logging for debugging
-axiosInstance.interceptors.request.use(config => {
-  console.log('Request:', {
-    url: config.url,
-    method: config.method,
-    data: config.data,
-    headers: config.headers
-  });
-  return config;
-});
-
+// Response interceptor for error handling
 axiosInstance.interceptors.response.use(
   response => {
-    console.log('Response:', {
-      status: response.status,
-      data: response.data
-    });
     return response;
   },
   error => {
-    console.log('Error Response:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
     return Promise.reject(error);
   }
 );
@@ -48,16 +28,28 @@ axiosInstance.interceptors.response.use(
 interface AuthTokens {
   accessToken: string;
   refreshToken: string;
+  expiresAt: number; // Unix timestamp when the access token expires
 }
 
 // Save tokens to secure storage (Keychain)
-export const saveTokens = async (accessToken: string, refreshToken: string): Promise<boolean> => {
+export const saveTokens = async (accessToken: string, refreshToken: string, expiresIn?: number): Promise<boolean> => {
   try {
-    console.log('Saving tokens to Keychain');
-    await Keychain.setGenericPassword(
-      'auth_tokens',
-      JSON.stringify({ accessToken, refreshToken }),
-      { service: KEYCHAIN_SERVICE }
+    // Calculate expiration timestamp (default to 15 minutes if not provided)
+    const expirationSeconds = expiresIn || (15 * 60); // 15 minutes default
+    const expiresAt = Date.now() + (expirationSeconds * 1000);
+    
+    const tokenData: AuthTokens = {
+      accessToken,
+      refreshToken,
+      expiresAt
+    };
+    
+    await withKeychainFallback((options) =>
+      Keychain.setGenericPassword(
+        'auth_tokens',
+        JSON.stringify(tokenData),
+        options
+      )
     );
     return true;
   } catch (error) {
@@ -69,12 +61,12 @@ export const saveTokens = async (accessToken: string, refreshToken: string): Pro
 // Get tokens from secure storage
 export const getTokens = async (): Promise<AuthTokens | null> => {
   try {
-    const credentials = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
+    const credentials = await withKeychainFallback((options) =>
+      Keychain.getGenericPassword(options)
+    );
     if (!credentials) {
-      console.log('No tokens found in Keychain');
       return null;
     }
-    console.log('Tokens retrieved from Keychain');
     return JSON.parse(credentials.password);
   } catch (error) {
     console.error('Error getting tokens from Keychain:', error);
@@ -91,8 +83,9 @@ export const getAccessToken = async (): Promise<string | null> => {
 // Clear tokens (logout)
 export const clearTokens = async (): Promise<boolean> => {
   try {
-    console.log('Clearing tokens from Keychain');
-    await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
+    await withKeychainFallback((options) =>
+      Keychain.resetGenericPassword(options)
+    );
     return true;
   } catch (error) {
     console.error('Error clearing tokens from Keychain:', error);
@@ -119,7 +112,7 @@ const processQueue = (error: any, token: string | null = null) => {
 
 // Add request interceptor to add the access token to requests
 axiosInstance.interceptors.request.use(
-  async (config: AxiosRequestConfig) => {
+  async (config) => {
     // If the request doesn't need a token (like login/register)
     if (config.url?.includes('/auth/login') || config.url?.includes('/auth/register')) {
       return config;
@@ -127,10 +120,8 @@ axiosInstance.interceptors.request.use(
 
     const token = await getAccessToken();
     if (token) {
-      config.headers = {
-        ...config.headers,
-        Authorization: `Bearer ${token}`,
-      };
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
