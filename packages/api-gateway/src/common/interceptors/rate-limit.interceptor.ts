@@ -59,6 +59,7 @@ export interface RateLimitConfig {
   windowMs: number; // Window size in milliseconds
   max: number; // Maximum requests per window
   message?: string; // Custom error message
+  policy?: string; // Rate limiting policy description
   standardHeaders?: boolean; // Add standard headers
   legacyHeaders?: boolean; // Add legacy headers
   skipSuccessfulRequests?: boolean;
@@ -66,7 +67,7 @@ export interface RateLimitConfig {
   keyGenerator?: (req: FastifyRequest) => string;
   disabled?: boolean;
   tiered?: boolean;
-  tiers?: { [key: string]: RateLimitConfig };
+  tiers?: Record<string, RateLimitConfig>;
   burst?: RateLimitConfig;
   sustained?: RateLimitConfig;
 }
