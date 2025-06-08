@@ -1,7 +1,7 @@
 import { PipeTransform, Injectable, ArgumentMetadata } from '@nestjs/common';
 import { ZodSchema, ZodError, ZodIssue } from 'zod';
 import { ValidationException } from '../exceptions/api.exceptions';
-import { ERROR_CODES } from '../constants/error-codes';
+import { ERROR_CODES, ErrorCode } from '../constants/error-codes';
 
 /**
  * Custom validation pipe using Zod that integrates with ADR-012 error handling
@@ -19,7 +19,7 @@ export class ZodValidationPipe implements PipeTransform {
         const firstError = error.errors[0];
         const field = firstError.path.join('.');
 
-        throw new ValidationException(this.getErrorCode(firstError.code), firstError.message, {
+        throw new ValidationException(this.getErrorCode(firstError), firstError.message, {
           field,
           constraint: this.getConstraintMessage(firstError),
           suggestion: this.getSuggestion(firstError),
@@ -37,20 +37,26 @@ export class ZodValidationPipe implements PipeTransform {
   /**
    * Map Zod error codes to our error taxonomy
    */
-  private getErrorCode(zodCode: string): string {
-    switch (zodCode) {
+  private getErrorCode(zodIssue: ZodIssue): ErrorCode {
+    switch (zodIssue.code) {
       case 'invalid_string':
+        if ('validation' in zodIssue) {
+          if (zodIssue.validation === 'email') {
+            return ERROR_CODES.INVALID_EMAIL_FORMAT;
+          }
+          if (zodIssue.validation === 'url') {
+            return ERROR_CODES.INVALID_URL;
+          }
+          if (zodIssue.validation === 'uuid') {
+            return ERROR_CODES.INVALID_UUID;
+          }
+        }
+        return ERROR_CODES.INVALID_FIELD_VALUE;
       case 'invalid_type':
         return ERROR_CODES.INVALID_FIELD_VALUE;
       case 'too_small':
       case 'too_big':
         return ERROR_CODES.INVALID_FIELD_VALUE;
-      case 'invalid_email':
-        return ERROR_CODES.INVALID_EMAIL_FORMAT;
-      case 'invalid_url':
-        return ERROR_CODES.INVALID_URL;
-      case 'invalid_uuid':
-        return ERROR_CODES.INVALID_UUID;
       case 'invalid_date':
         return ERROR_CODES.INVALID_DATE_FORMAT;
       case 'custom':
@@ -89,30 +95,23 @@ export class ZodValidationPipe implements PipeTransform {
         }
         return `maximum value: ${error.maximum}`;
 
-      case 'invalid_email':
-        return 'must be a valid email address';
-
-      case 'invalid_url':
-        return 'must be a valid URL';
-
-      case 'invalid_uuid':
-        return 'must be a valid UUID';
-
       case 'invalid_date':
         return 'must be a valid date';
 
       case 'invalid_string':
-        if (error.validation === 'email') {
-          return 'must be a valid email address';
-        }
-        if (error.validation === 'url') {
-          return 'must be a valid URL';
-        }
-        if (error.validation === 'uuid') {
-          return 'must be a valid UUID';
-        }
-        if (error.validation === 'regex') {
-          return 'must match the required format';
+        if ('validation' in error) {
+          if (error.validation === 'email') {
+            return 'must be a valid email address';
+          }
+          if (error.validation === 'url') {
+            return 'must be a valid URL';
+          }
+          if (error.validation === 'uuid') {
+            return 'must be a valid UUID';
+          }
+          if (error.validation === 'regex') {
+            return 'must match the required format';
+          }
         }
         return 'must be a valid string';
 
@@ -129,20 +128,25 @@ export class ZodValidationPipe implements PipeTransform {
    */
   private getSuggestion(error: ZodIssue): string | undefined {
     switch (error.code) {
-      case 'invalid_email':
-        return 'Example: user@example.com';
-
-      case 'invalid_url':
-        if (error.path.includes('url')) {
-          return 'Supported platforms: tiktok.com, reddit.com, twitter.com, x.com';
-        }
-        return 'Example: https://example.com';
-
-      case 'invalid_uuid':
-        return 'Example: 123e4567-e89b-12d3-a456-426614174000';
-
       case 'invalid_date':
         return 'Use ISO 8601 format: 2025-06-09T14:30:00.000Z';
+
+      case 'invalid_string':
+        if ('validation' in error) {
+          if (error.validation === 'email') {
+            return 'Example: user@example.com';
+          }
+          if (error.validation === 'url') {
+            if (error.path.includes('url')) {
+              return 'Supported platforms: tiktok.com, reddit.com, twitter.com, x.com';
+            }
+            return 'Example: https://example.com';
+          }
+          if (error.validation === 'uuid') {
+            return 'Example: 123e4567-e89b-12d3-a456-426614174000';
+          }
+        }
+        break;
 
       case 'too_small':
         if (error.type === 'string' && error.path.includes('password')) {
