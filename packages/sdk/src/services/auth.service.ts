@@ -1,5 +1,6 @@
 import { StorageAdapter } from '../adapters/types';
 import { SingleFlight } from '../utils/singleflight';
+import { DeviceEventEmitter } from 'react-native';
 
 export interface TokenPair {
   accessToken: string;
@@ -113,6 +114,8 @@ export class AuthService {
       // Check if refresh token is expired
       if (tokens.refreshTokenExpiry && Date.now() > tokens.refreshTokenExpiry) {
         await this.clearTokens();
+        // Emit auth-error to trigger logout flow
+        DeviceEventEmitter.emit('auth-error');
         throw new Error('Refresh token expired');
       }
 
@@ -123,6 +126,8 @@ export class AuthService {
       } catch (error) {
         // If refresh fails, clear tokens
         await this.clearTokens();
+        // Emit auth-error to trigger logout flow
+        DeviceEventEmitter.emit('auth-error');
         throw error;
       }
     });

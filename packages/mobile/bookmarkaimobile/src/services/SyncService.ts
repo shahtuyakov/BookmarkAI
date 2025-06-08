@@ -1,6 +1,8 @@
 import NetInfo from '@react-native-community/netinfo';
 import { BookmarkAIClient } from '@bookmarkai/sdk';
 import { MMKV } from 'react-native-mmkv';
+import { Platform } from 'react-native';
+import { IOSSQLiteQueueService, SQLiteQueueItem } from './iOSSQLiteQueue';
 
 interface QueuedShare {
   id: string;
@@ -15,6 +17,7 @@ interface QueuedShare {
 export class SyncService {
   private static instance: SyncService;
   private storage = new MMKV({ id: 'sync-queue' });
+  private iosSQLiteQueue?: IOSSQLiteQueueService;
   private isProcessing = false;
   private networkUnsubscribe?: () => void;
   private processingTimer?: NodeJS.Timeout;
@@ -25,6 +28,22 @@ export class SyncService {
 
   private constructor(private client: BookmarkAIClient) {
     this.setupNetworkListener();
+    this.initializePlatformSpecificQueue();
+  }
+
+  /**
+   * Initialize platform-specific queue services
+   */
+  private initializePlatformSpecificQueue(): void {
+    if (Platform.OS === 'ios') {
+      this.iosSQLiteQueue = IOSSQLiteQueueService.getInstance();
+      
+      if (this.iosSQLiteQueue.isAvailable()) {
+        // Migrate existing MMKV items to SQLite if any exist
+        this.migrateMmkvToSQLiteIfNeeded();
+      } else {
+      }
+    }
   }
 
   static getInstance(client: BookmarkAIClient): SyncService {
@@ -62,7 +81,27 @@ export class SyncService {
   }
 
   /**
-   * Process all queued shares
+   * Migrate existing MMKV queue items to SQLite (iOS only)
+   */
+  private async migrateMmkvToSQLiteIfNeeded(): Promise<void> {
+    if (!this.iosSQLiteQueue) return;
+
+    try {
+      const mmkvQueue = this.getQueue();
+      
+      if (mmkvQueue.length > 0) {
+        await this.iosSQLiteQueue.migrateMMKVToSQLite(mmkvQueue);
+        
+        // Clear MMKV queue after successful migration
+        this.clearQueue();
+      }
+    } catch (error) {
+      console.error('❌ SyncService: Failed to migrate MMKV to SQLite:', error);
+    }
+  }
+
+  /**
+   * Process all queued shares (with SQLite integration)
    */
   async processQueue(): Promise<void> {
     if (this.isProcessing) {
@@ -84,45 +123,112 @@ export class SyncService {
     this.isProcessing = true;
 
     try {
-      const queue = this.getQueue();
-      const remainingQueue: QueuedShare[] = [];
+      // Get items from both SQLite (iOS) and MMKV
+      const sqliteItems = await this.getSQLiteQueueItems();
+      const mmkvItems = this.getQueue();
+      
 
-      for (const share of queue) {
-        try {
-          
-          // Create share via SDK
-          await this.client.shares.create({
-            url: share.url,
-            title: share.title,
-            notes: share.notes,
-          });
-
-          // Don't add to remaining queue - it's processed
-        } catch (error: any) {
-          console.error(`Failed to process share: ${share.url}`, error);
-          
-          share.retryCount++;
-          share.lastError = error.message;
-
-          // Add back to queue if under retry limit
-          if (share.retryCount < this.MAX_RETRIES) {
-            remainingQueue.push(share);
-          } else {
-            console.error(`Share exceeded retry limit: ${share.url}`);
-            // TODO: Could emit an event here for the UI to show failed shares
-          }
-        }
+      // Process SQLite items (iOS)
+      if (sqliteItems.length > 0) {
+        await this.processSQLiteItems(sqliteItems);
       }
 
-      // Save remaining queue
-      this.saveQueue(remainingQueue);
-
-      // If there are still items, schedule another attempt
-      if (remainingQueue.length > 0) {
-        this.scheduleRetry();
+      // Process MMKV items (fallback/other platforms)
+      if (mmkvItems.length > 0) {
+        await this.processMmkvItems(mmkvItems);
       }
+
     } finally {
       this.isProcessing = false;
+    }
+  }
+
+  /**
+   * Process SQLite queue items (iOS specific)
+   */
+  private async processSQLiteItems(items: SQLiteQueueItem[]): Promise<void> {
+    if (!this.iosSQLiteQueue) return;
+
+    const successful: string[] = [];
+    const failed: Array<{ id: string; error: string }> = [];
+
+    for (const item of items) {
+      try {
+        // Mark as processing
+        await this.iosSQLiteQueue.updateQueueItemStatus(item.id, 'processing');
+
+        // Create share via SDK (API only accepts URL)
+        await this.client.shares.create({
+          url: item.url,
+        });
+
+        successful.push(item.id);
+
+      } catch (error: any) {
+        const errorMessage = error.message || 'Unknown error';
+        failed.push({ id: item.id, error: errorMessage });
+        console.error(`❌ SyncService: Failed to process SQLite item ${item.id}:`, errorMessage);
+      }
+    }
+
+    // Update SQLite with results
+    await this.iosSQLiteQueue.syncWithProcessingResults({ successful, failed });
+    
+  }
+
+  /**
+   * Process MMKV queue items (legacy/fallback)
+   */
+  private async processMmkvItems(items: QueuedShare[]): Promise<void> {
+    const remainingQueue: QueuedShare[] = [];
+
+    for (const share of items) {
+      try {
+        // Create share via SDK (API only accepts URL)
+        await this.client.shares.create({
+          url: share.url,
+        });
+
+        // Don't add to remaining queue - it's processed
+
+      } catch (error: any) {
+        console.error(`❌ SyncService: Failed to process MMKV share: ${share.url}`, error);
+        
+        share.retryCount++;
+        share.lastError = error.message;
+
+        // Add back to queue if under retry limit
+        if (share.retryCount < this.MAX_RETRIES) {
+          remainingQueue.push(share);
+        } else {
+          console.error(`❌ SyncService: MMKV share exceeded retry limit: ${share.url}`);
+        }
+      }
+    }
+
+    // Save remaining MMKV queue
+    this.saveQueue(remainingQueue);
+
+    // If there are still items, schedule another attempt
+    if (remainingQueue.length > 0) {
+      this.scheduleRetry();
+    }
+
+  }
+
+  /**
+   * Get SQLite queue items (iOS only)
+   */
+  private async getSQLiteQueueItems(): Promise<SQLiteQueueItem[]> {
+    if (!this.iosSQLiteQueue || !this.iosSQLiteQueue.isAvailable()) {
+      return [];
+    }
+
+    try {
+      return await this.iosSQLiteQueue.getPendingQueueItems();
+    } catch (error) {
+      console.error('❌ SyncService: Failed to get SQLite queue items:', error);
+      return [];
     }
   }
 
@@ -138,22 +244,96 @@ export class SyncService {
   }
 
   /**
-   * Get queue statistics
+   * Get queue statistics (including SQLite on iOS)
    */
-  getQueueStats(): {
+  async getQueueStats(): Promise<{
     total: number;
     failed: number;
     pending: number;
-  } {
-    const queue = this.getQueue();
-    const failed = queue.filter(s => s.retryCount >= this.MAX_RETRIES).length;
-    const pending = queue.length - failed;
+    sqlite?: {
+      pending?: number;
+      processing?: number;
+      completed?: number;
+      failed?: number;
+    };
+    mmkv: {
+      total: number;
+      failed: number;
+      pending: number;
+    };
+  }> {
+    const mmkvQueue = this.getQueue();
+    const mmkvFailed = mmkvQueue.filter(s => s.retryCount >= this.MAX_RETRIES).length;
+    const mmkvPending = mmkvQueue.length - mmkvFailed;
+
+    let sqliteStats;
+    if (this.iosSQLiteQueue && this.iosSQLiteQueue.isAvailable()) {
+      try {
+        sqliteStats = await this.iosSQLiteQueue.getQueueStats();
+      } catch (error) {
+        console.error('❌ SyncService: Failed to get SQLite stats:', error);
+      }
+    }
+
+    const sqlitePending = sqliteStats?.pending || 0;
+    const totalPending = mmkvPending + sqlitePending;
+    const totalFailed = mmkvFailed + (sqliteStats?.failed || 0);
+    const totalProcessing = sqliteStats?.processing || 0;
+    const totalCompleted = sqliteStats?.completed || 0;
+    const total = mmkvQueue.length + sqlitePending + totalProcessing + totalCompleted + (sqliteStats?.failed || 0);
 
     return {
-      total: queue.length,
-      failed,
-      pending,
+      total,
+      failed: totalFailed,
+      pending: totalPending,
+      sqlite: sqliteStats,
+      mmkv: {
+        total: mmkvQueue.length,
+        failed: mmkvFailed,
+        pending: mmkvPending,
+      },
     };
+  }
+
+  /**
+   * Get all queued shares (including SQLite on iOS)
+   */
+  async getAllQueuedShares(): Promise<{
+    sqlite: SQLiteQueueItem[];
+    mmkv: QueuedShare[];
+  }> {
+    const mmkvItems = this.getQueue();
+    let sqliteItems: SQLiteQueueItem[] = [];
+
+    if (this.iosSQLiteQueue && this.iosSQLiteQueue.isAvailable()) {
+      try {
+        sqliteItems = await this.iosSQLiteQueue.getAllQueueItems();
+      } catch (error) {
+        console.error('❌ SyncService: Failed to get SQLite queue items:', error);
+      }
+    }
+
+    return {
+      sqlite: sqliteItems,
+      mmkv: mmkvItems,
+    };
+  }
+
+  /**
+   * Clean up old completed items (SQLite only)
+   */
+  async cleanupOldItems(olderThanHours: number = 24): Promise<number> {
+    if (!this.iosSQLiteQueue || !this.iosSQLiteQueue.isAvailable()) {
+      return 0;
+    }
+
+    try {
+      const deletedCount = await this.iosSQLiteQueue.cleanupOldItems(olderThanHours);
+      return deletedCount;
+    } catch (error) {
+      console.error('❌ SyncService: Failed to cleanup old items:', error);
+      return 0;
+    }
   }
 
   /**
@@ -212,7 +392,7 @@ export class SyncService {
    * Generate unique ID for queued share
    */
   private generateId(): string {
-    return `queue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `queue_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**

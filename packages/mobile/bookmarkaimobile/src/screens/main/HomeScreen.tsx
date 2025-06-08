@@ -17,6 +17,7 @@ import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
 import { Share } from '@bookmarkai/sdk';
 import { TokenSyncTestSuite } from '../../utils/test-token-sync';
+import { runIOSSQLiteQueueTests, runDetailedIOSSQLiteQueueTests, clearIOSSQLiteQueue, addTestIOSSQLiteItem } from '../../utils/test-ios-sqlite-queue';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
@@ -106,6 +107,25 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       Alert.alert('Test Error', error.message);
     }
   };
+
+  const runSQLiteQueueTests = async () => {
+    try {
+      await runIOSSQLiteQueueTests();
+      Alert.alert('SQLite Tests Complete', 'Check the console/logs for detailed results');
+    } catch (error: any) {
+      Alert.alert('SQLite Test Error', error.message);
+    }
+  };
+
+  const runDetailedSQLiteTests = async () => {
+    try {
+      const report = await runDetailedIOSSQLiteQueueTests();
+      console.log('📊 Detailed SQLite Test Report:\n', report);
+      Alert.alert('Detailed SQLite Tests Complete', 'Full report logged to console');
+    } catch (error: any) {
+      Alert.alert('Detailed SQLite Test Error', error.message);
+    }
+  };
   
   const runIndividualTest = async (testName: string) => {
     try {
@@ -125,6 +145,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         case 'enhancedSync':
           await TokenSyncTestSuite.testEnhancedTokenSync();
           break;
+        case 'sqliteQueue':
+          await runSQLiteQueueTests();
+          break;
+        case 'sqliteDetailed':
+          await runDetailedSQLiteTests();
+          break;
+        case 'clearSqlite':
+          await clearIOSSQLiteQueue();
+          return; // Don't show completion alert for this one
+        case 'addTestItem':
+          await addTestIOSSQLiteItem();
+          return; // Don't show completion alert for this one
       }
       Alert.alert('Test Complete', `${testName} test finished. Check console for results.`);
     } catch (error: any) {
@@ -227,7 +259,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         />
         
         {/* Development Test Button - Only show in debug mode */}
-        {false && (
+        {__DEV__ && (
           <Button 
             mode="outlined" 
             icon="test-tube" 
@@ -293,7 +325,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <Dialog.Title>🧪 Development Tests</Dialog.Title>
           <Dialog.Content>
             <Text style={styles.testDescription}>
-              Test Android native integration and token synchronization
+              Test native integration, token synchronization, and iOS SQLite queue
             </Text>
             
             <View style={styles.testButtonsContainer}>
@@ -343,6 +375,39 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 onPress={() => runIndividualTest('enhancedSync')}
                 style={styles.testDialogButton}>
                 Enhanced Auto Sync Test
+              </Button>
+              
+              {/* iOS SQLite Queue Tests */}
+              <Button 
+                mode="outlined" 
+                icon="database"
+                onPress={() => runIndividualTest('sqliteQueue')}
+                style={styles.testDialogButton}>
+                iOS SQLite Queue Test
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                icon="database-check"
+                onPress={() => runIndividualTest('sqliteDetailed')}
+                style={styles.testDialogButton}>
+                Detailed SQLite Test
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                icon="delete"
+                onPress={() => runIndividualTest('clearSqlite')}
+                style={styles.testDialogButton}>
+                Clear SQLite Queue
+              </Button>
+              
+              <Button 
+                mode="outlined" 
+                icon="bug"
+                onPress={() => runIndividualTest('addTestItem')}
+                style={styles.testDialogButton}>
+                Debug Queue Contents
               </Button>
             </View>
             
