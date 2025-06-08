@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaginationSchema, SortSchema, FieldsSchema, DateRangeSchema } from './pagination.schema';
+import { PaginationSchema, SortSchema, FieldsSchema } from './pagination.schema';
 
 /**
  * Share validation schemas following ADR-012 conventions
@@ -65,7 +65,9 @@ export const CreateSharesBatchSchema = z.object({
 });
 
 // Share list query parameters
-export const ShareListQuerySchema = PaginationSchema.merge(DateRangeSchema).extend({
+export const ShareListQuerySchema = PaginationSchema.extend({
+  createdAfter: z.coerce.date().optional(),
+  createdBefore: z.coerce.date().optional(),
   status: ShareStatusSchema.optional(),
   platform: z
     .union([
@@ -110,7 +112,13 @@ export const ShareListQuerySchema = PaginationSchema.merge(DateRangeSchema).exte
         'Fields must be one of: id, url, title, notes, status, platform, userId, metadata, createdAt, updatedAt, processedAt',
     },
   ),
-});
+}).refine(
+  data => !data.createdAfter || !data.createdBefore || data.createdAfter <= data.createdBefore,
+  {
+    message: 'createdAfter must be before or equal to createdBefore',
+    path: ['createdAfter'],
+  },
+);
 
 // Share detail query parameters
 export const ShareDetailQuerySchema = z.object({

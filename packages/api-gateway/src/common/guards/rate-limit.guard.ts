@@ -100,7 +100,11 @@ export class RateLimitGuard implements CanActivate {
     const user = request.user;
     const userTier = user?.subscription?.tier || 'free';
 
-    const tierConfig = config.tiers[userTier] || config.tiers.free;
+    const tierConfig = config.tiers?.[userTier] || config.tiers?.['free'];
+
+    if (!tierConfig) {
+      throw new Error(`No rate limit configuration found for tier: ${userTier}`);
+    }
 
     return this.handleStandardRateLimit(request, {
       ...tierConfig,
