@@ -3,6 +3,7 @@ import { BookmarkAIClient } from '@bookmarkai/sdk';
 import { MMKV } from 'react-native-mmkv';
 import { Platform } from 'react-native';
 import { IOSSQLiteQueueService, SQLiteQueueItem } from './iOSSQLiteQueue';
+import { AndroidRoomQueueService, AndroidRoomQueueItem } from './androidRoomQueue';
 
 interface QueuedShare {
   id: string;
@@ -18,6 +19,7 @@ export class SyncService {
   private static instance: SyncService;
   private storage = new MMKV({ id: 'sync-queue' });
   private iosSQLiteQueue?: IOSSQLiteQueueService;
+  private androidRoomQueue?: AndroidRoomQueueService;
   private isProcessing = false;
   private networkUnsubscribe?: () => void;
   private processingTimer?: NodeJS.Timeout;
@@ -41,7 +43,13 @@ export class SyncService {
       if (this.iosSQLiteQueue.isAvailable()) {
         // Migrate existing MMKV items to SQLite if any exist
         this.migrateMmkvToSQLiteIfNeeded();
-      } else {
+      }
+    } else if (Platform.OS === 'android') {
+      this.androidRoomQueue = AndroidRoomQueueService.getInstance();
+      
+      if (this.androidRoomQueue.isAvailable()) {
+        // Migrate existing MMKV items to Room if any exist
+        this.migrateMmkvToRoomIfNeeded();
       }
     }
   }
@@ -96,12 +104,32 @@ export class SyncService {
         this.clearQueue();
       }
     } catch (error) {
-      console.error('❌ SyncService: Failed to migrate MMKV to SQLite:', error);
+      console.error('SyncService: Failed to migrate MMKV to SQLite:', error);
     }
   }
 
   /**
-   * Process all queued shares (with SQLite integration)
+   * Migrate existing MMKV queue items to Android Room (Android only)
+   */
+  private async migrateMmkvToRoomIfNeeded(): Promise<void> {
+    if (!this.androidRoomQueue) return;
+
+    try {
+      const mmkvQueue = this.getQueue();
+      
+      if (mmkvQueue.length > 0) {
+        await this.androidRoomQueue.migrateMMKVToRoom(mmkvQueue);
+        
+        // Clear MMKV queue after successful migration
+        this.clearQueue();
+      }
+    } catch (error) {
+      console.error('SyncService: Failed to migrate MMKV to Room:', error);
+    }
+  }
+
+  /**
+   * Process all queued shares (with platform-specific queue integration)
    */
   async processQueue(): Promise<void> {
     if (this.isProcessing) {
@@ -123,14 +151,18 @@ export class SyncService {
     this.isProcessing = true;
 
     try {
-      // Get items from both SQLite (iOS) and MMKV
+      // Get items from platform-specific queues and MMKV
       const sqliteItems = await this.getSQLiteQueueItems();
+      const roomItems = await this.getAndroidRoomQueueItems();
       const mmkvItems = this.getQueue();
-      
-
       // Process SQLite items (iOS)
       if (sqliteItems.length > 0) {
         await this.processSQLiteItems(sqliteItems);
+      }
+
+      // Process Room items (Android)
+      if (roomItems.length > 0) {
+        await this.processAndroidRoomItems(roomItems);
       }
 
       // Process MMKV items (fallback/other platforms)
@@ -167,13 +199,12 @@ export class SyncService {
       } catch (error: any) {
         const errorMessage = error.message || 'Unknown error';
         failed.push({ id: item.id, error: errorMessage });
-        console.error(`❌ SyncService: Failed to process SQLite item ${item.id}:`, errorMessage);
+        console.error(`SyncService: Failed to process SQLite item ${item.id}:`, errorMessage);
       }
     }
 
     // Update SQLite with results
     await this.iosSQLiteQueue.syncWithProcessingResults({ successful, failed });
-    
   }
 
   /**
@@ -190,9 +221,8 @@ export class SyncService {
         });
 
         // Don't add to remaining queue - it's processed
-
       } catch (error: any) {
-        console.error(`❌ SyncService: Failed to process MMKV share: ${share.url}`, error);
+        console.error(`SyncService: Failed to process MMKV share: ${share.url}`, error);
         
         share.retryCount++;
         share.lastError = error.message;
@@ -201,7 +231,7 @@ export class SyncService {
         if (share.retryCount < this.MAX_RETRIES) {
           remainingQueue.push(share);
         } else {
-          console.error(`❌ SyncService: MMKV share exceeded retry limit: ${share.url}`);
+          console.error(`SyncService: MMKV share exceeded retry limit: ${share.url}`);
         }
       }
     }
@@ -213,7 +243,6 @@ export class SyncService {
     if (remainingQueue.length > 0) {
       this.scheduleRetry();
     }
-
   }
 
   /**
@@ -227,9 +256,57 @@ export class SyncService {
     try {
       return await this.iosSQLiteQueue.getPendingQueueItems();
     } catch (error) {
-      console.error('❌ SyncService: Failed to get SQLite queue items:', error);
+      console.error('SyncService: Failed to get SQLite queue items:', error);
       return [];
     }
+  }
+
+  /**
+   * Get Android Room queue items (Android only)
+   */
+  private async getAndroidRoomQueueItems(): Promise<AndroidRoomQueueItem[]> {
+    if (!this.androidRoomQueue || !this.androidRoomQueue.isAvailable()) {
+      return [];
+    }
+
+    try {
+      return await this.androidRoomQueue.getPendingQueueItems();
+    } catch (error) {
+      console.error('SyncService: Failed to get Android Room queue items:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Process Android Room queue items (Android specific)
+   */
+  private async processAndroidRoomItems(items: AndroidRoomQueueItem[]): Promise<void> {
+    if (!this.androidRoomQueue) return;
+
+    const successful: string[] = [];
+    const failed: Array<{ id: string; error: string }> = [];
+
+    for (const item of items) {
+      try {
+        // Mark as processing
+        await this.androidRoomQueue.updateQueueItemStatus(item.id, 'processing');
+
+        // Create share via SDK (API only accepts URL)
+        await this.client.shares.create({
+          url: item.url,
+        });
+
+        successful.push(item.id);
+
+      } catch (error: any) {
+        const errorMessage = error.message || 'Unknown error';
+        failed.push({ id: item.id, error: errorMessage });
+        console.error(`SyncService: Failed to process Android Room item ${item.id}:`, errorMessage);
+      }
+    }
+
+    // Update Android Room with results
+    await this.androidRoomQueue.syncWithProcessingResults({ successful, failed });
   }
 
   /**
@@ -271,7 +348,7 @@ export class SyncService {
       try {
         sqliteStats = await this.iosSQLiteQueue.getQueueStats();
       } catch (error) {
-        console.error('❌ SyncService: Failed to get SQLite stats:', error);
+        console.error('SyncService: Failed to get SQLite stats:', error);
       }
     }
 
@@ -309,7 +386,7 @@ export class SyncService {
       try {
         sqliteItems = await this.iosSQLiteQueue.getAllQueueItems();
       } catch (error) {
-        console.error('❌ SyncService: Failed to get SQLite queue items:', error);
+        console.error('SyncService: Failed to get SQLite queue items:', error);
       }
     }
 
@@ -331,7 +408,7 @@ export class SyncService {
       const deletedCount = await this.iosSQLiteQueue.cleanupOldItems(olderThanHours);
       return deletedCount;
     } catch (error) {
-      console.error('❌ SyncService: Failed to cleanup old items:', error);
+      console.error('SyncService: Failed to cleanup old items:', error);
       return 0;
     }
   }

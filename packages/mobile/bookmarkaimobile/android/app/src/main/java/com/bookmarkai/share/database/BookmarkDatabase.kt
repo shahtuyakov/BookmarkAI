@@ -17,7 +17,7 @@ import net.sqlcipher.database.SupportFactory
  */
 @Database(
     entities = [BookmarkQueueEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class BookmarkDatabase : RoomDatabase() {
@@ -103,8 +103,7 @@ abstract class BookmarkDatabase : RoomDatabase() {
          */
         private fun getAllMigrations(): Array<Migration> {
             return arrayOf(
-                // Future migrations will go here
-                // MIGRATION_1_2, MIGRATION_2_3, etc.
+                MIGRATION_1_2
             )
         }
         
@@ -118,12 +117,20 @@ abstract class BookmarkDatabase : RoomDatabase() {
     }
 }
 
-// Example migration (for future use)
-/*
+/**
+ * Migration from database version 1 to 2
+ * Adds title and notes columns and updates status values to match iOS
+ */
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(database: SupportSQLiteDatabase) {
-        // Example: Add new column
-        database.execSQL("ALTER TABLE bookmark_queue ADD COLUMN new_field TEXT")
+        // Add title and notes columns
+        database.execSQL("ALTER TABLE bookmark_queue ADD COLUMN title TEXT")
+        database.execSQL("ALTER TABLE bookmark_queue ADD COLUMN notes TEXT")
+        
+        // Update status values to match iOS schema (lowercase)
+        database.execSQL("UPDATE bookmark_queue SET status = 'pending' WHERE status = 'PENDING'")
+        database.execSQL("UPDATE bookmark_queue SET status = 'processing' WHERE status = 'UPLOADING'")
+        database.execSQL("UPDATE bookmark_queue SET status = 'completed' WHERE status = 'UPLOADED'")
+        database.execSQL("UPDATE bookmark_queue SET status = 'failed' WHERE status = 'FAILED' OR status = 'NEEDS_AUTH'")
     }
 }
-*/
