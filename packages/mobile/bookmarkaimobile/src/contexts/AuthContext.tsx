@@ -174,6 +174,8 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
             await clearTokens();
             await clearAndroidTokens();
             setUser(null);
+            // Emit auth-error to trigger proper logout flow
+            DeviceEventEmitter.emit('auth-error');
           }
         } else {
           setUser(null);

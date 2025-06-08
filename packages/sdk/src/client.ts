@@ -153,11 +153,17 @@ export class BookmarkAIClient {
           
           // Check for 401 and retry with refreshed token
           if (response.status === 401) {
-            await this.authService.refreshTokens();
-            // Re-apply interceptors to get new auth header
-            requestConfig = await this.interceptorManager.applyRequestInterceptors(config);
-            response = await this.networkAdapter.request<T>(requestConfig);
-            response = await this.interceptorManager.applyResponseInterceptors(response);
+            try {
+              await this.authService.refreshTokens();
+              // Re-apply interceptors to get new auth header
+              requestConfig = await this.interceptorManager.applyRequestInterceptors(config);
+              response = await this.networkAdapter.request<T>(requestConfig);
+              response = await this.interceptorManager.applyResponseInterceptors(response);
+            } catch (refreshError) {
+              // Token refresh failed, the AuthService already emitted 'auth-error'
+              // Just re-throw the error
+              throw refreshError;
+            }
           }
 
           // Transform error responses
