@@ -2,6 +2,8 @@
 
 # Run generate migrations
 
+npm install --legacy-peer-deps
+
 cd packages/api-gateway && pnpm db:generate
 
 # Run apply migrations
@@ -18,7 +20,7 @@ cd packages/mobile/bookmarkaimobile && npm install
 
 npx react-native start --reset-cache
 
-npm install --legacy-peer-deps 
+npm install --legacy-peer-deps
 
 # Install ios dependencies for mobile app
 
@@ -102,21 +104,22 @@ cd packages/mobile/bookmarkaimobile && npx react-native start
 # run tunnel for mobile app
 
 export NGROK_AUTH_TOKEN=your_token_here
-npm run dev:tunnel 
-
+npm run dev:tunnel
 
 # extension
 
 1 Legacy Build (default)
 
 npm run build
-  - Uses original service-worker.ts and popup.tsx
-  - Direct API calls without SDK
-  - Smaller bundle size
+
+- Uses original service-worker.ts and popup.tsx
+- Direct API calls without SDK
+- Smaller bundle size
 
 2 SDK Build
 npm run build:sdk
-  - Uses service-worker-sdk.ts and popup-sdk.tsx
-  - All API calls go through the SDK
-  - Includes unified auth service with feature flags
-  - Larger bundle but with more features
+
+- Uses service-worker-sdk.ts and popup-sdk.tsx
+- All API calls go through the SDK
+- Includes unified auth service with feature flags
+- Larger bundle but with more features

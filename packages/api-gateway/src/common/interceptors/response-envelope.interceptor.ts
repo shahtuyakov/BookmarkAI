@@ -19,7 +19,7 @@ export class ResponseEnvelopeInterceptor implements NestInterceptor {
   private apiVersion: string;
 
   constructor(private configService: ConfigService) {
-    this.apiVersion = this.configService.get('API_VERSION') || '1.0.0';
+    this.apiVersion = this.configService.get('API_VERSION', '1.0.0');
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<unknown>> {

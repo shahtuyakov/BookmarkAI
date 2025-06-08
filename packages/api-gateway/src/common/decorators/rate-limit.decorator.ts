@@ -118,7 +118,7 @@ export function BurstRateLimit(options: {
 export function IpRateLimit(config: Omit<RateLimitConfig, 'keyGenerator'>) {
   return RateLimit({
     ...config,
-    keyGenerator: req => `ip:${req.ip}:${(req as Record<string, unknown>).routerPath || req.url}`,
+    keyGenerator: req => `ip:${req.ip}:${req.routerPath || req.url}`,
   });
 }
 
@@ -129,11 +129,11 @@ export function UserRateLimit(config: Omit<RateLimitConfig, 'keyGenerator'>) {
   return RateLimit({
     ...config,
     keyGenerator: req => {
-      const userId = (req as Record<string, unknown>).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw new Error('User-based rate limiting requires authentication');
       }
-      return `user:${userId}:${(req as Record<string, unknown>).routerPath || req.url}`;
+      return `user:${userId}:${req.routerPath || req.url}`;
     },
   });
 }
@@ -145,7 +145,7 @@ export function GlobalRateLimit(config: RateLimitConfig) {
   return RateLimit({
     ...config,
     keyGenerator: req => {
-      const userId = (req as Record<string, unknown>).user?.id;
+      const userId = req.user?.id;
       const identifier = userId || req.ip;
       return `global:${identifier}`;
     },
@@ -159,9 +159,9 @@ export function EndpointRateLimit(config: RateLimitConfig) {
   return RateLimit({
     ...config,
     keyGenerator: req => {
-      const userId = (req as Record<string, unknown>).user?.id;
+      const userId = req.user?.id;
       const identifier = userId || req.ip;
-      const endpoint = (req as Record<string, unknown>).routerPath || req.url;
+      const endpoint = req.routerPath || req.url;
       return `endpoint:${identifier}:${endpoint}`;
     },
   });
