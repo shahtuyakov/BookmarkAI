@@ -6,7 +6,6 @@ import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SharesModule } from './modules/shares/shares.module';
 import { RateLimitMiddleware } from './modules/auth/middlewares/rate-limit.middleware';
-import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { ConfigService } from './config/services/config.service';
 
 /**
@@ -39,9 +38,6 @@ import { ConfigService } from './config/services/config.service';
 export class AppModule {
   // Apply middleware
   configure(consumer: MiddlewareConsumer) {
-    // Apply request ID middleware globally
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
-
     // Apply rate limiting middleware to auth endpoints
     consumer
       .apply(RateLimitMiddleware)

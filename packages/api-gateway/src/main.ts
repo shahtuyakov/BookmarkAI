@@ -4,6 +4,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { getQueueToken } from '@nestjs/bull';
 import fastifyCookie from '@fastify/cookie';
+import { v4 as uuidv4 } from 'uuid';
 import { AppModule } from './app.module';
 import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor';
 import { ApiExceptionFilter } from './common/filters/api-exception.filter';
@@ -43,6 +44,16 @@ async function bootstrap() {
 
   // Apply response envelope interceptor globally
   app.useGlobalInterceptors(new ResponseEnvelopeInterceptor(configService));
+
+  // Get Fastify instance and add request ID hook
+  const fastifyInstance = app.getHttpAdapter().getInstance();
+
+  // Add request ID hook using Fastify's native hooks
+  fastifyInstance.addHook('onRequest', async (request, reply) => {
+    const requestId = (request.headers['x-request-id'] as string) || uuidv4();
+    request.id = requestId;
+    reply.header('X-Request-ID', requestId);
+  });
 
   const config = new DocumentBuilder()
     .setTitle('BookmarkAI API')

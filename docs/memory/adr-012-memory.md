@@ -276,3 +276,92 @@ The ADR-012 implementation is now **complete and production-ready** with:
 - **Excellent developer experience** - detailed errors, documentation, and tooling
 
 All code has been reviewed for quality, type safety, and adherence to ADR-012 specifications.
+
+## ✅ Live Testing Completed (2025-06-09)
+
+### Testing Environment
+
+- **ngrok Tunnel**: Successfully established at `https://bookmarkai-dev.ngrok.io`
+- **API Gateway**: Running on `127.0.0.1:3001` with Fastify adapter
+- **All Endpoints**: Tested and verified with ADR-012 compliance
+
+### Verified Endpoints
+
+#### Auth Endpoints (`/api/auth/*`)
+
+- ✅ POST `/api/auth/register` - Registration with validation
+- ✅ POST `/api/auth/login` - Login with JWT tokens
+- ✅ POST `/api/auth/refresh` - Token refresh
+- ✅ POST `/api/auth/logout` - Secure logout
+- ✅ GET `/api/auth/verify-email` - Email verification
+- ✅ POST `/api/auth/resend-verification` - Resend verification
+- ✅ POST `/api/auth/forgot-password` - Password reset request
+- ✅ POST `/api/auth/reset-password` - Password reset
+- ✅ GET `/api/auth/profile` - Protected profile access
+
+#### Shares Endpoints (`/api/v1/shares/*`)
+
+- ✅ POST `/api/v1/shares` - Create share with idempotency
+- ✅ GET `/api/v1/shares` - Paginated list with cursor
+- ✅ GET `/api/v1/shares/:id` - Get specific share
+
+#### System Endpoints
+
+- ✅ GET `/api/health` - Health check with envelope
+- ✅ GET `/api/test/public` - Public test endpoint
+- ✅ GET `/api/test/protected` - JWT protected endpoint
+- ✅ GET `/api/admin/queues` - Bull Board UI
+
+### ADR-012 Features Verified
+
+1. **Response Envelope** ✅
+
+   - All responses wrapped in `{success, data, meta}` format
+   - Request ID included in meta and headers
+
+2. **Error Handling** ✅
+
+   - Structured error format with codes, messages, and suggestions
+   - Field-level validation details
+   - Proper HTTP status codes
+
+3. **Request Tracking** ✅
+
+   - X-Request-ID header on all responses
+   - Support for client-provided IDs
+   - Correlation across error responses
+
+4. **Authentication** ✅
+
+   - JWT Bearer token authentication
+   - Protected endpoints properly secured
+   - Auth errors with proper codes
+
+5. **Pagination** ✅
+
+   - Cursor-based pagination on shares endpoint
+   - Proper response structure with hasMore flag
+
+6. **Rate Limiting** ✅
+   - Applied to auth endpoints
+   - Headers included (when triggered)
+
+### Fix Applied During Testing
+
+- **Fastify Middleware Compatibility**: Resolved middleware issues by replacing NestJS middleware with native Fastify hooks for request ID handling
+- **Request ID Hook**: Implemented in `main.ts` using Fastify's `onRequest` hook
+- **Exception Filter**: Maintained compatibility with Fastify response methods
+
+### Production Deployment Checklist
+
+- ✅ Response envelope interceptor active
+- ✅ Error handling with full taxonomy
+- ✅ Request correlation working
+- ✅ All endpoints following ADR-012 format
+- ✅ Backward compatibility maintained
+- ✅ ngrok integration tested for local development
+- ✅ Swagger documentation accessible at `/api/docs`
+- ✅ TypeScript compilation clean
+- ✅ No runtime errors in testing
+
+The BookmarkAI API is now fully compliant with ADR-012 specifications and ready for production use.
