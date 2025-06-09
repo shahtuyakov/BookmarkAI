@@ -6,11 +6,8 @@ export default defineConfig(({ mode }) => {
   // Load env file based on mode (development, production)
   const env = loadEnv(mode, process.cwd(), ''); // Load all env vars
 
-  // DEBUG: Log loaded environment variables during Vite config processing
-  console.log('[DEBUG] Vite Mode:', mode);
-  console.log('[DEBUG] Loaded env in vite.config.ts (all vars):', env);
-  console.log('[DEBUG] VITE_OAUTH_AUTH_URL in vite.config.ts:', env.VITE_OAUTH_AUTH_URL);
-  console.log('[DEBUG] VITE_API_BASE_URL in vite.config.ts:', env.VITE_API_BASE_URL);
+  // Load environment variables for Vite config processing
+  // Debug logging removed for production build
 
   return {
     plugins: [
@@ -28,6 +25,11 @@ export default defineConfig(({ mode }) => {
           'service-worker': resolve(__dirname, 'src/background/service-worker.ts'),
           'popup-script': resolve(__dirname, 'src/popup/popup.tsx'),
         },
+        external: [
+          'react-native',
+          '@react-native',
+          'react-native/**',
+        ],
         output: [
           {
             entryFileNames: (chunkInfo) => {

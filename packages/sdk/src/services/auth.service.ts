@@ -1,6 +1,26 @@
 import { StorageAdapter } from '../adapters/types';
 import { SingleFlight } from '../utils/singleflight';
-import { DeviceEventEmitter } from 'react-native';
+
+// Conditional React Native import for cross-platform compatibility
+interface EventEmitter {
+  emit: (event: string, ...args: unknown[]) => void;
+  addListener: (event: string, listener: (...args: unknown[]) => void) => { remove: () => void };
+  removeAllListeners: (event?: string) => void;
+}
+
+let DeviceEventEmitter: EventEmitter;
+try {
+  // Only import React Native if available (mobile environment)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  DeviceEventEmitter = require('react-native').DeviceEventEmitter;
+} catch (error) {
+  // Fallback for non-React Native environments (web, extension)
+  DeviceEventEmitter = {
+    emit: () => {},
+    addListener: () => ({ remove: () => {} }),
+    removeAllListeners: () => {},
+  };
+}
 
 export interface TokenPair {
   accessToken: string;
