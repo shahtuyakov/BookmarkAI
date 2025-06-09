@@ -16,7 +16,7 @@ import { ConfigService } from './config/services/config.service';
     // Core infrastructure modules
     ConfigModule,
     DatabaseModule,
-    
+
     // Register BullMQ for queue management
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -36,14 +36,15 @@ import { ConfigService } from './config/services/config.service';
   ],
 })
 export class AppModule {
-  // Apply rate limiting middleware to auth endpoints
+  // Apply middleware
   configure(consumer: MiddlewareConsumer) {
+    // Apply rate limiting middleware to auth endpoints
     consumer
       .apply(RateLimitMiddleware)
       .forRoutes(
         { path: 'auth/login', method: RequestMethod.POST },
         { path: 'auth/register', method: RequestMethod.POST },
-        { path: 'auth/refresh', method: RequestMethod.POST }
+        { path: 'auth/refresh', method: RequestMethod.POST },
       );
   }
 }
