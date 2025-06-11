@@ -23,7 +23,32 @@
     "seed:ci": "npm run seed:build && NODE_ENV=ci node scripts/dist/seed/ci.js",
     "seed:ci:local": "npm run seed:build && NODE_ENV=ci-local node scripts/dist/seed/ci.js",
     "seed:clean": "npm run seed:build && CLEAN_SEED=true node scripts/dist/seed/ci.js",
-    "dev:tunnel": "node scripts/setup-ngrok.js"
+    "dev:tunnel": "node scripts/setup-ngrok.js",
+    
+    "install:all": "pnpm install",
+    "build:all": "pnpm -r build",
+    "test:all": "pnpm -r test",
+    "lint:all": "pnpm -r lint",
+    "typecheck:all": "pnpm -r typecheck",
+    
+    "dev:api": "pnpm --filter api-gateway start:dev",
+    "dev:mobile": "pnpm --filter @bookmarkai/mobile start",
+    "dev:extension": "pnpm --filter @bookmarkai/extension dev",
+    "dev:sdk": "pnpm --filter @bookmarkai/sdk dev",
+    
+    "build:extension": "pnpm --filter @bookmarkai/extension build",
+    "build:sdk": "pnpm --filter @bookmarkai/sdk build",
+    
+    "db:generate": "pnpm --filter api-gateway db:generate",
+    "db:migrate": "pnpm --filter api-gateway db:migrate",
+    
+    "mobile:ios": "pnpm --filter @bookmarkai/mobile ios",
+    "mobile:android": "pnpm --filter @bookmarkai/mobile android",
+    "mobile:metro": "pnpm --filter @bookmarkai/mobile start",
+    
+    "deps:check": "pnpm -r outdated",
+    "deps:update": "pnpm -r update",
+    "deps:audit": "pnpm audit"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -50,7 +75,39 @@
     "pyright": "^1.1.350",
     "ts-prune": "^0.10.3",
     "typescript": "^5.0.0",
-    "@types/pg": "^8.10.9",
-    "@types/ioredis": "^5.0.0"
+    "@types/pg": "^8.10.9"
+  },
+  "pnpm": {
+    "overrides": {
+      "axios": "^1.9.0",
+      "uuid": "^11.1.0",
+      "typescript": "^5.8.3",
+      "eslint": "^8.57.0",
+      "@typescript-eslint/eslint-plugin": "^6.15.0",
+      "@typescript-eslint/parser": "^6.15.0",
+      "@types/jest": "^29.5.14",
+      "@bull-board/ui": "^5.23.0",
+      "node-fetch": "^2.6.11",
+      "glob": "^11.0.0",
+      "rimraf": "^6.0.0",
+      "request": "false"
+    },
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "@babel/*",
+        "react-native-windows",
+        "@types/react-native",
+        "@bull-board/ui",
+        "@fastify/static"
+      ],
+      "allowedVersions": {
+        "react": "18 || 19",
+        "react-native": "0.79",
+        "@nestjs/common": "8 || 9 || 10 || 11",
+        "@nestjs/core": "8 || 9 || 10 || 11",
+        "@fastify/static": "6 || 7 || 8",
+        "node-fetch": "2 || 3"
+      }
+    }
   }
 }
