@@ -25,6 +25,7 @@ module.exports = {
     '.lintstagedrc.js',
     '.prettierrc.js',
     'scripts/**/*.js',
+    '**/metro.config.js',
   ],
   env: {
     node: true,

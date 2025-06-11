@@ -173,9 +173,9 @@ class SQLiteQueueManager {
             
             sqlite3_finalize(statement)
             
-            // Debug: If we have items but they seem empty, inspect the database
+            // Debug: If we have items but they seem empty, log warning
             if items.count > 0 && items.first?.url.isEmpty == true {
-                debugDatabaseContents()
+                print("⚠️ SQLiteQueueManager: Found items with empty URLs - database may have corrupted data")
             }
             
             return items
@@ -319,7 +319,7 @@ class SQLiteQueueManager {
             
             if sqlite3_prepare_v2(db, deleteSQL, -1, &statement, nil) == SQLITE_OK {
                 if sqlite3_step(statement) == SQLITE_DONE {
-                    let deletedCount = Int(sqlite3_changes(db))
+                    _ = Int(sqlite3_changes(db))
                     sqlite3_finalize(statement)
                     return true
                 }

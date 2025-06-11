@@ -1,8 +1,9 @@
+/* eslint-env node */
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
 const path = require('path');
 
 /**
- * Metro configuration for React Native 0.79.2 with local SDK package support
+ * Metro configuration for React Native 0.79.2 with PNPM monorepo support
  */
 const config = {
   transformer: {
@@ -14,15 +15,20 @@ const config = {
     // New Architecture module resolution
     unstable_enablePackageExports: true,
     unstable_conditionNames: ['react-native', 'browser', 'require'],
-    // Add SDK package to node modules map
+    // PNPM monorepo node modules resolution
     nodeModulesPaths: [
       path.resolve(__dirname, 'node_modules'),
       path.resolve(__dirname, '../../sdk/node_modules'),
+      path.resolve(__dirname, '../../../node_modules'), // Root node_modules for hoisted packages
     ],
+    // Alias for workspace packages
+    alias: {
+      '@bookmarkai/sdk': path.resolve(__dirname, '../../sdk'),
+    },
   },
   watchFolders: [
-    // Watch the SDK package for changes
-    path.resolve(__dirname, '../../sdk'),
+    // Watch the entire monorepo for changes
+    path.resolve(__dirname, '../../..'),
   ],
 };
 
