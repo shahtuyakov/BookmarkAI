@@ -191,3 +191,39 @@ pnpm --filter @bookmarkai/sdk typecheck  # Type checking
 ✅ React Native compatibility with isolated node-linker  
 ✅ Faster installs with content-addressable storage  
 ✅ Cross-platform SDK compatibility (web/mobile/extension)
+
+### Contract Testing
+
+# Build shared test matchers package
+pnpm --filter @bookmarkai/test-matchers build
+
+# Run consumer contract tests (React Native)
+pnpm --filter @bookmarkai/mobile test:contracts
+
+# Run provider verification (requires running API)
+# First start PostgreSQL and Redis:
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres --name postgres postgres:15
+docker run -d -p 6379:6379 --name redis redis:7
+
+# Then in api-gateway:
+pnpm --filter api-gateway db:migrate
+pnpm --filter api-gateway start:test  # In one terminal
+pnpm --filter api-gateway test:contracts:verify  # In another terminal
+
+# Generate types from OpenAPI
+pnpm --filter api-gateway generate:types
+pnpm --filter api-gateway generate:all  # For all platforms
+
+# View generated pact contracts
+cat packages/mobile/bookmarkaimobile/pacts/*.json | jq .
+
+# Run CI contract test pipeline locally
+./test-contracts-local.sh
+
+### Native Platform Contract Tests
+
+# iOS contract tests
+cd ios && xcodebuild test -scheme BookmarkAI -destination 'platform=iOS Simulator,name=iPhone 14' -only-testing:BookmarkAITests/ContractTests
+
+# Android contract tests  
+cd android && ./gradlew testDebugUnitTest --tests "*ContractTest*"

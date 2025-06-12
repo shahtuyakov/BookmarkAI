@@ -303,44 +303,6 @@ class ShareHandlerBridgeContractTests {
 }
 ```
 
-### 2.8 CI/CD Integration
-
-```yaml
-# .github/workflows/contract-tests.yml
-name: Contract Tests
-on: [push, pull_request]
-
-jobs:
-  consumer-contracts:
-    strategy:
-      matrix:
-        platform: [react-native, webextension, ios, android]
-    steps:
-      - name: Run consumer contract tests
-        run: npm run test:contracts:${{ matrix.platform }}
-
-      - name: Publish contracts to PactFlow
-        run: |
-          npx pact-broker publish pacts \
-            --consumer-app-version=${{ github.sha }} \
-            --tag=${{ github.ref_name }}
-
-  provider-verification:
-    needs: consumer-contracts
-    steps:
-      - name: Verify all contracts
-        run: npm run test:contracts:verify
-
-      - name: Can-i-deploy check
-        run: |
-          npx pact-broker can-i-deploy \
-            --pacticipant=api-gateway \
-            --version=${{ github.sha }} \
-            --to-environment=production
-```
-
----
-
 ## 3 — Options Considered
 
 | Option                     | Pros                                                | Cons                                      | Decision        |

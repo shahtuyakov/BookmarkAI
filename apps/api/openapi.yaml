@@ -615,6 +615,54 @@ components:
           description: Trace ID for debugging
           example: 'trace_123e4567'
 
+    # Contract Testing Schema - Used for cross-platform share queue synchronization
+    ShareQueueEntry:
+      type: object
+      required:
+        - id
+        - url
+        - createdAt
+        - status
+        - source
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
+          description: ULID format identifier
+          example: '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+        url:
+          type: string
+          format: uri
+          pattern: '^https?://.+'
+          description: URL to be shared
+          example: 'https://example.com/article'
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp
+          example: '2024-01-15T10:30:00.000Z'
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          description: Processing status
+          example: 'pending'
+        source:
+          type: string
+          enum: [ios-share-extension, android-share-intent, webextension, react-native]
+          description: Platform that created the share
+          example: 'react-native'
+        metadata:
+          type: object
+          nullable: true
+          properties:
+            title:
+              type: string
+              example: 'Example Page'
+            description:
+              type: string
+              example: 'Example description'
+          additionalProperties: true
+
     # Health Check (updated to envelope format)
     HealthResponse:
       allOf:
