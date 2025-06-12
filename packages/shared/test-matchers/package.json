@@ -1,0 +1,30 @@
+{
+  "name": "@bookmarkai/test-matchers",
+  "version": "1.0.0",
+  "description": "Shared contract testing matchers for BookmarkAI",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["pact", "contract-testing", "matchers"],
+  "author": "BookmarkAI Team",
+  "license": "MIT",
+  "peerDependencies": {
+    "@pact-foundation/pact": ">=10.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
+  }
+}

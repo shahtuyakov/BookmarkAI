@@ -1,0 +1,100 @@
+{
+  "consumer": {
+    "name": "bookmarkai-react-native"
+  },
+  "interactions": [
+    {
+      "description": "a request to create a share from React Native",
+      "providerState": "user is authenticated",
+      "request": {
+        "body": {
+          "notes": "Remember to read this later",
+          "title": "Interesting article",
+          "url": "https://example.com/article"
+        },
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "550e8400-e29b-41d4-a716-446655440000",
+          "User-Agent": "BookmarkAI-ReactNative/1.0.0"
+        },
+        "matchingRules": {
+          "$.body": {
+            "match": "type"
+          },
+          "$.header['Idempotency-Key']": {
+            "match": "regex",
+            "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "$.header['User-Agent']": {
+            "match": "regex",
+            "regex": ".*BookmarkAI-ReactNative.*"
+          }
+        },
+        "method": "POST",
+        "path": "/v1/shares"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "createdAt": "2024-01-15T10:30:00.000Z",
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "notes": "Remember to read this later",
+            "status": "pending",
+            "title": "Interesting article",
+            "updatedAt": "2024-01-15T10:30:00.000Z",
+            "url": "https://example.com/article",
+            "userId": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+          },
+          "meta": {
+            "requestId": "550e8400-e29b-41d4-a716-446655440000",
+            "version": "1.0.0"
+          },
+          "success": true
+        },
+        "generators": null,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.data.createdAt": {
+            "match": "regex",
+            "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "$.body.data.id": {
+            "match": "regex",
+            "regex": "^[0-9A-HJKMNP-TV-Z]{26}$"
+          },
+          "$.body.data.updatedAt": {
+            "match": "regex",
+            "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "$.body.data.userId": {
+            "match": "regex",
+            "regex": "^[0-9A-HJKMNP-TV-Z]{26}$"
+          },
+          "$.body.meta.requestId": {
+            "match": "regex",
+            "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          }
+        },
+        "status": 202
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "12.5.2"
+    },
+    "pactRust": {
+      "ffi": "0.4.20",
+      "models": "1.2.0"
+    },
+    "pactSpecification": {
+      "version": "2.0.0"
+    }
+  },
+  "provider": {
+    "name": "bookmarkai-api-gateway"
+  }
+}

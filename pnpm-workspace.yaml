@@ -2,6 +2,7 @@ packages:
   - 'packages/*'
   - 'packages/mobile/bookmarkaimobile'
   - 'packages/*/*/*'
+  - 'packages/shared/*'
   - 'python/*'
 
 catalog:

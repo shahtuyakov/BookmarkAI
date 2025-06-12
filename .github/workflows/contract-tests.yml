@@ -1,0 +1,202 @@
+name: Contract Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PACT_BROKER_URL: ${{ secrets.PACT_BROKER_URL }}
+  PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+  NODE_VERSION: '18'
+
+jobs:
+  consumer-contracts:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [react-native, webextension, ios, android]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.11.0
+          
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Build test matchers package
+        run: pnpm --filter @bookmarkai/test-matchers build
+        
+      - name: Generate types from OpenAPI
+        run: pnpm --filter api-gateway run generate:types
+        
+      - name: Run React Native consumer contract tests
+        if: matrix.platform == 'react-native'
+        run: pnpm --filter @bookmarkai/mobile run test:contracts
+        
+      - name: Run WebExtension consumer contract tests
+        if: matrix.platform == 'webextension'
+        run: pnpm --filter webextension run test:contracts
+        continue-on-error: true # WebExtension tests not implemented yet
+        
+      - name: Run iOS consumer contract tests
+        if: matrix.platform == 'ios'
+        run: |
+          cd ios
+          xcodebuild test -scheme BookmarkAI -destination 'platform=iOS Simulator,name=iPhone 14' -only-testing:BookmarkAITests/ContractTests
+        continue-on-error: true # iOS tests not implemented yet
+        
+      - name: Run Android consumer contract tests
+        if: matrix.platform == 'android'
+        run: |
+          cd android
+          ./gradlew testDebugUnitTest --tests "*ContractTest*"
+        continue-on-error: true # Android tests not implemented yet
+        
+      - name: Publish contracts to PactFlow
+        if: env.PACT_BROKER_URL != ''
+        run: |
+          npx pact-broker publish pacts \
+            --consumer-app-version=${{ github.sha }} \
+            --tag=${{ github.ref_name }} \
+            --broker-base-url=${{ env.PACT_BROKER_URL }} \
+            --broker-token=${{ env.PACT_BROKER_TOKEN }}
+
+  provider-verification:
+    needs: consumer-contracts
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bookmarkai_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.11.0
+          
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+            
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Generate RSA keys for JWT
+        run: |
+          cd packages/api-gateway
+          node generate-keys.js
+          
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bookmarkai_test
+        run: |
+          cd packages/api-gateway
+          pnpm run db:migrate
+          
+      - name: Start API Gateway
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bookmarkai_test
+          REDIS_URL: redis://localhost:6379
+          JWT_PRIVATE_KEY_PATH: ./dev/keys/private.pem
+          JWT_PUBLIC_KEY_PATH: ./dev/keys/public.pem
+        run: |
+          cd packages/api-gateway
+          pnpm run start:test &
+          npx wait-on http://localhost:3001/api/health -t 30000
+          
+      - name: Verify contracts
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bookmarkai_test
+          REDIS_URL: redis://localhost:6379
+          GIT_COMMIT: ${{ github.sha }}
+        run: |
+          cd packages/api-gateway
+          pnpm run test:contracts:verify
+          
+      - name: Can-i-deploy check
+        if: env.PACT_BROKER_URL != ''
+        run: |
+          npx pact-broker can-i-deploy \
+            --pacticipant=bookmarkai-api-gateway \
+            --version=${{ github.sha }} \
+            --to-environment=production \
+            --broker-base-url=${{ env.PACT_BROKER_URL }} \
+            --broker-token=${{ env.PACT_BROKER_TOKEN }}
+
+  contract-test-summary:
+    needs: [consumer-contracts, provider-verification]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check contract test results
+        run: |
+          if [[ "${{ needs.consumer-contracts.result }}" == "failure" ]] || [[ "${{ needs.provider-verification.result }}" == "failure" ]]; then
+            echo "Contract tests failed!"
+            exit 1
+          else
+            echo "All contract tests passed!"
+          fi
