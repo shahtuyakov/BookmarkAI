@@ -1,3 +1,4 @@
+import { AxiosError } from 'axios';
 import { BookmarkAIClient } from '../client';
 import { ShareBatchProcessor } from '../utils/batch';
 
@@ -10,7 +11,7 @@ interface ApiResponse<T> {
   error?: {
     code: string;
     message: string;
-    details?: any;
+    details?: unknown;
   };
 }
 
@@ -19,7 +20,7 @@ interface ApiResponse<T> {
  */
 function unwrapApiResponse<T>(response: { data: ApiResponse<T> | T }): T {
   const responseData = response.data;
-  
+
   // If it's wrapped in ApiResponse format, extract the data
   if (responseData && typeof responseData === 'object' && 'success' in responseData) {
     const apiResponse = responseData as ApiResponse<T>;
@@ -28,7 +29,7 @@ function unwrapApiResponse<T>(response: { data: ApiResponse<T> | T }): T {
     }
     return apiResponse.data;
   }
-  
+
   // Otherwise return as-is (backwards compatibility)
   return responseData as T;
 }
@@ -47,7 +48,7 @@ export interface Share {
   status: 'pending' | 'processing' | 'done' | 'failed';
   platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'unknown';
   userId: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   processedAt?: string;
@@ -73,12 +74,36 @@ export interface SharesServiceOptions {
   maxBatchSize?: number;
 }
 
+// In-memory cache to reuse idempotency keys for the same URL within a short time window
+const inMemoryKeyCache: Map<string, { key: string; ts: number }> = new Map();
+
+// Reuse window (ms)
+const KEY_REUSE_WINDOW_MS = 30_000;
+
+function isTransientNetworkError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  // AxiosError codes for network issues across environments
+  const TRANSIENT_CODES = ['ECONNABORTED', 'ENETUNREACH', 'ETIMEDOUT', 'ECONNRESET', 'ERR_NETWORK'];
+
+  if ((error as AxiosError).isAxiosError) {
+    const code = (error as AxiosError).code;
+    return code ? TRANSIENT_CODES.includes(code) : false;
+  }
+
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export class SharesService {
   private batchProcessor?: ShareBatchProcessor;
 
   constructor(
     private client: BookmarkAIClient,
-    options: SharesServiceOptions = {}
+    options: SharesServiceOptions = {},
   ) {
     if (options.enableBatching !== false) {
       this.initializeBatchProcessor();
@@ -89,8 +114,20 @@ export class SharesService {
    * Create a new share
    */
   async create(request: CreateShareRequest, idempotencyKey?: string): Promise<Share> {
-    // Generate idempotency key if not provided
-    const key = idempotencyKey || this.generateIdempotencyKey();
+    // Generate or reuse idempotency key
+    let key = idempotencyKey;
+
+    if (!key) {
+      const cached = inMemoryKeyCache.get(request.url);
+      const now = Date.now();
+
+      if (cached && now - cached.ts < KEY_REUSE_WINDOW_MS) {
+        key = cached.key;
+      } else {
+        key = this.generateIdempotencyKey();
+        inMemoryKeyCache.set(request.url, { key, ts: now });
+      }
+    }
 
     // If batching is enabled and we're not explicitly bypassing it
     if (this.batchProcessor && !idempotencyKey) {
@@ -100,17 +137,36 @@ export class SharesService {
       }) as Promise<Share>;
     }
 
-    // Direct API call
-    const response = await this.client.request<ApiResponse<Share> | Share>({
-      url: '/shares',
-      method: 'POST',
-      headers: {
-        'idempotency-key': key,
-      },
-      data: request,
-    });
+    // Direct API call with transient-error retry (max 3 attempts)
+    const MAX_ATTEMPTS = 3;
+    let attempt = 0;
 
-    return unwrapApiResponse<Share>(response);
+    while (attempt < MAX_ATTEMPTS) {
+      try {
+        const response = await this.client.request<ApiResponse<Share> | Share>({
+          url: '/shares',
+          method: 'POST',
+          headers: {
+            'idempotency-key': key,
+          },
+          data: request,
+        });
+
+        return unwrapApiResponse<Share>(response);
+      } catch (error) {
+        if (isTransientNetworkError(error) && attempt < MAX_ATTEMPTS - 1) {
+          const baseDelay = 100 * Math.pow(2, attempt); // 100ms, 200ms
+          const jitter = Math.random() * 0.3 * baseDelay;
+          await sleep(baseDelay + jitter);
+          attempt += 1;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    // Should never reach here
+    throw new Error('Failed to create share after retries');
   }
 
   /**
@@ -122,7 +178,9 @@ export class SharesService {
       idempotencyKey: this.generateIdempotencyKey(),
     }));
 
-    const response = await this.client.request<ApiResponse<CreateSharesBatchResponse> | CreateSharesBatchResponse>({
+    const response = await this.client.request<
+      ApiResponse<CreateSharesBatchResponse> | CreateSharesBatchResponse
+    >({
       url: '/shares/batch',
       method: 'POST',
       data: { shares: sharesWithKeys },
@@ -191,18 +249,18 @@ export class SharesService {
    * Wait for a share to be processed
    */
   async waitForProcessing(
-    shareId: string, 
+    shareId: string,
     options: {
       timeout?: number;
       pollInterval?: number;
-    } = {}
+    } = {},
   ): Promise<Share> {
     const { timeout = 30000, pollInterval = 1000 } = options;
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
       const share = await this.get(shareId);
-      
+
       if (share.status === 'done' || share.status === 'failed') {
         return share;
       }
@@ -217,9 +275,9 @@ export class SharesService {
    * Generate a unique idempotency key
    */
   private generateIdempotencyKey(): string {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
       return v.toString(16);
     });
   }
@@ -228,16 +286,14 @@ export class SharesService {
    * Initialize batch processor
    */
   private initializeBatchProcessor(): void {
-    this.batchProcessor = new ShareBatchProcessor(
-      async (shares) => {
-        const response = await this.createBatch(
-          shares.map(({ idempotencyKey, ...share }) => share)
-        );
+    this.batchProcessor = new ShareBatchProcessor(async shares => {
+      const response = await this.createBatch(
+        shares.map(({ idempotencyKey: _, ...share }) => share),
+      );
 
-        // Map accepted shares back
-        return response.accepted;
-      }
-    );
+      // Map accepted shares back
+      return response.accepted;
+    });
   }
 
   /**
