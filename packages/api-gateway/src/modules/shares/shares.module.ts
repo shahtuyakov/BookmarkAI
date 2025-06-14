@@ -1,12 +1,15 @@
 import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
-import { SharesController } from './controllers/shares.controller';
-import { SharesService } from './services/shares.service';
-import { IdempotencyService } from './services/idempotency.service';
-import { SharesRateLimitMiddleware } from './middlewares/rate-limit.middleware';
-import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ConfigService } from '../../config/services/config.service';
 import { AuthModule } from '../auth/auth.module';
+import { DrizzleService } from '../../database/services/drizzle.service';
+import { SharesController } from './controllers/shares.controller';
+import { MetricsController } from './controllers/metrics.controller';
+import { SharesService } from './services/shares.service';
+import { IdempotencyService } from './services/idempotency.service';
+import { MetricsService } from './services/metrics.service';
+import { SharesRateLimitMiddleware } from './middlewares/rate-limit.middleware';
+import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ErrorService } from './services/error.service';
 import { ShareProcessor } from './queue/share-processor';
 
@@ -17,7 +20,7 @@ import { ShareProcessor } from './queue/share-processor';
   imports: [
     // Import AuthModule to access JwtAuthGuard and KmsJwtService
     AuthModule,
-    
+
     // Register BullMQ queue with enhanced configuration from ADR
     BullModule.registerQueueAsync({
       name: SHARE_QUEUE.NAME,
@@ -34,28 +37,30 @@ import { ShareProcessor } from './queue/share-processor';
             delay: 5000,
           },
           timeout: configService.get('WORKER_TIMEOUT_MS', 30000),
-          removeOnComplete: { 
-            age: configService.get('COMPLETED_JOB_TTL_SECONDS', 86400) // 24 hours
+          removeOnComplete: {
+            age: configService.get('COMPLETED_JOB_TTL_SECONDS', 86400), // 24 hours
           },
-          removeOnFail: { 
-            age: configService.get('FAILED_JOB_TTL_SECONDS', 604800) // 7 days
+          removeOnFail: {
+            age: configService.get('FAILED_JOB_TTL_SECONDS', 604800), // 7 days
           },
         },
       }),
     }),
   ],
-  controllers: [SharesController],
+  controllers: [SharesController, MetricsController],
   providers: [
-    SharesService, 
+    SharesService,
     IdempotencyService,
+    MetricsService,
+    DrizzleService,
     ErrorService,
-    ShareProcessor // Register the processor here
+    ShareProcessor, // Register the processor here
   ],
   exports: [
-    SharesService, 
-    IdempotencyService, 
+    SharesService,
+    IdempotencyService,
     ErrorService,
-    BullModule // Export BullModule so other modules can access the queue
+    BullModule, // Export BullModule so other modules can access the queue
   ],
 })
 export class SharesModule {
