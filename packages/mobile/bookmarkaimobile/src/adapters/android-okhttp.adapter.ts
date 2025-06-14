@@ -129,7 +129,7 @@ export class AndroidOkHttpAdapter implements NetworkAdapter {
    * Setup event listeners for progress tracking
    */
   private setupEventListeners(): void {
-    if (!this.eventEmitter) return;
+    if (!this.eventEmitter) {return;}
 
     // Upload progress
     this.eventEmitter.addListener('OkHttpUploadProgress', (event: ProgressEvent) => {
@@ -160,7 +160,7 @@ export class AndroidOkHttpAdapter implements NetworkAdapter {
    */
   private convertRequest(request: NetworkRequest): OkHttpRequestConfig {
     const requestId = this.generateRequestId();
-    
+
     return {
       requestId,
       url: request.url,
@@ -168,7 +168,7 @@ export class AndroidOkHttpAdapter implements NetworkAdapter {
       headers: request.headers || {},
       body: request.body ? JSON.stringify(request.body) : undefined,
       timeout: request.timeout,
-      priority: this.mapPriority(request.priority)
+      priority: this.mapPriority(request.priority),
     };
   }
 
@@ -193,7 +193,7 @@ export class AndroidOkHttpAdapter implements NetworkAdapter {
    */
   private convertResponse(response: OkHttpResponse): NetworkResponse {
     let data: any;
-    
+
     try {
       // Try to parse as JSON first
       data = JSON.parse(response.data);
@@ -213,8 +213,8 @@ export class AndroidOkHttpAdapter implements NetworkAdapter {
         isRedirect: response.isRedirect,
         networkInfo: response.networkInfo,
         adapter: 'OkHttp',
-        platform: 'android'
-      }
+        platform: 'android',
+      },
     };
   }
 
@@ -228,9 +228,9 @@ export class AndroidOkHttpAdapter implements NetworkAdapter {
 
     try {
       console.log(`🚀 OkHttp: ${request.method || 'GET'} ${request.url}`);
-      
+
       const config = this.convertRequest(request);
-      
+
       // Setup progress tracking if requested
       if (request.onProgress) {
         this.progressListeners.set(config.requestId!, (event: ProgressEvent) => {
@@ -238,27 +238,27 @@ export class AndroidOkHttpAdapter implements NetworkAdapter {
             loaded: event.bytesTransferred,
             total: event.totalBytes,
             progress: event.progress,
-            type: event.type
+            type: event.type,
           });
         });
       }
 
       const response = await OkHttpNetworkAdapterNative.request(config);
-      
+
       // Cleanup progress listener
       if (config.requestId) {
         this.progressListeners.delete(config.requestId);
       }
 
       const networkResponse = this.convertResponse(response);
-      
+
       console.log(`✅ OkHttp: ${response.status} ${request.url} (${response.responseTime}ms)`);
-      
+
       return networkResponse;
 
     } catch (error: any) {
       console.error(`❌ OkHttp: ${request.method || 'GET'} ${request.url} failed:`, error.message);
-      
+
       // Convert native errors to standard format
       throw new Error(`OkHttp request failed: ${error.message || 'Unknown error'}`);
     }
@@ -305,7 +305,7 @@ export class AndroidOkHttpAdapter implements NetworkAdapter {
    */
   destroy(): void {
     this.progressListeners.clear();
-    
+
     if (this.eventEmitter) {
       this.eventEmitter.removeAllListeners('OkHttpUploadProgress');
       this.eventEmitter.removeAllListeners('OkHttpDownloadProgress');

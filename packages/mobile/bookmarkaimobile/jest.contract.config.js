@@ -8,7 +8,7 @@ module.exports = {
         jsx: 'react',
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
-      }
+      },
     }],
   },
   moduleNameMapper: {

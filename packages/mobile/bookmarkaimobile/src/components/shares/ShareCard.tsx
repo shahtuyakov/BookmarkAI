@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Card, Text, Chip, useTheme, Avatar } from 'react-native-paper';
 import { Share } from '@bookmarkai/sdk';
 
@@ -62,7 +62,7 @@ const formatDate = (dateString: string) => {
 
 const ShareCard: React.FC<ShareCardProps> = ({ share, onPress }) => {
   const theme = useTheme();
-  
+
   // Extract domain from URL
   const getDomain = (url: string) => {
     try {
@@ -72,45 +72,45 @@ const ShareCard: React.FC<ShareCardProps> = ({ share, onPress }) => {
       return url;
     }
   };
-  
+
   // Format title or fallback to URL
   const title = share.metadata?.title || `Content from ${getDomain(share.url)}`;
-  
+
   return (
     <Card style={styles.card} onPress={() => onPress(share)}>
       {share.metadata?.thumbnailUrl ? (
         <Card.Cover source={{ uri: share.metadata.thumbnailUrl }} style={styles.cardCover} />
       ) : (
-        <Card.Cover 
-          source={{ uri: `https://picsum.photos/seed/${share.id}/400/200` }} 
-          style={styles.cardCover} 
+        <Card.Cover
+          source={{ uri: `https://picsum.photos/seed/${share.id}/400/200` }}
+          style={styles.cardCover}
         />
       )}
-      
+
       <Card.Content style={styles.cardContent}>
         <View style={styles.titleContainer}>
-          <Avatar.Icon 
-            size={24} 
-            icon={getPlatformIcon(share.platform)} 
-            style={{ backgroundColor: getPlatformColor(share.platform) }} 
+          <Avatar.Icon
+            size={24}
+            icon={getPlatformIcon(share.platform)}
+            style={{ backgroundColor: getPlatformColor(share.platform) }}
           />
           <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
         </View>
-        
+
         {share.metadata?.author && (
           <Text style={styles.author} numberOfLines={1}>
             By {share.metadata.author}
           </Text>
         )}
-        
+
         {share.metadata?.description && (
           <Text style={styles.description} numberOfLines={2}>
             {share.metadata.description}
           </Text>
         )}
-        
+
         <View style={styles.metaContainer}>
           <Chip
             mode="outlined"
@@ -118,7 +118,7 @@ const ShareCard: React.FC<ShareCardProps> = ({ share, onPress }) => {
             textStyle={{ color: getStatusColor(share.status, theme) }}>
             {share.status.toUpperCase()}
           </Chip>
-          
+
           <Text style={styles.date}>{formatDate(share.createdAt)}</Text>
         </View>
       </Card.Content>

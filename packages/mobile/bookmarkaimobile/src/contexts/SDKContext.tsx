@@ -33,7 +33,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
   const [syncService, setSyncService] = useState<SyncService | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  
+
   // Create storage adapter that will be shared between initialization and token sync
   const [storageAdapter] = useState(() => new ReactNativeStorageAdapter({
     keychain: keychainWrapper,
@@ -47,24 +47,24 @@ export function SDKProvider({ children }: SDKProviderProps) {
         return;
       }
 
-      
+
       // Store tokens using the SDK's expected key format
       const expiresIn = 15 * 60; // 15 minutes in seconds
       const accessTokenExpiry = Date.now() + (expiresIn * 1000);
       const refreshTokenExpiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
-      
-      
+
+
       // Store tokens sequentially to avoid race conditions in ReactNativeStorageAdapter
       await storageAdapter.setItem('bookmarkai_access_token', accessToken);
       await storageAdapter.setItem('bookmarkai_refresh_token', refreshToken || '');
       await storageAdapter.setItem('bookmarkai_token_expiry', JSON.stringify({
         accessTokenExpiry,
-        refreshTokenExpiry
+        refreshTokenExpiry,
       }));
 
       // Verify SDK is now authenticated
       await client.isAuthenticated();
-      
+
     } catch (syncError) {
       // Silent error handling
     }
@@ -78,10 +78,10 @@ export function SDKProvider({ children }: SDKProviderProps) {
         // Create platform-specific network adapter
         // This will use URLSession on iOS and fetch on Android
         const networkAdapter = new PlatformNetworkAdapter();
-        
+
         // Determine API URL based on environment
         // SDK needs the full API base URL since it only adds endpoint paths like /shares
-        const apiUrl = __DEV__ 
+        const apiUrl = __DEV__
           ? 'https://bookmarkai-dev.ngrok.io/api/v1'
           : 'https://api.bookmarkai.com/v1';
 
@@ -128,8 +128,8 @@ export function SDKProvider({ children }: SDKProviderProps) {
             onResponse: (response: any) => {
               return response;
             },
-            onResponseError: (error: any) => {
-              throw error;
+            onResponseError: (err: any) => {
+              throw err;
             },
           });
         }
@@ -142,25 +142,25 @@ export function SDKProvider({ children }: SDKProviderProps) {
           } catch (authCheckError) {
             isAuthenticated = false;
           }
-          
+
           if (!isAuthenticated) {
             // Try to get tokens from AuthContext keychain and sync them to SDK
             try {
               const authCredentials = await keychainWrapper.getInternetCredentials('com.bookmarkai.app');
               if (authCredentials) {
                 const tokenData = JSON.parse(authCredentials.password);
-                
+
                 // Manually store tokens in SDK format
                 const expiresIn = 15 * 60; // 15 minutes in seconds
                 const accessTokenExpiry = Date.now() + (expiresIn * 1000);
                 const refreshTokenExpiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
-                
+
                 // Store tokens sequentially to avoid race conditions
                 await storageAdapter.setItem('bookmarkai_access_token', tokenData.accessToken);
                 await storageAdapter.setItem('bookmarkai_refresh_token', tokenData.refreshToken || '');
                 await storageAdapter.setItem('bookmarkai_token_expiry', JSON.stringify({
                   accessTokenExpiry,
-                  refreshTokenExpiry
+                  refreshTokenExpiry,
                 }));
                 // Check authentication again
                 try {
@@ -184,12 +184,12 @@ export function SDKProvider({ children }: SDKProviderProps) {
 
         setClient(bookmarkClient);
         setSyncService(sync);
-        
+
         // Start enhanced token synchronization
         if (enhancedTokenSync.isAvailable()) {
           enhancedTokenSync.startAutomaticSync();
         }
-        
+
         setIsInitialized(true);
       } catch (err) {
         setError(err as Error);
@@ -210,7 +210,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
       // Stop enhanced token sync
       enhancedTokenSync.stopAutomaticSync();
     };
-  }, []);
+  }, [client, storageAdapter, syncService]);
 
   return (
     <SDKContext.Provider value={{ client, syncService, isInitialized, error, syncAuthTokens }}>
@@ -230,36 +230,36 @@ export function useSDK() {
 // Helper hooks for specific SDK features
 export function useBookmarkClient() {
   const { client, isInitialized, error } = useSDK();
-  
+
   if (!isInitialized) {
     throw new Error('SDK not initialized yet');
   }
-  
+
   if (error) {
     throw error;
   }
-  
+
   if (!client) {
     throw new Error('SDK client not available');
   }
-  
+
   return client;
 }
 
 export function useSyncService() {
   const { syncService, isInitialized, error } = useSDK();
-  
+
   if (!isInitialized) {
     throw new Error('SDK not initialized yet');
   }
-  
+
   if (error) {
     throw error;
   }
-  
+
   if (!syncService) {
     throw new Error('Sync service not available');
   }
-  
+
   return syncService;
 }

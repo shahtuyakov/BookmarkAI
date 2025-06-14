@@ -7,7 +7,7 @@ declare module 'react-native-keychain' {
     service: string;
     storage: string;
   }
-  
+
   // Override the setInternetCredentials return type for SDK compatibility
   export function setInternetCredentials(
     server: string,

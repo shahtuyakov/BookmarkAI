@@ -44,12 +44,12 @@ export const authAPI = {
   login: async (credentials: LoginRequest) => {
     try {
       const response = await apiClient.post<{data: AuthResponse}>('/auth/login', credentials);
-      
+
       const { accessToken, refreshToken, expiresIn } = response.data.data;
-      
+
       // If the server doesn't return user info directly, we'll fetch it
       let user: User;
-      
+
       if (response.data.data.user) {
         // If user data is included in the response
         user = response.data.data.user;
@@ -58,7 +58,7 @@ export const authAPI = {
         await saveTokens(accessToken, refreshToken, expiresIn);
         user = await authAPI.getUserProfile();
       }
-      
+
       await saveTokens(accessToken, refreshToken, expiresIn);
       return { user };
     } catch (error) {
@@ -66,17 +66,17 @@ export const authAPI = {
       throw error;
     }
   },
-  
+
   // Register
   register: async (userData: RegisterRequest) => {
     try {
       const response = await apiClient.post<{data: AuthResponse}>('/auth/register', userData);
-      
+
       const { accessToken, refreshToken, expiresIn } = response.data.data;
-      
+
       // If the server doesn't return user info directly, we'll fetch it
       let user: User;
-      
+
       if (response.data.data.user) {
         // If user data is included in the response
         user = response.data.data.user;
@@ -85,7 +85,7 @@ export const authAPI = {
         await saveTokens(accessToken, refreshToken, expiresIn);
         user = await authAPI.getUserProfile();
       }
-      
+
       await saveTokens(accessToken, refreshToken, expiresIn);
       return { user };
     } catch (error) {
@@ -93,13 +93,13 @@ export const authAPI = {
       throw error;
     }
   },
-  
+
   // Logout
     logout: async () => {
       try {
         // Get the refresh token from storage
         const tokens = await getTokens();
-        
+
         // Call the backend to invalidate token, including the refresh token
         if (tokens?.refreshToken) {
           await apiClient.post('/auth/logout', { refreshToken: tokens.refreshToken });
@@ -109,27 +109,27 @@ export const authAPI = {
       } catch (error) {
         console.error('Error logging out from server', error);
       }
-      
+
       // Always clear local tokens regardless of server response
       await clearTokens();
   },
-  
+
   // Get user profile
   getUserProfile: async () => {
     const response = await apiClient.get<{data: User}>('/auth/profile');
     return response.data.data;
   },
-  
+
   // Request password reset
   requestPasswordReset: async (email: string) => {
     await apiClient.post('/auth/forgot-password', { email });
   },
-  
+
   // Reset password with token
   resetPassword: async (data: ConfirmResetRequest) => {
     await apiClient.post('/auth/reset-password', data);
   },
-  
+
   // Refresh token
   refreshToken: async (refreshToken: string) => {
     const response = await apiClient.post<{data: AuthResponse}>('/auth/refresh', { refreshToken });

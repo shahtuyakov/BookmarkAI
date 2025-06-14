@@ -23,22 +23,22 @@ const AuthNavigator = () => {
           fontSize: 18,
         },
       }}>
-      <Stack.Screen 
-        name="Login" 
-        component={LoginScreen} 
-        options={{ 
+      <Stack.Screen
+        name="Login"
+        component={LoginScreen}
+        options={{
           title: 'Sign In',
           headerShown: false, // Hide header on login screen
         }}
       />
-      <Stack.Screen 
-        name="Register" 
-        component={RegisterScreen} 
+      <Stack.Screen
+        name="Register"
+        component={RegisterScreen}
         options={{ title: 'Create Account' }}
       />
-      <Stack.Screen 
-        name="ForgotPassword" 
-        component={ForgotPasswordScreen} 
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
         options={{ title: 'Reset Password' }}
       />
     </Stack.Navigator>

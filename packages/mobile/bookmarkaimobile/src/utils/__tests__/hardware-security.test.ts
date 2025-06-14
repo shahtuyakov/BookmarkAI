@@ -4,7 +4,7 @@ import { HardwareSecurityService, hardwareSecurityService } from '../hardware-se
 // Mock React Native modules for testing
 jest.mock('react-native', () => ({
   Platform: {
-    OS: 'android'
+    OS: 'android',
   },
   NativeModules: {
     HardwareSecurityModule: {
@@ -20,14 +20,14 @@ jest.mock('react-native', () => ({
       SUPPORTS_HARDWARE_KEYSTORE: true,
       SUPPORTS_STRONGBOX: false,
       SUPPORTS_BIOMETRIC: true,
-      API_LEVEL: 30
-    }
-  }
+      API_LEVEL: 30,
+    },
+  },
 }));
 
 describe('HardwareSecurityService', () => {
   const mockNativeModule = require('react-native').NativeModules.HardwareSecurityModule;
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -59,13 +59,13 @@ describe('HardwareSecurityService', () => {
         apiLevel: 30,
         supportsAES: true,
         supportsECDSA: true,
-        supportsRSA: true
+        supportsRSA: true,
       };
 
       mockNativeModule.getHardwareSecurityInfo.mockResolvedValue(mockSecurityInfo);
 
       const info = await hardwareSecurityService.getSecurityInfo();
-      
+
       expect(info).toEqual(mockSecurityInfo);
       expect(mockNativeModule.getHardwareSecurityInfo).toHaveBeenCalled();
     });
@@ -82,13 +82,13 @@ describe('HardwareSecurityService', () => {
       const mockResult = {
         success: true,
         keyAlias: 'test_key',
-        requiresBiometric: false
+        requiresBiometric: false,
       };
 
       mockNativeModule.generateHardwareKey.mockResolvedValue(mockResult);
 
       const result = await hardwareSecurityService.generateKey('test_key', false);
-      
+
       expect(result).toEqual(mockResult);
       expect(mockNativeModule.generateHardwareKey).toHaveBeenCalledWith('test_key', false);
     });
@@ -97,13 +97,13 @@ describe('HardwareSecurityService', () => {
       const mockResult = {
         success: true,
         keyAlias: 'biometric_key',
-        requiresBiometric: true
+        requiresBiometric: true,
       };
 
       mockNativeModule.generateHardwareKey.mockResolvedValue(mockResult);
 
       const result = await hardwareSecurityService.generateKey('biometric_key', true);
-      
+
       expect(result.requiresBiometric).toBe(true);
       expect(mockNativeModule.generateHardwareKey).toHaveBeenCalledWith('biometric_key', true);
     });
@@ -112,7 +112,7 @@ describe('HardwareSecurityService', () => {
       mockNativeModule.hasHardwareKey.mockResolvedValue(true);
 
       const exists = await hardwareSecurityService.hasKey('test_key');
-      
+
       expect(exists).toBe(true);
       expect(mockNativeModule.hasHardwareKey).toHaveBeenCalledWith('test_key');
     });
@@ -121,7 +121,7 @@ describe('HardwareSecurityService', () => {
       mockNativeModule.deleteHardwareKey.mockResolvedValue(true);
 
       const deleted = await hardwareSecurityService.deleteKey('test_key');
-      
+
       expect(deleted).toBe(true);
       expect(mockNativeModule.deleteHardwareKey).toHaveBeenCalledWith('test_key');
     });
@@ -132,13 +132,13 @@ describe('HardwareSecurityService', () => {
       const mockEncryption = {
         encryptedData: 'encrypted_base64_data',
         iv: 'iv_base64_data',
-        keyAlias: 'test_key'
+        keyAlias: 'test_key',
       };
 
       mockNativeModule.encryptWithHardwareKey.mockResolvedValue(mockEncryption);
 
       const result = await hardwareSecurityService.encrypt('test_key', 'sensitive data');
-      
+
       expect(result).toEqual(mockEncryption);
       expect(mockNativeModule.encryptWithHardwareKey).toHaveBeenCalledWith('test_key', 'sensitive data');
     });
@@ -146,13 +146,13 @@ describe('HardwareSecurityService', () => {
     it('should decrypt data with hardware key', async () => {
       const mockDecryption = {
         decryptedData: 'sensitive data',
-        keyAlias: 'test_key'
+        keyAlias: 'test_key',
       };
 
       mockNativeModule.decryptWithHardwareKey.mockResolvedValue(mockDecryption);
 
       const result = await hardwareSecurityService.decrypt('test_key', 'encrypted_data', 'iv_data');
-      
+
       expect(result).toEqual(mockDecryption);
       expect(mockNativeModule.decryptWithHardwareKey).toHaveBeenCalledWith('test_key', 'encrypted_data', 'iv_data');
     });
@@ -177,13 +177,13 @@ describe('HardwareSecurityService', () => {
         message: 'Hardware security test passed',
         keyGeneration: true,
         encryption: true,
-        decryption: true
+        decryption: true,
       };
 
       mockNativeModule.testHardwareSecurity.mockResolvedValue(mockTestResult);
 
       const result = await hardwareSecurityService.test();
-      
+
       expect(result).toEqual(mockTestResult);
       expect(result.success).toBe(true);
     });
@@ -192,13 +192,13 @@ describe('HardwareSecurityService', () => {
       const mockTestResult = {
         success: false,
         message: 'Hardware security test failed: Key generation failed',
-        error: 'KeyGenerationException'
+        error: 'KeyGenerationException',
       };
 
       mockNativeModule.testHardwareSecurity.mockResolvedValue(mockTestResult);
 
       const result = await hardwareSecurityService.test();
-      
+
       expect(result.success).toBe(false);
       expect(result.error).toBe('KeyGenerationException');
     });
@@ -211,13 +211,13 @@ describe('HardwareSecurityService', () => {
         hasStrongBox: true,
         biometricStatus: 'available',
         isDeviceSecure: true,
-        hasScreenLock: true
+        hasScreenLock: true,
       };
 
       mockNativeModule.getHardwareSecurityInfo.mockResolvedValue(mockSecurityInfo);
 
       const summary = await hardwareSecurityService.getCapabilitiesSummary();
-      
+
       expect(summary.securityLevel).toBe('strongbox');
       expect(summary.biometricSupport).toBe(true);
       expect(summary.recommendedForProduction).toBe(true);
@@ -231,13 +231,13 @@ describe('HardwareSecurityService', () => {
         hasStrongBox: false,
         biometricStatus: 'available',
         isDeviceSecure: true,
-        hasScreenLock: true
+        hasScreenLock: true,
       };
 
       mockNativeModule.getHardwareSecurityInfo.mockResolvedValue(mockSecurityInfo);
 
       const summary = await hardwareSecurityService.getCapabilitiesSummary();
-      
+
       expect(summary.securityLevel).toBe('hardware');
       expect(summary.biometricSupport).toBe(true);
       expect(summary.recommendedForProduction).toBe(true);
@@ -249,13 +249,13 @@ describe('HardwareSecurityService', () => {
         hasStrongBox: false,
         biometricStatus: 'none_enrolled',
         isDeviceSecure: false,
-        hasScreenLock: false
+        hasScreenLock: false,
       };
 
       mockNativeModule.getHardwareSecurityInfo.mockResolvedValue(mockSecurityInfo);
 
       const summary = await hardwareSecurityService.getCapabilitiesSummary();
-      
+
       expect(summary.biometricSupport).toBe(false);
       expect(summary.recommendedForProduction).toBe(false);
       expect(summary.summary).toContain('Warning: Device not secure');

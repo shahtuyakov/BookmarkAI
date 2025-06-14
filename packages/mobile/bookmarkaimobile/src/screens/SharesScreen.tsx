@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function SharesScreen() {
   const insets = useSafeAreaInsets();
-  
+
   // Fetch shares list
   const {
     data,

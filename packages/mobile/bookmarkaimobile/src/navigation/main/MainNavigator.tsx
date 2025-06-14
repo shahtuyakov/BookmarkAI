@@ -41,7 +41,7 @@ const MainNavigator = () => {
       <Tab.Screen
         name="HomeTab"
         component={HomeStack}
-        options={{ 
+        options={{
           title: 'Home',
           headerShown: false,
         }}
@@ -49,7 +49,7 @@ const MainNavigator = () => {
       <Tab.Screen
         name="SearchTab"
         component={SearchScreen}
-        options={{ 
+        options={{
           title: 'Search',
           headerShown: true,
         }}
@@ -57,7 +57,7 @@ const MainNavigator = () => {
       <Tab.Screen
         name="ProfileTab"
         component={ProfileScreen}
-        options={{ 
+        options={{
           title: 'Profile',
           headerShown: true,
         }}

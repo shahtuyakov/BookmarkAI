@@ -5,7 +5,7 @@ import { Platform, NativeModules } from 'react-native';
  * This ensures the ShareUploadWorker can access tokens for background uploads.
  */
 export class AndroidTokenSyncService {
-  
+
   /**
    * Sync authentication tokens with Android native storage
    */
@@ -90,14 +90,14 @@ export class AndroidTokenSyncService {
       // Check React Native token storage
       const { getTokens } = require('./api/client');
       const rnTokens = await getTokens();
-      
+
       // Check Android native token storage
       const androidAuth = await this.isAuthenticated();
 
       console.log('🔍 Authentication State Debug:');
       console.log('  React Native tokens:', rnTokens ? '✅ Present' : '❌ Missing');
       console.log('  Android native auth:', androidAuth ? '✅ Authenticated' : '❌ Not authenticated');
-      
+
       if (rnTokens && !androidAuth) {
         console.log('⚠️ Token sync issue detected! RN has tokens but Android native does not');
       } else if (!rnTokens && androidAuth) {
@@ -111,4 +111,4 @@ export class AndroidTokenSyncService {
   }
 }
 
-export default AndroidTokenSyncService; 
+export default AndroidTokenSyncService;

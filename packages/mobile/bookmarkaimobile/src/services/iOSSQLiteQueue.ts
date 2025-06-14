@@ -82,8 +82,8 @@ export class IOSSQLiteQueueService {
    * Update queue item status
    */
   async updateQueueItemStatus(
-    itemId: string, 
-    status: SQLiteQueueItem['status'], 
+    itemId: string,
+    status: SQLiteQueueItem['status'],
     error?: string
   ): Promise<void> {
     try {
@@ -94,9 +94,9 @@ export class IOSSQLiteQueueService {
 
       await ShareHandler.updateQueueItemStatus(itemId, status, error || null);
       console.log(`✅ IOSSQLiteQueueService: Updated item ${itemId} to ${status}`);
-    } catch (error) {
-      console.error(`❌ IOSSQLiteQueueService: Failed to update item ${itemId}:`, error);
-      throw error;
+    } catch (err) {
+      console.error(`❌ IOSSQLiteQueueService: Failed to update item ${itemId}:`, err);
+      throw err;
     }
   }
 
@@ -160,8 +160,8 @@ export class IOSSQLiteQueueService {
    * Check if SQLite queue is available
    */
   isAvailable(): boolean {
-    return !!(ShareHandler?.getSQLiteQueueItems && 
-              ShareHandler?.updateQueueItemStatus && 
+    return !!(ShareHandler?.getSQLiteQueueItems &&
+              ShareHandler?.updateQueueItemStatus &&
               ShareHandler?.removeQueueItem);
   }
 
@@ -171,10 +171,10 @@ export class IOSSQLiteQueueService {
    */
   async migrateMMKVToSQLite(mmkvItems: any[]): Promise<void> {
     console.log(`🔄 IOSSQLiteQueueService: Migrating ${mmkvItems.length} items from MMKV to SQLite`);
-    
+
     // The native ShareHandler will handle adding items to SQLite
     // This is just for monitoring the migration process
-    
+
     for (const item of mmkvItems) {
       try {
         console.log(`📦 IOSSQLiteQueueService: Migrating item ${item.id || 'unknown'}`);
@@ -184,7 +184,7 @@ export class IOSSQLiteQueueService {
         console.error('❌ IOSSQLiteQueueService: Migration error for item:', item, error);
       }
     }
-    
+
     console.log('✅ IOSSQLiteQueueService: Migration process completed');
   }
 

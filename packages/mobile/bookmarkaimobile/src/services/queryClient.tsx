@@ -14,12 +14,12 @@ export const queryClient = new QueryClient({
       cacheTime: 1000 * 60 * 60 * 24, // 24 hours
       retry: 3,
       retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
-      
+
       // By default, we assume data might be stale and needs refetching
       refetchOnMount: true,
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
-      
+
       // Offline handling: use cached data when offline
       networkMode: 'always',
     },

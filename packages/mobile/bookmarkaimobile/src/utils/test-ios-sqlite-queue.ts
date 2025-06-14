@@ -1,5 +1,5 @@
 import { Platform, Alert } from 'react-native';
-import { IOSSQLiteQueueService, SQLiteQueueItem } from '../services/iOSSQLiteQueue';
+import { IOSSQLiteQueueService } from '../services/iOSSQLiteQueue';
 
 /**
  * iOS SQLite Queue Testing Interface
@@ -18,7 +18,7 @@ export class IOSSQLiteQueueTester {
    */
   async runAllTests(): Promise<void> {
     console.log('🧪 Starting iOS SQLite Queue Test Suite');
-    
+
     if (Platform.OS !== 'ios') {
       Alert.alert('Test Error', 'iOS SQLite tests can only run on iOS platform');
       return;
@@ -27,19 +27,19 @@ export class IOSSQLiteQueueTester {
     try {
       // Basic availability test
       await this.testAvailability();
-      
+
       // Queue statistics test
       await this.testQueueStats();
-      
+
       // Queue retrieval tests
       await this.testGetQueueItems();
-      
+
       // Mock item creation test (since we can't easily trigger share extension in simulator)
       await this.testMockQueueOperations();
-      
+
       // Display results
       this.displayTestResults();
-      
+
     } catch (error) {
       console.error('❌ Test suite failed:', error);
       Alert.alert('Test Suite Failed', `Error: ${error.message}`);
@@ -51,19 +51,19 @@ export class IOSSQLiteQueueTester {
    */
   private async testAvailability(): Promise<void> {
     console.log('🔍 Test 1: Checking SQLite queue availability');
-    
+
     try {
       const isAvailable = this.sqliteQueue.isAvailable();
-      this.testResults['availability'] = isAvailable;
-      
+      this.testResults.availability = isAvailable;
+
       console.log(`📊 SQLite Queue Available: ${isAvailable}`);
-      
+
       if (!isAvailable) {
         console.log('⚠️ SQLite queue not available - this is expected in some simulator configurations');
       }
     } catch (error) {
       console.error('❌ Availability test failed:', error);
-      this.testResults['availability'] = false;
+      this.testResults.availability = false;
     }
   }
 
@@ -72,23 +72,23 @@ export class IOSSQLiteQueueTester {
    */
   private async testQueueStats(): Promise<void> {
     console.log('🔍 Test 2: Getting queue statistics');
-    
+
     try {
       const stats = await this.sqliteQueue.getQueueStats();
-      this.testResults['stats'] = true;
-      
+      this.testResults.stats = true;
+
       console.log('📊 Queue Statistics:', stats);
-      
+
       // Check if stats structure is valid
       if (typeof stats === 'object') {
         console.log('✅ Stats structure is valid');
       } else {
         console.log('⚠️ Stats structure unexpected');
-        this.testResults['stats'] = false;
+        this.testResults.stats = false;
       }
     } catch (error) {
       console.error('❌ Stats test failed:', error);
-      this.testResults['stats'] = false;
+      this.testResults.stats = false;
     }
   }
 
@@ -97,30 +97,30 @@ export class IOSSQLiteQueueTester {
    */
   private async testGetQueueItems(): Promise<void> {
     console.log('🔍 Test 3: Getting queue items');
-    
+
     try {
       // Test getting all items
       const allItems = await this.sqliteQueue.getAllQueueItems();
       console.log(`📦 Total queue items: ${allItems.length}`);
-      
+
       // Test getting pending items
       const pendingItems = await this.sqliteQueue.getPendingQueueItems();
       console.log(`⏳ Pending queue items: ${pendingItems.length}`);
-      
-      this.testResults['getItems'] = true;
-      
+
+      this.testResults.getItems = true;
+
       // Log sample items for inspection
       if (allItems.length > 0) {
         console.log('📋 Sample queue item:', allItems[0]);
       }
-      
+
       if (pendingItems.length > 0) {
         console.log('📋 Sample pending item:', pendingItems[0]);
       }
-      
+
     } catch (error) {
       console.error('❌ Get items test failed:', error);
-      this.testResults['getItems'] = false;
+      this.testResults.getItems = false;
     }
   }
 
@@ -129,24 +129,24 @@ export class IOSSQLiteQueueTester {
    */
   private async testMockQueueOperations(): Promise<void> {
     console.log('🔍 Test 4: Testing mock queue operations');
-    
+
     try {
       // Since we can't easily trigger the share extension in simulator,
       // we'll test the queue management methods directly
-      
+
       // Test cleanup operation
       const cleanedCount = await this.sqliteQueue.cleanupOldItems(1); // 1 hour old
       console.log(`🧹 Cleaned up ${cleanedCount} old items`);
-      
+
       // Test queue stats after cleanup
       const statsAfterCleanup = await this.sqliteQueue.getQueueStats();
       console.log('📊 Stats after cleanup:', statsAfterCleanup);
-      
-      this.testResults['mockOps'] = true;
-      
+
+      this.testResults.mockOps = true;
+
     } catch (error) {
       console.error('❌ Mock operations test failed:', error);
-      this.testResults['mockOps'] = false;
+      this.testResults.mockOps = false;
     }
   }
 
@@ -156,22 +156,22 @@ export class IOSSQLiteQueueTester {
   private displayTestResults(): void {
     console.log('\n📊 iOS SQLite Queue Test Results:');
     console.log('=====================================');
-    
+
     const results = Object.entries(this.testResults);
     const passedTests = results.filter(([_, passed]) => passed).length;
     const totalTests = results.length;
-    
+
     results.forEach(([testName, passed]) => {
       console.log(`${passed ? '✅' : '❌'} ${testName}: ${passed ? 'PASSED' : 'FAILED'}`);
     });
-    
+
     console.log(`\n📈 Summary: ${passedTests}/${totalTests} tests passed`);
-    
+
     // Show alert with results
-    const message = `iOS SQLite Queue Tests\n\n${results.map(([name, passed]) => 
+    const message = `iOS SQLite Queue Tests\n\n${results.map(([name, passed]) =>
       `${passed ? '✅' : '❌'} ${name}`
     ).join('\n')}\n\nPassed: ${passedTests}/${totalTests}`;
-    
+
     Alert.alert('Test Results', message);
   }
 
@@ -180,15 +180,15 @@ export class IOSSQLiteQueueTester {
    */
   async testSyncServiceIntegration(): Promise<void> {
     console.log('🔍 Testing SyncService integration');
-    
+
     try {
       // Import SyncService dynamically to avoid circular dependencies
-      const { SyncService } = await import('../services/SyncService');
-      
+      await import('../services/SyncService');
+
       // We would need an SDK client instance to test this properly
       console.log('📱 SyncService integration test would require SDK client');
       console.log('💡 This test should be run from a component with SDK context');
-      
+
     } catch (error) {
       console.error('❌ SyncService integration test failed:', error);
     }
@@ -200,25 +200,25 @@ export class IOSSQLiteQueueTester {
    */
   async simulateShareExtensionFlow(): Promise<void> {
     console.log('🔍 Simulating share extension flow');
-    
+
     try {
       // Get initial stats
       const initialStats = await this.sqliteQueue.getQueueStats();
       console.log('📊 Initial queue stats:', initialStats);
-      
+
       // This would normally be done by the share extension adding to SQLite
       console.log('💡 In real usage, share extension would add items to SQLite queue');
       console.log('💡 Then ShareHandler would detect new items and send to React Native');
       console.log('💡 SyncService would process the items and update their status');
-      
+
       // Simulate checking for new items (what ShareHandler does)
       const pendingItems = await this.sqliteQueue.getPendingQueueItems();
       console.log(`📦 Found ${pendingItems.length} pending items to process`);
-      
+
       if (pendingItems.length > 0) {
         console.log('📋 Pending items:', pendingItems);
       }
-      
+
     } catch (error) {
       console.error('❌ Share extension simulation failed:', error);
     }
@@ -229,27 +229,27 @@ export class IOSSQLiteQueueTester {
    */
   async testDatabaseLocation(): Promise<void> {
     console.log('🔍 Testing database location and permissions');
-    
+
     try {
       // The SQLite database should be in the app group container
       console.log('📍 Expected database location: App Group Container');
       console.log('🔗 App Group ID: group.com.bookmarkai');
       console.log('📁 Database file: bookmark_queue.sqlite');
-      
+
       // Test if we can get stats (which requires database access)
       const stats = await this.sqliteQueue.getQueueStats();
-      
+
       if (Object.keys(stats).length > 0 || stats.constructor === Object) {
         console.log('✅ Database appears accessible');
-        this.testResults['databaseAccess'] = true;
+        this.testResults.databaseAccess = true;
       } else {
         console.log('⚠️ Database access unclear');
-        this.testResults['databaseAccess'] = false;
+        this.testResults.databaseAccess = false;
       }
-      
+
     } catch (error) {
       console.error('❌ Database location test failed:', error);
-      this.testResults['databaseAccess'] = false;
+      this.testResults.databaseAccess = false;
     }
   }
 
@@ -260,7 +260,7 @@ export class IOSSQLiteQueueTester {
     const timestamp = new Date().toISOString();
     const results = Object.entries(this.testResults);
     const passedTests = results.filter(([_, passed]) => passed).length;
-    
+
     return `
 iOS SQLite Queue Test Report
 Generated: ${timestamp}
@@ -293,14 +293,14 @@ export const runIOSSQLiteQueueTests = async (): Promise<void> => {
  */
 export const runDetailedIOSSQLiteQueueTests = async (): Promise<string> => {
   const tester = new IOSSQLiteQueueTester();
-  
+
   await tester.testAvailability();
   await tester.testDatabaseLocation();
   await tester.testQueueStats();
   await tester.testGetQueueItems();
   await tester.testMockQueueOperations();
   await tester.simulateShareExtensionFlow();
-  
+
   return tester.generateTestReport();
 };
 
@@ -310,19 +310,19 @@ export const runDetailedIOSSQLiteQueueTests = async (): Promise<string> => {
 export const clearIOSSQLiteQueue = async (): Promise<void> => {
   const sqliteQueue = IOSSQLiteQueueService.getInstance();
   console.log('🗑️ Clearing iOS SQLite queue using cleanup workaround...');
-  
+
   try {
     // Use cleanup with 0 hours to clear all completed/failed items
     let deletedCount = await sqliteQueue.cleanupOldItems(0);
     console.log(`🧹 Cleaned up ${deletedCount} old items`);
-    
+
     // Try to get all items to see what's left
     const allItems = await sqliteQueue.getAllQueueItems();
     console.log(`📊 Items remaining after cleanup: ${allItems.length}`);
-    
+
     if (allItems.length > 0) {
       console.log('⚠️ Some items still remain. Try updating them to completed status first.');
-      
+
       // Try to mark pending items as completed so they can be cleaned up
       for (const item of allItems) {
         try {
@@ -332,13 +332,13 @@ export const clearIOSSQLiteQueue = async (): Promise<void> => {
           console.log(`❌ Failed to update item ${item.id}:`, error);
         }
       }
-      
+
       // Try cleanup again
       deletedCount = await sqliteQueue.cleanupOldItems(0);
       console.log(`🧹 Second cleanup removed ${deletedCount} items`);
     }
-    
-    Alert.alert('Cleanup Complete', `Removed items using cleanup method`);
+
+    Alert.alert('Cleanup Complete', 'Removed items using cleanup method');
   } catch (error) {
     console.error('❌ Error during cleanup:', error);
     Alert.alert('Error', `Failed to cleanup queue: ${error.message}`);
@@ -351,12 +351,12 @@ export const clearIOSSQLiteQueue = async (): Promise<void> => {
 export const debugIOSSQLiteQueue = async (): Promise<void> => {
   const sqliteQueue = IOSSQLiteQueueService.getInstance();
   console.log('🔍 Debugging iOS SQLite queue contents...');
-  
+
   try {
     // Get all items
     const allItems = await sqliteQueue.getAllQueueItems();
     console.log(`📊 Total items in queue: ${allItems.length}`);
-    
+
     allItems.forEach((item, index) => {
       console.log(`📦 Item ${index + 1}:`);
       console.log(`   ID: "${item.id}" (length: ${item.id?.length || 0})`);
@@ -366,11 +366,11 @@ export const debugIOSSQLiteQueue = async (): Promise<void> => {
       console.log(`   Status: "${item.status}"`);
       console.log(`   Created: ${new Date(item.timestamp)}`);
     });
-    
+
     // Get queue stats
     const stats = await sqliteQueue.getQueueStats();
     console.log('📊 Queue Statistics:', stats);
-    
+
     Alert.alert('Debug Complete', `Found ${allItems.length} items. Check console for details.`);
   } catch (error) {
     console.error('❌ Error debugging queue:', error);

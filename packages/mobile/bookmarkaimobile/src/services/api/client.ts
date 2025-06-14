@@ -37,13 +37,13 @@ export const saveTokens = async (accessToken: string, refreshToken: string, expi
     // Calculate expiration timestamp (default to 15 minutes if not provided)
     const expirationSeconds = expiresIn || (15 * 60); // 15 minutes default
     const expiresAt = Date.now() + (expirationSeconds * 1000);
-    
+
     const tokenData: AuthTokens = {
       accessToken,
       refreshToken,
-      expiresAt
+      expiresAt,
     };
-    
+
     await withKeychainFallback((options) =>
       Keychain.setGenericPassword(
         'auth_tokens',
@@ -149,7 +149,7 @@ axiosInstance.interceptors.response.use(
         failedQueue.push({ resolve, reject });
       })
         .then(token => {
-          originalRequest.headers['Authorization'] = `Bearer ${token}`;
+          originalRequest.headers.Authorization = `Bearer ${token}`;
           return axiosInstance(originalRequest);
         })
         .catch(err => {
@@ -165,6 +165,7 @@ axiosInstance.interceptors.response.use(
     const tokens = await getTokens();
     if (!tokens || !tokens.refreshToken) {
       // No refresh token, force re-login
+      console.log('🚨 HTTP Interceptor: No refresh token found, emitting auth-error event');
       isRefreshing = false;
       await clearTokens();
       DeviceEventEmitter.emit('auth-error');
@@ -184,26 +185,27 @@ axiosInstance.interceptors.response.use(
 
       // Update the failed requests with the new token
       processQueue(null, accessToken);
-      
+
       // Update the original request with the new token
-      originalRequest.headers['Authorization'] = `Bearer ${accessToken}`;
-      
+      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+
       // Reset the refreshing flag
       isRefreshing = false;
-      
+
       // Retry the original request
       return axiosInstance(originalRequest);
     } catch (refreshError) {
       // Token refresh failed, reject all pending requests
       processQueue(refreshError, null);
-      
+
       // Reset the refreshing flag
       isRefreshing = false;
-      
+
       // Clear tokens and force re-login
       await clearTokens();
+      console.log('🚨 HTTP Interceptor: Token refresh failed, emitting auth-error event');
       DeviceEventEmitter.emit('auth-error');
-      
+
       return Promise.reject(refreshError);
     }
   }

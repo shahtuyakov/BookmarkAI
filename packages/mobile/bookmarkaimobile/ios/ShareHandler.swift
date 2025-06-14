@@ -248,4 +248,47 @@ class ShareHandler: RCTEventEmitter {
     super.invalidate()
     NotificationCenter.default.removeObserver(self)
   }
+  
+  // MARK: - Token Sync Methods (iOS Stubs for Android Compatibility)
+  
+  @objc func isAuthenticated(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    // iOS implementation - return false since iOS uses different auth system
+    resolve([
+      "isAuthenticated": false,
+      "platform": "ios",
+      "message": "iOS uses React Native authentication"
+    ])
+  }
+  
+  @objc func syncAuthTokens(_ accessToken: String, refreshToken: String, expiresIn: NSNumber, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    // iOS implementation - tokens are managed by React Native
+    resolve([
+      "success": false,
+      "platform": "ios", 
+      "message": "iOS tokens managed by React Native"
+    ])
+  }
+  
+  @objc func clearAuthTokens(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    // iOS implementation - no native token storage to clear
+    resolve([
+      "success": false,
+      "platform": "ios",
+      "message": "iOS tokens managed by React Native"  
+    ])
+  }
+  
+  @objc func getTokenDebugInfo(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    // iOS implementation - return empty info since tokens are in React Native
+    resolve([
+      "platform": "ios",
+      "hasTokens": false,
+      "isAuthenticated": false,
+      "message": "iOS tokens managed by React Native",
+      "accessTokenPreview": "",
+      "refreshTokenPreview": "",
+      "timeUntilExpiry": 0,
+      "isExpired": true
+    ])
+  }
 }

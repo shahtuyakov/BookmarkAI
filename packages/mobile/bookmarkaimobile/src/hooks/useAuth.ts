@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBookmarkClient } from '../contexts/SDKContext';
-import { LoginRequest, User } from '@bookmarkai/sdk';
+import { LoginRequest } from '@bookmarkai/sdk';
 import ReactNativeBiometrics from 'react-native-biometrics';
 
 // Query keys
@@ -51,7 +51,7 @@ export function useLogin() {
       // Update auth state
       queryClient.setQueryData(authKeys.isAuthenticated(), true);
       queryClient.setQueryData(authKeys.user(), data.user);
-      
+
       // Invalidate all queries to refetch with new auth
       queryClient.invalidateQueries();
     },
@@ -74,7 +74,7 @@ export function useLogout() {
       // Clear all auth data
       queryClient.setQueryData(authKeys.isAuthenticated(), false);
       queryClient.removeQueries({ queryKey: authKeys.user() });
-      
+
       // Clear all cached data
       queryClient.clear();
     },
@@ -96,7 +96,7 @@ export function useBiometricAuth() {
     mutationFn: async () => {
       // Check if biometrics are available
       const { available, biometryType } = await biometrics.isSensorAvailable();
-      
+
       if (!available) {
         throw new Error('Biometric authentication not available');
       }
@@ -121,7 +121,7 @@ export function useBiometricAuth() {
  */
 export function useEnableBiometricLogin() {
   const client = useBookmarkClient();
-  const biometrics = new LocalAuthentication();
+  const biometrics = new ReactNativeBiometrics();
 
   return useMutation({
     mutationFn: async () => {

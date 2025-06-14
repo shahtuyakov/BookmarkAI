@@ -39,4 +39,20 @@ RCT_EXTERN_METHOD(addTestQueueItem:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(cleanupCorruptedData:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+// Token synchronization methods (for compatibility with Android)
+RCT_EXTERN_METHOD(isAuthenticated:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(syncAuthTokens:(NSString *)accessToken
+                  refreshToken:(NSString *)refreshToken
+                  expiresIn:(NSNumber *)expiresIn
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(clearAuthTokens:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(getTokenDebugInfo:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

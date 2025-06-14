@@ -4,7 +4,7 @@ import { AndroidOkHttpAdapter, createAndroidOkHttpAdapter } from '../android-okh
 // Mock React Native modules
 jest.mock('react-native', () => ({
   Platform: {
-    OS: 'android'
+    OS: 'android',
   },
   NativeModules: {
     OkHttpNetworkAdapter: {
@@ -18,13 +18,13 @@ jest.mock('react-native', () => ({
       SUPPORTS_CERTIFICATE_PINNING: true,
       SUPPORTS_PROGRESS_TRACKING: true,
       SUPPORTS_CANCELLATION: true,
-      EVENTS: ['OkHttpUploadProgress', 'OkHttpDownloadProgress']
-    }
+      EVENTS: ['OkHttpUploadProgress', 'OkHttpDownloadProgress'],
+    },
   },
   NativeEventEmitter: jest.fn().mockImplementation(() => ({
     addListener: jest.fn(),
-    removeAllListeners: jest.fn()
-  }))
+    removeAllListeners: jest.fn(),
+  })),
 }));
 
 describe('AndroidOkHttpAdapter', () => {
@@ -63,14 +63,14 @@ describe('AndroidOkHttpAdapter', () => {
         headers: { 'content-type': 'application/json' },
         responseTime: 150,
         isRedirect: false,
-        networkInfo: {}
+        networkInfo: {},
       };
 
       mockNativeModule.request.mockResolvedValue(mockResponse);
 
       const response = await adapter.request({
         url: 'https://api.example.com/test',
-        method: 'GET'
+        method: 'GET',
       });
 
       expect(response.status).toBe(200);
@@ -90,7 +90,7 @@ describe('AndroidOkHttpAdapter', () => {
         headers: {},
         responseTime: 200,
         isRedirect: false,
-        networkInfo: {}
+        networkInfo: {},
       };
 
       mockNativeModule.request.mockResolvedValue(mockResponse);
@@ -99,7 +99,7 @@ describe('AndroidOkHttpAdapter', () => {
       await adapter.request({
         url: 'https://api.example.com/create',
         method: 'POST',
-        body: requestBody
+        body: requestBody,
       });
 
       expect(mockNativeModule.request).toHaveBeenCalledWith(
@@ -107,7 +107,7 @@ describe('AndroidOkHttpAdapter', () => {
           url: 'https://api.example.com/create',
           method: 'POST',
           body: JSON.stringify(requestBody),
-          priority: 'normal'
+          priority: 'normal',
         })
       );
     });
@@ -122,30 +122,30 @@ describe('AndroidOkHttpAdapter', () => {
         headers: {},
         responseTime: 100,
         isRedirect: false,
-        networkInfo: {}
+        networkInfo: {},
       });
 
       // Test high priority
       await adapter.request({
         url: 'https://api.example.com/urgent',
-        priority: 'high'
+        priority: 'high',
       });
 
       expect(mockNativeModule.request).toHaveBeenCalledWith(
         expect.objectContaining({
-          priority: 'high'
+          priority: 'high',
         })
       );
 
       // Test low priority
       await adapter.request({
         url: 'https://api.example.com/background',
-        priority: 'low'
+        priority: 'low',
       });
 
       expect(mockNativeModule.request).toHaveBeenCalledWith(
         expect.objectContaining({
-          priority: 'low'
+          priority: 'low',
         })
       );
     });
@@ -155,7 +155,7 @@ describe('AndroidOkHttpAdapter', () => {
       mockNativeModule.request.mockRejectedValue(error);
 
       await expect(adapter.request({
-        url: 'https://api.example.com/error'
+        url: 'https://api.example.com/error',
       })).rejects.toThrow('OkHttp request failed: Network error');
     });
 
@@ -169,13 +169,13 @@ describe('AndroidOkHttpAdapter', () => {
         headers: { 'content-type': 'text/plain' },
         responseTime: 50,
         isRedirect: false,
-        networkInfo: {}
+        networkInfo: {},
       };
 
       mockNativeModule.request.mockResolvedValue(mockResponse);
 
       const response = await adapter.request({
-        url: 'https://api.example.com/text'
+        url: 'https://api.example.com/text',
       });
 
       expect(response.data).toBe('plain text response');
@@ -187,7 +187,7 @@ describe('AndroidOkHttpAdapter', () => {
       mockNativeModule.cancelRequest.mockResolvedValue(true);
 
       const result = await adapter.cancelRequest('test_123');
-      
+
       expect(result).toBe(true);
       expect(mockNativeModule.cancelRequest).toHaveBeenCalledWith('test_123');
     });
@@ -196,7 +196,7 @@ describe('AndroidOkHttpAdapter', () => {
       mockNativeModule.cancelAllRequests.mockResolvedValue(5);
 
       const cancelledCount = await adapter.cancelAllRequests();
-      
+
       expect(cancelledCount).toBe(5);
       expect(mockNativeModule.cancelAllRequests).toHaveBeenCalled();
     });
@@ -205,7 +205,7 @@ describe('AndroidOkHttpAdapter', () => {
       mockNativeModule.cancelRequest.mockRejectedValue(new Error('Cancel failed'));
 
       const result = await adapter.cancelRequest('test_123');
-      
+
       expect(result).toBe(false);
     });
   });
@@ -220,13 +220,13 @@ describe('AndroidOkHttpAdapter', () => {
         supportsCancellation: true,
         supportsConnectionPooling: true,
         activeRequests: 2,
-        connectionPoolSize: 5
+        connectionPoolSize: 5,
       };
 
       mockNativeModule.getAdapterInfo.mockResolvedValue(mockInfo);
 
       const info = await adapter.getInfo();
-      
+
       expect(info).toEqual(mockInfo);
     });
 
@@ -236,13 +236,13 @@ describe('AndroidOkHttpAdapter', () => {
         statusCode: 200,
         statusMessage: 'OK',
         isRedirect: false,
-        responseTime: 120
+        responseTime: 120,
       };
 
       mockNativeModule.testAdapter.mockResolvedValue(mockTestResult);
 
       const result = await adapter.test('https://httpbin.org/get');
-      
+
       expect(result).toEqual(mockTestResult);
       expect(mockNativeModule.testAdapter).toHaveBeenCalledWith('https://httpbin.org/get');
     });
@@ -252,20 +252,20 @@ describe('AndroidOkHttpAdapter', () => {
     it('should not be available on iOS', () => {
       // Mock iOS platform
       Object.defineProperty(Platform, 'OS', { value: 'ios' });
-      
+
       expect(AndroidOkHttpAdapter.isAvailable()).toBe(false);
     });
 
     it('should throw error when not supported', async () => {
       // Mock unsupported platform
       Object.defineProperty(Platform, 'OS', { value: 'web' });
-      
+
       const unsupportedAdapter = new AndroidOkHttpAdapter();
-      
+
       await expect(unsupportedAdapter.request({
-        url: 'https://api.example.com/test'
+        url: 'https://api.example.com/test',
       })).rejects.toThrow('OkHttp adapter not available on this platform');
-      
+
       unsupportedAdapter.destroy();
     });
   });
@@ -273,9 +273,9 @@ describe('AndroidOkHttpAdapter', () => {
   describe('cleanup', () => {
     it('should cleanup resources on destroy', () => {
       const eventEmitter = require('react-native').NativeEventEmitter();
-      
+
       adapter.destroy();
-      
+
       expect(eventEmitter.removeAllListeners).toHaveBeenCalledWith('OkHttpUploadProgress');
       expect(eventEmitter.removeAllListeners).toHaveBeenCalledWith('OkHttpDownloadProgress');
     });

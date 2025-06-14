@@ -12,7 +12,7 @@ const ForgotPasswordScreen = ({ navigation }: Props) => {
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
-  
+
   const { resetPassword, isLoading, error } = useAuth();
 
   const validateEmail = (text: string) => {
@@ -52,9 +52,9 @@ const ForgotPasswordScreen = ({ navigation }: Props) => {
           <Text style={styles.subtitle}>
             Enter your email address and we'll send you instructions to reset your password.
           </Text>
-          
+
           {error && <Text style={styles.errorText}>{error}</Text>}
-          
+
           <TextInput
             label="Email"
             value={email}
@@ -69,7 +69,7 @@ const ForgotPasswordScreen = ({ navigation }: Props) => {
           <HelperText type="error" visible={!!emailError}>
             {emailError}
           </HelperText>
-          
+
           <Button
             mode="contained"
             onPress={handleResetPassword}
@@ -78,7 +78,7 @@ const ForgotPasswordScreen = ({ navigation }: Props) => {
             style={styles.button}>
             Send Reset Instructions
           </Button>
-          
+
           <Button
             mode="text"
             onPress={() => navigation.navigate('Login')}
@@ -87,7 +87,7 @@ const ForgotPasswordScreen = ({ navigation }: Props) => {
           </Button>
         </View>
       </ScrollView>
-      
+
       <Snackbar
         visible={snackbarVisible}
         onDismiss={() => setSnackbarVisible(false)}

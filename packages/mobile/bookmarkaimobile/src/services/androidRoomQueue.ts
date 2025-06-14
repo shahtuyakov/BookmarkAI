@@ -103,8 +103,8 @@ export class AndroidRoomQueueService {
    * Update queue item status
    */
   async updateQueueItemStatus(
-    itemId: string, 
-    _status: AndroidRoomQueueItem['status'], 
+    itemId: string,
+    _status: AndroidRoomQueueItem['status'],
     _error?: string
   ): Promise<boolean> {
     if (!this.isAvailable()) {
@@ -151,7 +151,7 @@ export class AndroidRoomQueueService {
         completed: stats.uploaded || stats.completed || 0,
         failed: stats.failed || 0,
         total: stats.total || 0,
-        recentlyCompleted: stats.recentlyUploaded || stats.recentlyCompleted || 0
+        recentlyCompleted: stats.recentlyUploaded || stats.recentlyCompleted || 0,
       };
     } catch (error) {
       throw error;
@@ -275,9 +275,9 @@ export class AndroidRoomQueueService {
           url: item.url,
           title: item.title,
           notes: item.notes,
-          status: 'pending' as const
+          status: 'pending' as const,
         };
-        
+
         await this.addQueueItem(roomItem);
       }
     } catch (error) {

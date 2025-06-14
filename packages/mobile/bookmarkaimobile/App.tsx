@@ -14,7 +14,7 @@ import './src/utils/test-token-sync'; // Import token sync test suite
 
 function AppContent(): React.JSX.Element {
   const { mutate: createShare } = useCreateShare();
-  
+
   // Set up share extension handler
   useShareExtension({
     onShareReceived: (url) => {
@@ -22,7 +22,7 @@ function AppContent(): React.JSX.Element {
       console.log('About to call createShare...');
       createShare({ url });
       console.log('createShare called');
-    }
+    },
   });
 
   return <RootNavigator />;

@@ -78,32 +78,32 @@ class EnhancedTokenSyncService {
       return {
         success: true,
         message: 'Enhanced sync not available on this platform',
-        isAuthenticated: false
+        isAuthenticated: false,
       };
     }
 
     try {
       // Get current React Native tokens
       const rnTokens = await this.getReactNativeTokens();
-      
+
       if (!rnTokens) {
         return await androidTokenSync.clearTokens();
       }
 
       // Check if Android tokens are already in sync
       const needsSync = await this.checkIfSyncNeeded(rnTokens);
-      
+
       if (!needsSync) {
         return {
           success: true,
           message: 'Tokens already synchronized',
-          isAuthenticated: true
+          isAuthenticated: true,
         };
       }
 
       // Perform the sync
       const result = await this.syncToAndroid(rnTokens);
-      
+
       if (result.success) {
         this.lastSyncTime = Date.now();
         this.retryCount = 0;
@@ -117,7 +117,7 @@ class EnhancedTokenSyncService {
       return {
         success: false,
         message: `Force sync failed: ${error.message}`,
-        isAuthenticated: false
+        isAuthenticated: false,
       };
     }
   }
@@ -136,10 +136,10 @@ class EnhancedTokenSyncService {
     try {
       const rnTokens = await this.getReactNativeTokens();
       const androidStatus = await androidTokenSync.checkAuthStatus();
-      
+
       const rnHasTokens = !!rnTokens;
       const androidHasTokens = androidStatus.isAuthenticated;
-      
+
       let isInSync = false;
       let recommendation = '';
 
@@ -176,7 +176,7 @@ class EnhancedTokenSyncService {
         androidHasTokens,
         lastSyncTime: this.lastSyncTime,
         retryCount: this.retryCount,
-        recommendation
+        recommendation,
       };
 
     } catch (error) {
@@ -186,7 +186,7 @@ class EnhancedTokenSyncService {
         androidHasTokens: false,
         lastSyncTime: this.lastSyncTime,
         retryCount: this.retryCount,
-        recommendation: 'Error checking sync status'
+        recommendation: 'Error checking sync status',
       };
     }
   }
@@ -205,7 +205,7 @@ class EnhancedTokenSyncService {
   private async checkIfSyncNeeded(rnTokens: TokenData): Promise<boolean> {
     try {
       const androidStatus = await androidTokenSync.checkAuthStatus();
-      
+
       if (!androidStatus.isAuthenticated) {
         return true; // Android has no tokens, sync needed
       }
@@ -246,7 +246,7 @@ class EnhancedTokenSyncService {
       return {
         success: false,
         message: `Sync to Android failed: ${error.message}`,
-        isAuthenticated: false
+        isAuthenticated: false,
       };
     }
   }
@@ -263,15 +263,15 @@ class EnhancedTokenSyncService {
     });
   }
 
-  private async handleTokenChange(tokens?: any): Promise<void> {
+  private async handleTokenChange(_tokens?: any): Promise<void> {
     try {
-      
+
       // Wait a bit to ensure tokens are saved to RN storage
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Force sync with new tokens
       await this.forceSyncNow();
-      
+
     } catch (error) {
     }
   }
@@ -291,7 +291,7 @@ class EnhancedTokenSyncService {
         return;
       }
 
-      
+
       const rnTokens = await this.getReactNativeTokens();
       if (!rnTokens) {
         return; // No tokens to sync

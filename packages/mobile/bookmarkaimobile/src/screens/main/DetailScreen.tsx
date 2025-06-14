@@ -28,23 +28,23 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
   const { id } = route.params;
   const theme = useTheme();
   const { isConnected } = useNetworkStatus();
-  
+
   // Get share details with React Query
-  const { 
-    share, 
-    isLoading, 
-    isRefreshing, 
-    error, 
-    refresh 
+  const {
+    share,
+    isLoading,
+    isRefreshing,
+    error,
+    refresh,
   } = useShareById(id);
-  
+
   // Handle opening the URL in browser
   const openInBrowser = () => {
     if (share?.url) {
       Linking.openURL(share.url);
     }
   };
-  
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -52,13 +52,13 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
       </View>
     );
   }
-  
+
   if (error || !share) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>
-          {isConnected 
-            ? 'Failed to load bookmark details. Please try again.' 
+          {isConnected
+            ? 'Failed to load bookmark details. Please try again.'
             : 'You\'re offline. Connect to the internet to load the latest details.'}
         </Text>
         <Button
@@ -70,7 +70,7 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
       </View>
     );
   }
-  
+
   // Format dates
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -82,10 +82,10 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
       minute: '2-digit',
     });
   };
-  
+
   // Check if this is a pending offline share
   const isPendingOfflineShare = (share as any)._isPending === true;
-  
+
   return (
     <ScrollView
       style={styles.container}
@@ -99,7 +99,7 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
           enabled={isConnected}
         />
       }>
-      
+
       {!isConnected && (
         <Banner
           visible={true}
@@ -113,7 +113,7 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
           You're offline. Some content may not be updated.
         </Banner>
       )}
-      
+
       {isPendingOfflineShare && (
         <Banner
           visible={true}
@@ -127,21 +127,21 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
           This bookmark is waiting to be synced when you're back online.
         </Banner>
       )}
-      
+
       <Card style={styles.card}>
         {share.metadata?.thumbnailUrl && (
           <Card.Cover source={{ uri: share.metadata.thumbnailUrl }} style={styles.coverImage} />
         )}
-        
+
         <Card.Content style={styles.cardContent}>
           <Text style={styles.title}>
             {share.metadata?.title || 'Untitled Bookmark'}
           </Text>
-          
+
           {share.metadata?.author && (
             <Text style={styles.author}>By {share.metadata.author}</Text>
           )}
-          
+
           <View style={styles.metaContainer}>
             <Chip
               mode="outlined"
@@ -149,7 +149,7 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
               textStyle={{ color: getPlatformColor(share.platform) }}>
               {share.platform.toUpperCase()}
             </Chip>
-            
+
             <Chip
               mode="outlined"
               style={styles.chip}
@@ -157,21 +157,21 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
               {share.status.toUpperCase()}
             </Chip>
           </View>
-          
+
           <Divider style={styles.divider} />
-          
+
           <Text style={styles.sectionTitle}>Description</Text>
           <Text style={styles.description}>
             {share.metadata?.description || 'No description available'}
           </Text>
-          
+
           <Divider style={styles.divider} />
-          
+
           <Text style={styles.sectionTitle}>URL</Text>
           <Text style={styles.url} selectable={true}>
             {share.url}
           </Text>
-          
+
           <Button
             mode="contained"
             icon="open-in-new"
@@ -179,21 +179,21 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
             style={styles.openButton}>
             Open in Browser
           </Button>
-          
+
           <Divider style={styles.divider} />
-          
+
           <Text style={styles.sectionTitle}>Details</Text>
           <View style={styles.detailsContainer}>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Created:</Text>
               <Text style={styles.detailValue}>{formatDate(share.createdAt)}</Text>
             </View>
-            
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Updated:</Text>
               <Text style={styles.detailValue}>{formatDate(share.updatedAt)}</Text>
             </View>
-            
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>ID:</Text>
               <Text style={styles.detailValue} selectable={true}>{share.id}</Text>

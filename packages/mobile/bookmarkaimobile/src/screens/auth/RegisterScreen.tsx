@@ -16,12 +16,12 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [confirmSecureTextEntry, setConfirmSecureTextEntry] = useState(true);
-  
+
   const [nameError, setNameError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
-  
+
   const { register, isLoading, error } = useAuth();
 
   const validateName = (text: string) => {
@@ -116,9 +116,9 @@ const RegisterScreen = ({ navigation }: Props) => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Join BookmarkAI today</Text>
-          
+
           {error && <Text style={styles.errorText}>{error}</Text>}
-          
+
           <TextInput
             label="Name"
             value={name}
@@ -130,7 +130,7 @@ const RegisterScreen = ({ navigation }: Props) => {
           <HelperText type="error" visible={!!nameError}>
             {nameError}
           </HelperText>
-          
+
           <TextInput
             label="Email"
             value={email}
@@ -145,7 +145,7 @@ const RegisterScreen = ({ navigation }: Props) => {
           <HelperText type="error" visible={!!emailError}>
             {emailError}
           </HelperText>
-          
+
           <TextInput
             label="Password"
             value={password}
@@ -169,7 +169,7 @@ const RegisterScreen = ({ navigation }: Props) => {
           <HelperText type="error" visible={!!passwordError}>
             {passwordError}
           </HelperText>
-          
+
           <TextInput
             label="Confirm Password"
             value={confirmPassword}
@@ -188,7 +188,7 @@ const RegisterScreen = ({ navigation }: Props) => {
           <HelperText type="error" visible={!!confirmPasswordError}>
             {confirmPasswordError}
           </HelperText>
-          
+
           <Button
             mode="contained"
             onPress={handleRegister}
@@ -197,7 +197,7 @@ const RegisterScreen = ({ navigation }: Props) => {
             style={styles.button}>
             Create Account
           </Button>
-          
+
           <View style={styles.loginContainer}>
             <Text>Already have an account? </Text>
             <Button

@@ -64,13 +64,13 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
   async testAdapter(): Promise<{ type: string; success: boolean; error?: string }> {
     try {
       const testUrl = 'https://httpbin.org/get';
-      
+
       await this.adapter.request({
         url: testUrl,
         method: 'GET',
         timeout: 10000,
       });
-      
+
       return {
         type: this.getAdapterType(),
         success: true,

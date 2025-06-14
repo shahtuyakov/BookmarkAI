@@ -15,7 +15,7 @@ interface BiometricCheckResult {
 export const checkBiometricAvailability = async (): Promise<BiometricCheckResult> => {
   try {
     const { available, biometryType } = await rnBiometrics.isSensorAvailable();
-    
+
     return {
       available,
       biometryType: biometryType || 'none',
@@ -64,7 +64,7 @@ export const authenticateWithBiometrics = async (
     if (!available) {
       return false;
     }
-    
+
     // Show the authentication prompt
     const { success } = await rnBiometrics.simplePrompt({ promptMessage });
     return success;
@@ -79,17 +79,17 @@ export const enableBiometricLogin = async (userId: string): Promise<boolean> => 
   try {
     // Create keys if they don't exist yet
     await createBiometricKeys();
-    
+
     // Create signature with biometrics
     const { success, signature } = await rnBiometrics.createSignature({
       promptMessage: 'Sign in with biometrics',
       payload: userId,
     });
-    
+
     if (!success || !signature) {
       return false;
     }
-    
+
     // Store the user ID securely
     // In a production app, we'd also verify signatures server-side
     await AsyncStorage.setItem('biometric_user_id', userId);

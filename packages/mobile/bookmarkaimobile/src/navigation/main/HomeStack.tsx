@@ -14,13 +14,13 @@ const HomeStack = () => {
         headerShown: false,
       }}>
       <Stack.Screen name="Home" component={HomeScreen} />
-      <Stack.Screen 
-        name="Detail" 
-        component={DetailScreen} 
-        options={({ route }) => ({ 
+      <Stack.Screen
+        name="Detail"
+        component={DetailScreen}
+        options={({ route }) => ({
           title: route.params.title,
-          headerShown: true 
-        })} 
+          headerShown: true,
+        })}
       />
     </Stack.Navigator>
   );

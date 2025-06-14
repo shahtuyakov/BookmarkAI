@@ -10,15 +10,15 @@ export const SHARED_ACCESS_GROUP = 'com.bookmarkai';
  */
 export const getKeychainOptions = (includeAccessGroup: boolean = true) => {
   const options: any = {
-    service: KEYCHAIN_SERVICE
+    service: KEYCHAIN_SERVICE,
   };
-  
+
   // Only include access group if requested and on iOS
   // Note: Access groups cause "entitlement not present" errors in iOS Simulator
   if (includeAccessGroup && Platform.OS === 'ios') {
     options.accessGroup = SHARED_ACCESS_GROUP;
   }
-  
+
   return options;
 };
 
@@ -27,7 +27,7 @@ export const getKeychainOptions = (includeAccessGroup: boolean = true) => {
  */
 export const getSafeKeychainOptions = () => {
   return {
-    service: KEYCHAIN_SERVICE
+    service: KEYCHAIN_SERVICE,
     // No access group for maximum compatibility
   };
 };

@@ -35,13 +35,13 @@ export const sharesAPI = {
     const response = await apiClient.get<{data: PaginatedResponse<Share>}>('/v1/shares', { params });
     return response.data.data;
   },
-  
+
   // Get a specific share by ID
   getShareById: async (id: string): Promise<Share> => {
     const response = await apiClient.get<{data: Share}>(`/v1/shares/${id}`);
     return response.data.data;
   },
-  
+
   // Create a new share
   createShare: async (url: string, idempotencyKey: string): Promise<Share> => {
     const response = await apiClient.post<{data: Share}>(

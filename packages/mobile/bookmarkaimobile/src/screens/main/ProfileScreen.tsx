@@ -5,15 +5,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import * as biometricService from '../../services/biometrics';
 
 const ProfileScreen = () => {
-  const { 
-    user, 
-    logout, 
-    isLoading, 
-    isBiometricsAvailable, 
-    isBiometricsEnabled, 
+  const {
+    user,
+    logout,
+    isLoading,
+    isBiometricsAvailable,
+    isBiometricsEnabled,
     biometryType,
     enableBiometrics,
-    disableBiometrics
+    disableBiometrics,
   } = useAuth();
 
   const [confirmLogoutVisible, setConfirmLogoutVisible] = useState(false);
@@ -29,7 +29,7 @@ const ProfileScreen = () => {
 
   // Get user initials for avatar
   const getInitials = () => {
-    if (!user || !user.name) return '?';
+    if (!user || !user.name) {return '?';}
     return user.name
       .split(' ')
       .map(n => n[0])
@@ -101,7 +101,7 @@ const ProfileScreen = () => {
         <Avatar.Text size={80} label={getInitials()} />
         <Text style={styles.name}>{user?.name || 'User'}</Text>
         <Text style={styles.email}>{user?.email || 'user@example.com'}</Text>
-        
+
         {user?.lastLogin && (
           <Text style={styles.lastLogin}>
             Last login: {new Date(user.lastLogin).toLocaleString()}
@@ -132,11 +132,11 @@ const ProfileScreen = () => {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Security</Text>
-        
+
         {isBiometricsAvailable ? (
           <List.Item
             title={`${getBiometricName()} Login`}
-            description={`Sign in without entering your password`}
+            description={'Sign in without entering your password'}
             left={props => <List.Icon {...props} icon="fingerprint" />}
             right={() => (
               <Switch
@@ -158,9 +158,9 @@ const ProfileScreen = () => {
             )}
           />
         )}
-        
+
         <Divider />
-        
+
         <List.Item
           title="Offline Access"
           description="Allow access to your bookmarks offline"
@@ -220,7 +220,7 @@ const ProfileScreen = () => {
         style={styles.logoutButton}>
         Sign Out
       </Button>
-      
+
       {/* Logout confirmation dialog */}
       <Portal>
         <Dialog visible={confirmLogoutVisible} onDismiss={() => setConfirmLogoutVisible(false)}>

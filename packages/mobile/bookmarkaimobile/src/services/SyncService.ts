@@ -23,7 +23,7 @@ export class SyncService {
   private isProcessing = false;
   private networkUnsubscribe?: () => void;
   private processingTimer?: NodeJS.Timeout;
-  
+
   private readonly QUEUE_KEY = 'pending_shares';
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 5000; // 5 seconds
@@ -39,14 +39,14 @@ export class SyncService {
   private initializePlatformSpecificQueue(): void {
     if (Platform.OS === 'ios') {
       this.iosSQLiteQueue = IOSSQLiteQueueService.getInstance();
-      
+
       if (this.iosSQLiteQueue.isAvailable()) {
         // Migrate existing MMKV items to SQLite if any exist
         this.migrateMmkvToSQLiteIfNeeded();
       }
     } else if (Platform.OS === 'android') {
       this.androidRoomQueue = AndroidRoomQueueService.getInstance();
-      
+
       if (this.androidRoomQueue.isAvailable()) {
         // Migrate existing MMKV items to Room if any exist
         this.migrateMmkvToRoomIfNeeded();
@@ -66,7 +66,7 @@ export class SyncService {
    */
   async queueShare(share: Omit<QueuedShare, 'id' | 'timestamp' | 'retryCount'>): Promise<void> {
     const queue = this.getQueue();
-    
+
     const queuedShare: QueuedShare = {
       ...share,
       id: this.generateId(),
@@ -92,14 +92,14 @@ export class SyncService {
    * Migrate existing MMKV queue items to SQLite (iOS only)
    */
   private async migrateMmkvToSQLiteIfNeeded(): Promise<void> {
-    if (!this.iosSQLiteQueue) return;
+    if (!this.iosSQLiteQueue) {return;}
 
     try {
       const mmkvQueue = this.getQueue();
-      
+
       if (mmkvQueue.length > 0) {
         await this.iosSQLiteQueue.migrateMMKVToSQLite(mmkvQueue);
-        
+
         // Clear MMKV queue after successful migration
         this.clearQueue();
       }
@@ -112,14 +112,14 @@ export class SyncService {
    * Migrate existing MMKV queue items to Android Room (Android only)
    */
   private async migrateMmkvToRoomIfNeeded(): Promise<void> {
-    if (!this.androidRoomQueue) return;
+    if (!this.androidRoomQueue) {return;}
 
     try {
       const mmkvQueue = this.getQueue();
-      
+
       if (mmkvQueue.length > 0) {
         await this.androidRoomQueue.migrateMMKVToRoom(mmkvQueue);
-        
+
         // Clear MMKV queue after successful migration
         this.clearQueue();
       }
@@ -179,7 +179,7 @@ export class SyncService {
    * Process SQLite queue items (iOS specific)
    */
   private async processSQLiteItems(items: SQLiteQueueItem[]): Promise<void> {
-    if (!this.iosSQLiteQueue) return;
+    if (!this.iosSQLiteQueue) {return;}
 
     const successful: string[] = [];
     const failed: Array<{ id: string; error: string }> = [];
@@ -223,7 +223,7 @@ export class SyncService {
         // Don't add to remaining queue - it's processed
       } catch (error: any) {
         console.error(`SyncService: Failed to process MMKV share: ${share.url}`, error);
-        
+
         share.retryCount++;
         share.lastError = error.message;
 
@@ -281,7 +281,7 @@ export class SyncService {
    * Process Android Room queue items (Android specific)
    */
   private async processAndroidRoomItems(items: AndroidRoomQueueItem[]): Promise<void> {
-    if (!this.androidRoomQueue) return;
+    if (!this.androidRoomQueue) {return;}
 
     const successful: string[] = [];
     const failed: Array<{ id: string; error: string }> = [];

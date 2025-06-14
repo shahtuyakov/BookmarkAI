@@ -32,7 +32,7 @@ interface TokenDebugInfo {
  * All methods are Android-only and will safely no-op on iOS.
  */
 class AndroidTokenSyncService {
-  
+
   /**
    * Check if token sync is available on this platform
    */
@@ -44,15 +44,15 @@ class AndroidTokenSyncService {
    * Sync authentication tokens from React Native to Android native storage
    */
   async syncTokens(
-    accessToken: string, 
-    refreshToken: string, 
+    accessToken: string,
+    refreshToken: string,
     expiresIn: number
   ): Promise<TokenSyncResult> {
     if (!this.isAvailable()) {
       return {
         success: true,
         message: 'Token sync not available on this platform',
-        isAuthenticated: false
+        isAuthenticated: false,
       };
     }
 
@@ -65,11 +65,11 @@ class AndroidTokenSyncService {
 
       return result;
     } catch (error) {
-      
+
       return {
         success: false,
         message: `Token sync failed: ${error.message || 'Unknown error'}`,
-        isAuthenticated: false
+        isAuthenticated: false,
       };
     }
   }
@@ -82,7 +82,7 @@ class AndroidTokenSyncService {
       return {
         success: true,
         message: 'Token clear not available on this platform',
-        isAuthenticated: false
+        isAuthenticated: false,
       };
     }
 
@@ -90,11 +90,11 @@ class AndroidTokenSyncService {
       const result = await ShareHandler.clearAuthTokens();
       return result;
     } catch (error) {
-      
+
       return {
         success: false,
         message: `Token clear failed: ${(error as Error).message || 'Unknown error'}`,
-        isAuthenticated: true // Assume still authenticated on error
+        isAuthenticated: true, // Assume still authenticated on error
       };
     }
   }
@@ -107,7 +107,7 @@ class AndroidTokenSyncService {
       return {
         isAuthenticated: false,
         hasValidAccessToken: false,
-        hasRefreshToken: false
+        hasRefreshToken: false,
       };
     }
 
@@ -118,7 +118,7 @@ class AndroidTokenSyncService {
       return {
         isAuthenticated: false,
         hasValidAccessToken: false,
-        hasRefreshToken: false
+        hasRefreshToken: false,
       };
     }
   }
@@ -130,7 +130,7 @@ class AndroidTokenSyncService {
     if (!__DEV__) {
       return null;
     }
-    
+
     if (!this.isAvailable()) {
       return null;
     }
@@ -153,7 +153,7 @@ class AndroidTokenSyncService {
 
     try {
       const authStatus = await this.checkAuthStatus();
-      
+
       if (!expectedAccessToken) {
         // Just check if we're authenticated
         const isValid = authStatus.isAuthenticated && authStatus.hasValidAccessToken;
@@ -163,18 +163,18 @@ class AndroidTokenSyncService {
       // In development, we can check token details
       if (__DEV__) {
         const debugInfo = await this.getDebugInfo();
-        if (!debugInfo) return false;
+        if (!debugInfo) {return false;}
 
         const tokenMatches = debugInfo.accessTokenPreview.startsWith(expectedAccessToken.substring(0, 20));
         const isAuthenticated = debugInfo.isAuthenticated && !debugInfo.isExpired;
-        
+
         const isValid = tokenMatches && isAuthenticated;
         return isValid;
       }
 
       // Production fallback
       return authStatus.isAuthenticated && authStatus.hasValidAccessToken;
-      
+
     } catch (error) {
       return false;
     }
@@ -189,20 +189,20 @@ class AndroidTokenSyncService {
       return {
         success: true,
         message: 'Force sync not available on this platform',
-        isAuthenticated: false
+        isAuthenticated: false,
       };
     }
 
     try {
       // Import React Native token utilities
       const { getTokens } = await import('./api/client');
-      
+
       const tokens = await getTokens();
       if (!tokens) {
         return {
           success: false,
           message: 'No tokens found in React Native storage',
-          isAuthenticated: false
+          isAuthenticated: false,
         };
       }
 
@@ -211,12 +211,12 @@ class AndroidTokenSyncService {
       const expiresIn = Math.max(0, tokens.expiresAt - currentTime);
 
       return await this.syncTokens(tokens.accessToken, tokens.refreshToken, expiresIn);
-      
+
     } catch (error) {
       return {
         success: false,
         message: `Force sync failed: ${(error as Error).message}`,
-        isAuthenticated: false
+        isAuthenticated: false,
       };
     }
   }
@@ -225,12 +225,12 @@ class AndroidTokenSyncService {
    * Compare React Native and Android native token states (development only)
    */
   async compareTokenStates(): Promise<void> {
-    if (!__DEV__) return;
-    
+    if (!__DEV__) {return;}
+
     try {
       // Silent comparison for development purposes
       // Implementation details can be added here if needed for debugging
-      
+
     } catch (error) {
       // Silent error handling
     }

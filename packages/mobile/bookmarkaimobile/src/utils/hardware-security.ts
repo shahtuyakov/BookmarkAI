@@ -26,19 +26,19 @@ interface HardwareSecurityInfo {
   hasHardwareKeystore: boolean;
   hasStrongBox: boolean;
   hasTEE: boolean;
-  
+
   // Biometric capabilities
   hasBiometricHardware: boolean;
   biometricStatus: 'available' | 'no_hardware' | 'hardware_unavailable' | 'none_enrolled' | 'security_update_required' | 'unsupported' | 'unknown' | 'error';
   hasFingerprint: boolean;
   hasFaceUnlock: boolean;
-  
+
   // Device security
   isDeviceSecure: boolean;
   hasScreenLock: boolean;
   androidVersion: string;
   apiLevel: number;
-  
+
   // Key capabilities
   supportsAES: boolean;
   supportsECDSA: boolean;
@@ -78,7 +78,7 @@ const HardwareSecurityModuleNative = NativeModules.HardwareSecurityModule as Har
  * Hardware Security Service for React Native
  */
 export class HardwareSecurityService {
-  
+
   /**
    * Check if hardware security is available
    */
@@ -93,7 +93,7 @@ export class HardwareSecurityService {
     if (!HardwareSecurityService.isAvailable()) {
       throw new Error('Hardware security not available on this platform');
     }
-    
+
     try {
       const info = await HardwareSecurityModuleNative.getHardwareSecurityInfo();
       return info;
@@ -112,10 +112,10 @@ export class HardwareSecurityService {
 
     try {
       const result = await HardwareSecurityModuleNative.generateHardwareKey(keyAlias, requireBiometric);
-      
+
       if (result.success) {
       }
-      
+
       return result;
     } catch (error: any) {
       throw new Error(`Key generation failed: ${error.message}`);
@@ -179,11 +179,11 @@ export class HardwareSecurityService {
 
     try {
       const deleted = await HardwareSecurityModuleNative.deleteHardwareKey(keyAlias);
-      
+
       if (deleted) {
       } else {
       }
-      
+
       return deleted;
     } catch (error: any) {
       return false;
@@ -200,11 +200,11 @@ export class HardwareSecurityService {
 
     try {
       const result = await HardwareSecurityModuleNative.testHardwareSecurity();
-      
+
       if (result.success) {
       } else {
       }
-      
+
       return result;
     } catch (error: any) {
       throw new Error(`Hardware security test failed: ${error.message}`);
@@ -227,13 +227,13 @@ export class HardwareSecurityService {
         securityLevel: 'none',
         biometricSupport: false,
         recommendedForProduction: false,
-        summary: 'Hardware security not available on this platform'
+        summary: 'Hardware security not available on this platform',
       };
     }
 
     try {
       const info = await this.getSecurityInfo();
-      
+
       let securityLevel: 'none' | 'software' | 'hardware' | 'strongbox' = 'none';
       if (info.hasStrongBox) {
         securityLevel = 'strongbox';
@@ -262,7 +262,7 @@ export class HardwareSecurityService {
         securityLevel,
         biometricSupport,
         recommendedForProduction,
-        summary
+        summary,
       };
 
     } catch (error: any) {
@@ -271,7 +271,7 @@ export class HardwareSecurityService {
         securityLevel: 'none',
         biometricSupport: false,
         recommendedForProduction: false,
-        summary: `Error: ${error.message}`
+        summary: `Error: ${error.message}`,
       };
     }
   }
@@ -288,5 +288,5 @@ export type {
   KeyGenerationResult,
   EncryptionResult,
   DecryptionResult,
-  SecurityTestResult
+  SecurityTestResult,
 };

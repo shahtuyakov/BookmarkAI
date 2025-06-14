@@ -6,10 +6,10 @@ const SHARED_ACCESS_GROUP = 'com.bookmarkai'; // Matches entitlements keychain-a
 
 // Helper function to check if server should use AuthContext keychain service
 const shouldUseAuthService = (server: string): boolean => {
-  return server === 'com.bookmarkai.app' || 
-         server === 'bookmarkai' || 
-         server === 'tokens' || 
-         server.includes('bookmarkai') || 
+  return server === 'com.bookmarkai.app' ||
+         server === 'bookmarkai' ||
+         server === 'tokens' ||
+         server.includes('bookmarkai') ||
          server.includes('localhost') ||
          server === 'api' ||
          server === 'default';
@@ -33,7 +33,7 @@ export const keychainWrapper = {
         const result = await Keychain.setInternetCredentials(server, username, password);
         return !!result;
       }
-      
+
       // For other servers, use internet credentials as normal
       const result = await Keychain.setInternetCredentials(server, username, password);
       return !!result;
@@ -58,27 +58,27 @@ export const keychainWrapper = {
         } catch (error) {
           // Silently fall back to AuthContext tokens
         }
-        
+
         // Fallback: try to get AuthContext tokens and convert them
         const credentials = await Keychain.getGenericPassword({
           service: KEYCHAIN_SERVICE,
-          accessGroup: SHARED_ACCESS_GROUP
+          accessGroup: SHARED_ACCESS_GROUP,
         });
-        
+
         if (credentials) {
           // Parse the AuthContext token format
           try {
             const tokenData = JSON.parse(credentials.password);
-            
+
             // Return in format expected by SDK ReactNativeStorageAdapter
             const sdkTokenFormat = {
               bookmarkai_access_token: tokenData.accessToken,
               bookmarkai_refresh_token: tokenData.refreshToken || '',
             };
-            
+
             return {
               username: 'bookmarkai_user',
-              password: JSON.stringify(sdkTokenFormat)
+              password: JSON.stringify(sdkTokenFormat),
             };
           } catch (parseError) {
             return false;
@@ -87,7 +87,7 @@ export const keychainWrapper = {
           return false;
         }
       }
-      
+
       // For other servers, use internet credentials as normal
       const credentials = await Keychain.getInternetCredentials(server);
       return credentials;
@@ -103,11 +103,11 @@ export const keychainWrapper = {
       if (shouldUseAuthService(server)) {
         await Keychain.resetGenericPassword({
           service: KEYCHAIN_SERVICE,
-          accessGroup: SHARED_ACCESS_GROUP
+          accessGroup: SHARED_ACCESS_GROUP,
         });
         return true;
       }
-      
+
       // For other servers, use internet credentials as normal
       await Keychain.resetInternetCredentials(server);
       return true;

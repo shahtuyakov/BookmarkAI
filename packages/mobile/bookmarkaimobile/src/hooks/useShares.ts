@@ -99,11 +99,11 @@ export function useCreateShare() {
     mutationFn: async (request: CreateShareRequest) => {
       // Check network status
       const netInfo = await NetInfo.fetch();
-      
+
       if (!netInfo.isConnected) {
         // Queue for offline processing
         await syncService.queueShare(request);
-        
+
         // Return a mock share for optimistic UI
         return {
           id: `offline_${Date.now()}`,
@@ -124,7 +124,7 @@ export function useCreateShare() {
     onSuccess: (share) => {
       // Invalidate and refetch shares list
       queryClient.invalidateQueries({ queryKey: shareKeys.lists() });
-      
+
       // Add the new share to cache immediately
       queryClient.setQueryData<Share>(
         shareKeys.detail(share.id),
@@ -135,7 +135,7 @@ export function useCreateShare() {
       queryClient.setQueriesData<ShareListResponse>(
         { queryKey: shareKeys.lists() },
         (old) => {
-          if (!old) return { items: [share], hasMore: false, cursor: undefined };
+          if (!old) {return { items: [share], hasMore: false, cursor: undefined };}
           return {
             ...old,
             items: [share, ...old.items],
@@ -145,7 +145,7 @@ export function useCreateShare() {
     },
     onError: (error: any) => {
       console.error('Failed to create share:', error);
-      
+
       // If it's a network error, queue for later
       if (error.code === 'NETWORK_ERROR') {
         // The mutation function already handles this
@@ -176,10 +176,10 @@ export function useProcessShare() {
       queryClient.setQueriesData<ShareListResponse>(
         { queryKey: shareKeys.lists() },
         (old) => {
-          if (!old) return old;
+          if (!old) {return old;}
           return {
             ...old,
-            items: old.items.map(item => 
+            items: old.items.map(item =>
               item.id === share.id ? share : item
             ),
           };

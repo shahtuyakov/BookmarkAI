@@ -234,7 +234,7 @@ describe('Native Bridge Contract', () => {
   it('should handle share queue entries from native code', async () => {
     // This tests the contract for data passed from native iOS/Android
     // to React Native via the bridge
-    
+
     // Mock the expected format from native bridge
     const nativeBridgeData = {
       id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',

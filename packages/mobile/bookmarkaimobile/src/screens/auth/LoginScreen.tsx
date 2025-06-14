@@ -15,7 +15,7 @@ const LoginScreen = ({ navigation }: Props) => {
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  
+
   const { login, isLoading, error } = useAuth();
 
   const validateEmail = (text: string) => {
@@ -52,7 +52,7 @@ const LoginScreen = ({ navigation }: Props) => {
         // Navigation is handled by the AuthContext observer
       } catch (err) {
         // Error is handled by the AuthContext
-        Alert.alert("Login Failed", "Please check your credentials and try again.");
+        Alert.alert('Login Failed', 'Please check your credentials and try again.');
       }
     }
   };
@@ -65,9 +65,9 @@ const LoginScreen = ({ navigation }: Props) => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Welcome to BookmarkAI</Text>
           <Text style={styles.subtitle}>Sign in to your account</Text>
-          
+
           {error && <Text style={styles.errorText}>{error}</Text>}
-          
+
           <TextInput
             label="Email"
             value={email}
@@ -82,7 +82,7 @@ const LoginScreen = ({ navigation }: Props) => {
           <HelperText type="error" visible={!!emailError}>
             {emailError}
           </HelperText>
-          
+
           <TextInput
             label="Password"
             value={password}
@@ -101,7 +101,7 @@ const LoginScreen = ({ navigation }: Props) => {
           <HelperText type="error" visible={!!passwordError}>
             {passwordError}
           </HelperText>
-          
+
           <Button
             mode="contained"
             onPress={handleLogin}
@@ -110,14 +110,14 @@ const LoginScreen = ({ navigation }: Props) => {
             style={styles.button}>
             Sign In
           </Button>
-          
+
           <Button
             mode="text"
             onPress={() => navigation.navigate('ForgotPassword')}
             style={styles.textButton}>
             Forgot Password?
           </Button>
-          
+
           <View style={styles.registerContainer}>
             <Text>Don't have an account? </Text>
             <Button

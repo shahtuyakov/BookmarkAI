@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+// import { Platform } from 'react-native';
 import { IOSURLSessionAdapter } from '../ios-urlsession.adapter';
 
 // Mock the native module
@@ -32,18 +32,18 @@ describe('IOSURLSessionAdapter', () => {
 
     it('should warn if native module is not available', () => {
       const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-      
+
       jest.doMock('react-native', () => ({
         Platform: { OS: 'ios' },
         NativeModules: {},
       }));
-      
+
       new IOSURLSessionAdapter();
-      
+
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Native module not available')
       );
-      
+
       consoleSpy.mockRestore();
     });
   });
@@ -55,7 +55,7 @@ describe('IOSURLSessionAdapter', () => {
         status: 200,
         headers: { 'content-type': 'application/json' },
       };
-      
+
       mockNativeModule.request.mockResolvedValue(mockResponse);
 
       const response = await adapter.request({
@@ -86,7 +86,7 @@ describe('IOSURLSessionAdapter', () => {
         status: 201,
         headers: { 'content-type': 'application/json' },
       };
-      
+
       mockNativeModule.request.mockResolvedValue(mockResponse);
 
       const response = await adapter.request({
@@ -118,7 +118,7 @@ describe('IOSURLSessionAdapter', () => {
         status: 200,
         headers: {},
       };
-      
+
       mockNativeModule.request.mockResolvedValue(mockResponse);
 
       await adapter.request({
@@ -143,7 +143,7 @@ describe('IOSURLSessionAdapter', () => {
     it('should handle timeout errors', async () => {
       const timeoutError = new Error('Request timeout');
       (timeoutError as any).code = 'REQUEST_TIMEOUT';
-      
+
       mockNativeModule.request.mockRejectedValue(timeoutError);
 
       await expect(adapter.request({
@@ -156,7 +156,7 @@ describe('IOSURLSessionAdapter', () => {
     it('should handle network errors', async () => {
       const networkError = new Error('No internet');
       (networkError as any).code = 'NO_INTERNET';
-      
+
       mockNativeModule.request.mockRejectedValue(networkError);
 
       await expect(adapter.request({
@@ -171,7 +171,7 @@ describe('IOSURLSessionAdapter', () => {
         status: 404,
         headers: {},
       };
-      
+
       mockNativeModule.request.mockResolvedValue(mockResponse);
 
       await expect(adapter.request({
@@ -184,21 +184,21 @@ describe('IOSURLSessionAdapter', () => {
   describe('cancelRequest', () => {
     it('should cancel a specific request', async () => {
       await adapter.cancelRequest('request-123');
-      
+
       expect(mockNativeModule.cancelRequest).toHaveBeenCalledWith('request-123');
     });
 
     it('should handle cancel errors gracefully', async () => {
       const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
       mockNativeModule.cancelRequest.mockRejectedValue(new Error('Cancel failed'));
-      
+
       await adapter.cancelRequest('request-123');
-      
+
       expect(consoleSpy).toHaveBeenCalledWith(
         'Failed to cancel request:',
         expect.any(Error)
       );
-      
+
       consoleSpy.mockRestore();
     });
   });
@@ -206,21 +206,21 @@ describe('IOSURLSessionAdapter', () => {
   describe('cancelAllRequests', () => {
     it('should cancel all requests', async () => {
       await adapter.cancelAllRequests();
-      
+
       expect(mockNativeModule.cancelAllRequests).toHaveBeenCalled();
     });
 
     it('should handle cancel errors gracefully', async () => {
       const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
       mockNativeModule.cancelAllRequests.mockRejectedValue(new Error('Cancel all failed'));
-      
+
       await adapter.cancelAllRequests();
-      
+
       expect(consoleSpy).toHaveBeenCalledWith(
         'Failed to cancel all requests:',
         expect.any(Error)
       );
-      
+
       consoleSpy.mockRestore();
     });
   });
@@ -231,10 +231,10 @@ describe('IOSURLSessionAdapter', () => {
         Platform: { OS: 'android' },
         NativeModules: {},
       }));
-      
+
       const AndroidAdapter = require('../ios-urlsession.adapter').IOSURLSessionAdapter;
       const androidAdapter = new AndroidAdapter();
-      
+
       await expect(androidAdapter.request({
         url: 'https://api.example.com/test',
         method: 'GET',

@@ -14,8 +14,8 @@ const EmptyState: React.FC<EmptyStateProps> = ({ onAddBookmark }) => {
         Share URLs from other apps or add your first bookmark now.
       </Text>
       {onAddBookmark && (
-        <Button 
-          mode="contained" 
+        <Button
+          mode="contained"
           onPress={onAddBookmark}
           style={styles.button}
           icon="plus">

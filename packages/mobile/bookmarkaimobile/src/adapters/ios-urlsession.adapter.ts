@@ -12,7 +12,7 @@ export class IOSURLSessionAdapter implements NetworkAdapter {
 
   constructor() {
     this.isAvailable = Platform.OS === 'ios' && !!NativeURLSession;
-    
+
     if (!this.isAvailable) {
       console.warn(
         'IOSURLSessionAdapter: Native module not available. ' +
@@ -86,12 +86,12 @@ export class IOSURLSessionAdapter implements NetworkAdapter {
             throw new Error(error.message || 'Network request failed');
         }
       }
-      
+
       // Re-throw if it's already formatted
       if (error.response) {
         throw error;
       }
-      
+
       // Generic error
       throw new Error(error.message || 'Unknown error occurred');
     }
@@ -105,7 +105,7 @@ export class IOSURLSessionAdapter implements NetworkAdapter {
     if (!this.isAvailable) {
       return;
     }
-    
+
     try {
       await NativeURLSession.cancelRequest(requestId);
     } catch (error) {
@@ -120,7 +120,7 @@ export class IOSURLSessionAdapter implements NetworkAdapter {
     if (!this.isAvailable) {
       return;
     }
-    
+
     try {
       await NativeURLSession.cancelAllRequests();
     } catch (error) {
@@ -133,11 +133,11 @@ export class IOSURLSessionAdapter implements NetworkAdapter {
    */
   private normalizeHeaders(headers: Record<string, any>): Record<string, string> {
     const normalized: Record<string, string> = {};
-    
+
     Object.entries(headers).forEach(([key, value]) => {
       normalized[key.toLowerCase()] = String(value);
     });
-    
+
     return normalized;
   }
 
