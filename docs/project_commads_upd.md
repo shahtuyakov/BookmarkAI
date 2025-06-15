@@ -9,6 +9,15 @@ pnpm install
 cd packages/mobile/bookmarkaimobile/ios && pod install
 rm -rf Pods Podfile.lock && pod deintegrate
 pod cache clean --all
+
+# Clean up
+rm -rf Pods
+rm -rf build
+rm Podfile.lock
+
+# Clear CocoaPods cache
+pod cache clean --all
+
 pod install --repo-update
 
 ### Database Operations

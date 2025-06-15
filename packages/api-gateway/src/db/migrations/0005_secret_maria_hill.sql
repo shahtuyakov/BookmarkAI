@@ -1,0 +1,1 @@
+ALTER TABLE "idempotency_records" ALTER COLUMN "request_hash" SET DATA TYPE varchar(128);
