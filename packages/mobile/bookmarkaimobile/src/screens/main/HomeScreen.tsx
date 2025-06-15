@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { FAB, Searchbar, Text, useTheme, Dialog, Portal, Button, TextInput, Chip } from 'react-native-paper';
 import { HomeScreenNavigationProp } from '../../navigation/types';
-import { useSharesList, useCreateShare } from '../../hooks/useShares';
+import { useInfiniteSharesList, useCreateShare } from '../../hooks/useShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
@@ -33,16 +33,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   // Get network status
   const { isConnected } = useNetworkStatus();
   
-  // Get shares with React Query (SDK version)
+  // Get shares with infinite scrolling (SDK version)
   const { 
-    data: sharesResponse, 
+    data,
     isLoading, 
     error, 
     refetch,
-    isFetching
-  } = useSharesList({ limit: 10 });
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteSharesList({ limit: 20 });
   
-  const shares = sharesResponse?.items || [];
+  // Flatten all pages into a single array
+  const shares = data?.pages?.flatMap(page => page.items) || [];
   const isRefreshing = isFetching && !isLoading;
   
   // Create share mutation (SDK version)
@@ -62,7 +66,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   
   // Navigate to detail screen when a share is tapped
   const handleSharePress = (share: Share) => {
-    navigation.navigate('Detail', { id: share.id, title: share.metadata?.title || 'Details' });
+    const title = typeof share.metadata?.title === 'string' ? share.metadata.title : 'Details';
+    navigation.navigate('Detail', { id: share.id, title });
   };
   
   // Show add bookmark dialog
@@ -164,15 +169,48 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   };
   
-  // For SDK version, we don't have infinite scroll yet
-  // TODO: Implement pagination with cursor-based loading
+  // Handle loading more items when reaching the end
   const handleLoadMore = () => {
-    // Placeholder for future pagination implementation
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
   };
   
   // Render a loading footer when loading more items
   const renderFooter = () => {
-    // No pagination footer for now
+    if (isFetchingNextPage) {
+      return (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <Text style={styles.footerText}>Loading more...</Text>
+        </View>
+      );
+    }
+    
+    // Show retry button if there's an error and we have more pages
+    if (error && hasNextPage) {
+      return (
+        <View style={styles.footerError}>
+          <Text style={styles.footerErrorText}>Failed to load more</Text>
+          <Button 
+            mode="outlined" 
+            onPress={handleLoadMore}
+            compact
+            style={styles.footerRetryButton}>
+            Retry
+          </Button>
+        </View>
+      );
+    }
+    
+    if (!hasNextPage && shares.length > 0) {
+      return (
+        <View style={styles.footerEnd}>
+          <Text style={styles.footerEndText}>You've reached the end</Text>
+        </View>
+      );
+    }
+    
     return null;
   };
   
@@ -213,6 +251,48 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       );
     }
     
+    // Show error banner if there's an error but we have some data
+    if (error && shares.length > 0) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>
+              Failed to load more bookmarks
+            </Text>
+            <Button 
+              mode="text" 
+              onPress={() => refetch()}
+              compact
+              textColor="white">
+              Retry
+            </Button>
+          </View>
+          <FlatList
+            data={shares}
+            keyExtractor={getItemKey}
+            renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={refetch}
+                colors={[theme.colors.primary]}
+                tintColor={theme.colors.primary}
+              />
+            }
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.1}
+            ListFooterComponent={renderFooter}
+            removeClippedSubviews={true}
+            initialNumToRender={20}
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            getItemLayout={undefined}
+          />
+        </View>
+      );
+    }
+    
     if (!shares || shares.length === 0) {
       return <EmptyState onAddBookmark={showAddDialog} />;
     }
@@ -232,12 +312,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           />
         }
         onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.1}
         ListFooterComponent={renderFooter}
         removeClippedSubviews={true}
-        initialNumToRender={10}
-        maxToRenderPerBatch={5}
+        initialNumToRender={20}
+        maxToRenderPerBatch={10}
         windowSize={10}
+        getItemLayout={undefined} // Let FlatList calculate automatically for better performance
       />
     );
   };
@@ -461,6 +542,18 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 16,
   },
+  errorBanner: {
+    backgroundColor: '#FF3B30',
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  errorBannerText: {
+    color: 'white',
+    fontSize: 14,
+    flex: 1,
+  },
   fab: {
     position: 'absolute',
     margin: 16,
@@ -470,6 +563,33 @@ const styles = StyleSheet.create({
   footerLoader: {
     paddingVertical: 20,
     alignItems: 'center',
+  },
+  footerText: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 14,
+  },
+  footerEnd: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  footerEndText: {
+    color: '#999',
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  footerError: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    backgroundColor: '#FFF5F5',
+  },
+  footerErrorText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  footerRetryButton: {
+    borderColor: '#FF3B30',
   },
   urlInput: {
     marginTop: 10,

@@ -28,12 +28,12 @@ export type RootStackParamList = {
 };
 
 // Navigation Props Types
-export type AuthScreenNavigationProp<T extends keyof AuthStackParamList> = StackNavigationProp
+export type AuthScreenNavigationProp<T extends keyof AuthStackParamList> = StackNavigationProp<
   AuthStackParamList,
   T
 >;
 
-export type HomeScreenNavigationProp<T extends keyof HomeStackParamList> = StackNavigationProp
+export type HomeScreenNavigationProp<T extends keyof HomeStackParamList> = StackNavigationProp<
   HomeStackParamList,
   T
 >;
