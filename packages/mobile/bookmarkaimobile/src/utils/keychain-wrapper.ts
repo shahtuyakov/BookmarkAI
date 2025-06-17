@@ -2,7 +2,7 @@ import * as Keychain from 'react-native-keychain';
 
 // Shared keychain configuration for main app and share extension
 const KEYCHAIN_SERVICE = 'com.bookmarkai.auth';
-const SHARED_ACCESS_GROUP = 'com.bookmarkai'; // Matches entitlements keychain-access-groups
+const SHARED_ACCESS_GROUP = 'org.reactjs.native.example.BookmarkAI'; // Updated to match bundle ID
 
 // Helper function to check if server should use AuthContext keychain service
 const shouldUseAuthService = (server: string): boolean => {
