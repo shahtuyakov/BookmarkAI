@@ -10,36 +10,25 @@ class ShareViewController: SLComposeServiceViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        NSLog("🎯🎯🎯 ShareViewController: viewDidLoad called!")
-        NSLog("📱 Bundle ID: %@", Bundle.main.bundleIdentifier ?? "unknown")
-        NSLog("📱 Extension context: %@", extensionContext != nil ? "available" : "nil")
         title = "BookmarkAI"
         placeholder = "Add a comment (optional)"
         extractURL()
     }
     
     override func didSelectPost() {
-        print("🎯🎯🎯 ShareViewController: didSelectPost called!")
-        print("📝 URL to share: \(urlToShare?.absoluteString ?? "nil")")
-        print("📝 Is processing: \(isProcessing)")
-        print("📝 Content text: \(contentText)")
         
         guard let url = urlToShare, !isProcessing else {
             if urlToShare == nil {
                 showError("No URL found to share.")
-                print("❌ ShareViewController: No URL found")
             }
-            print("❌ ShareViewController: Guard failed - url: \(urlToShare != nil), processing: \(isProcessing)")
             return
         }
         
         guard isURLSupported(url) else {
             showError("Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, and X.")
-            print("❌ ShareViewController: URL not supported: \(url)")
             return
         }
         
-        print("✅ ShareViewController: All checks passed, starting immediate posting")
         isProcessing = true
         
         // Try immediate posting first, fallback to queue if it fails
@@ -51,80 +40,41 @@ class ShareViewController: SLComposeServiceViewController {
      * This provides Android-like immediate posting while maintaining reliability
      */
     private func attemptImmediatePostingThenFallback(url: URL) {
-        print("🚀 ShareViewController: Starting immediate posting attempt for \(url)")
-        
-        // Debug: Check if we're in the share extension context
-        print("📱 Bundle ID: \(Bundle.main.bundleIdentifier ?? "unknown")")
         
         // Get authentication tokens
-        NSLog("🔐🔐🔐 ShareViewController: About to check keychain for auth tokens...")
         let (accessToken, refreshToken) = KeychainHelper.shared.getAuthTokens()
         
-        NSLog("🔐 Auth check - Access token: %@", accessToken != nil ? "Found (\(accessToken!.prefix(20))...)" : "Not found")
-        NSLog("🔐 Auth check - Refresh token: %@", refreshToken != nil ? "Found" : "Not found")
-        
-        // DEBUG: Show what we found
-        if accessToken != nil {
-            let alert = UIAlertController(
-                title: "✅ Tokens Found!",
-                message: "Found auth tokens! Token preview: \(accessToken!.prefix(20))...",
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: "Continue", style: .default) { _ in
-                self.showProcessingAlert()
-                Task {
-                    let result = await self.postShareImmediately(
-                        url: url.absoluteString,
-                        title: self.extractTitleFromURL(url),
-                        notes: self.contentText,
-                        accessToken: accessToken!,
-                        userId: self.extractUserIdFromToken(accessToken!)
-                    )
-                    
-                    await MainActor.run {
-                        self.handleImmediatePostResult(result: result, url: url)
-                    }
-                }
-            })
-            present(alert, animated: true)
+        // Check if we have valid tokens
+        guard let accessToken = accessToken, !accessToken.isEmpty else {
+            self.fallbackToQueue(url: url, reason: "No authentication")
             return
         }
         
-        // If we didn't find tokens, show debug info and fall back to queue
-        NSLog("🔐❌ ShareViewController: No auth tokens found, falling back to queue")
+        // Show immediate processing feedback
+        self.showProcessingAlert()
         
-        // Debug: Show alert about missing auth
-        let bundleID = Bundle.main.bundleIdentifier ?? "unknown"
-        let debugMessage = """
-        No auth tokens found.
-        Bundle ID: \(bundleID)
-        Service: com.bookmarkai.auth
-        Account: auth_tokens
-        Access Groups tried:
-        - org.reactjs.native.example.BookmarkAI
-        - (no access group)
-        - \(KeychainHelper.shared.getTeamID() ?? "?").org.reactjs.native.example.BookmarkAI
-        """
-        
-        let debugAlert = UIAlertController(
-            title: "Debug: Auth Missing",
-            message: debugMessage,
-            preferredStyle: .alert
-        )
-        debugAlert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-            self.fallbackToQueue(url: url, reason: "No authentication")
-        })
-        present(debugAlert, animated: true)
+        // Start immediate posting with timeout
+        Task {
+            let result = await self.postShareImmediately(
+                url: url.absoluteString,
+                title: self.extractTitleFromURL(url),
+                notes: self.contentText,
+                accessToken: accessToken,
+                userId: self.extractUserIdFromToken(accessToken)
+            )
+            
+            await MainActor.run {
+                self.handleImmediatePostResult(result: result, url: url)
+            }
+        }
     }
     
     private func handleImmediatePostResult(result: SharePostResult, url: URL) {
         switch result {
         case .success(let shareId):
-            print("✅ ShareViewController: Immediate posting succeeded! Share ID: \(shareId ?? "unknown")")
             showSuccessAlert(url: url, immediate: true)
             
         case .failure(let error):
-            print("❌ ShareViewController: Immediate posting failed: \(error.description)")
             
             // Show queue fallback feedback
             showFallbackAlert(url: url, reason: error.description)
@@ -132,7 +82,6 @@ class ShareViewController: SLComposeServiceViewController {
     }
     
     private func fallbackToQueue(url: URL, reason: String) {
-        print("♻️ ShareViewController: Falling back to queue - \(reason)")
         addToQueueAndShowAlert(url: url, immediate: false)
     }
     
@@ -167,7 +116,7 @@ class ShareViewController: SLComposeServiceViewController {
         dismiss(animated: false) {
             let alert = UIAlertController(
                 title: "Bookmark Queued! 📋", 
-                message: "Saved to queue (will sync when app opens):\n\(url.host ?? url.absoluteString)", 
+                message: "Saved to queue (will sync when app opens):\n\(url.host ?? url.absoluteString)\n\nReason: \(reason)", 
                 preferredStyle: .alert
             )
             
@@ -365,12 +314,8 @@ class ShareViewController: SLComposeServiceViewController {
         userId: String
     ) async -> SharePostResult {
         
-        let startTime = Date()
-        print("🚀 ShareViewController: Attempting immediate post for: \(url)")
-        
-        // Prepare request - use actual API URL
-        // For development with ngrok or production
-        let apiBaseURL = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "https://bookmarkai-dev.ngrok.io" // Update this to your actual API URL
+        // Prepare request - use the same API URL as the main app
+        let apiBaseURL = "https://bookmarkai-dev.ngrok.io" // Development URL
         guard let apiURL = URL(string: "\(apiBaseURL)/api/v1/shares") else {
             return .failure(.invalidURL)
         }
@@ -385,63 +330,51 @@ class ShareViewController: SLComposeServiceViewController {
         let idempotencyKey = UUID().uuidString
         request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
         
-        request.timeoutInterval = 2.5 // Must complete within 2.5 seconds
+        request.timeoutInterval = 5.0 // Essential for share extension
         
         // Prepare request body
         let requestBody: [String: Any] = [
-            "url": url,
-            "title": title ?? "",
-            "notes": notes ?? "",
-            "source": "ios-share-extension",
-            "immediate": true
+            "url": url
         ]
+        
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         } catch {
-            print("❌ ShareViewController: JSON serialization failed: \(error)")
             return .failure(.jsonError(error))
         }
         
         // Make the request with timeout
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
             
-            let elapsed = Date().timeIntervalSince(startTime)
-            print("⏱️ ShareViewController: Request completed in \(elapsed)s")
+            let (data, response) = try await URLSession.shared.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 return .failure(.invalidResponse)
             }
             
-            print("📡 ShareViewController: Status code: \(httpResponse.statusCode)")
             
-            if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
-                // Parse response to get share ID
-                if let shareData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let shareId = shareData["id"] as? String {
-                    print("✅ ShareViewController: Share created successfully with ID: \(shareId)")
+            
+            if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 || httpResponse.statusCode == 202 {
+                // Parse response to get share ID from envelope format
+                if let responseData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let dataObject = responseData["data"] as? [String: Any],
+                   let shareId = dataObject["id"] as? String {
                     return .success(shareId)
                 } else {
-                    print("✅ ShareViewController: Share created successfully (no ID parsed)")
                     return .success(nil)
                 }
             } else if httpResponse.statusCode == 401 {
-                print("🔐 ShareViewController: Authentication failed")
                 return .failure(.authenticationFailed)
             } else if httpResponse.statusCode == 409 {
-                print("♻️ ShareViewController: Duplicate share (idempotency)")
                 return .success(nil) // Treat duplicates as success
             } else {
-                print("❌ ShareViewController: Server error: \(httpResponse.statusCode)")
                 return .failure(.serverError(httpResponse.statusCode))
             }
             
         } catch let error as NSError where error.code == NSURLErrorTimedOut {
-            print("⏰ ShareViewController: Request timed out")
             return .failure(.timeout)
-        } catch {
-            print("❌ ShareViewController: Network error: \(error)")
+        } catch let error as NSError {
             return .failure(.networkError(error))
         }
     }
