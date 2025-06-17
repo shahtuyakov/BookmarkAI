@@ -28,10 +28,6 @@ class SQLiteQueueManager {
     
     private func openDatabase() {
         if sqlite3_open(dbPath, &db) != SQLITE_OK {
-            print("❌ SQLiteQueueManager: Unable to open database at \(dbPath)")
-            if let errorMessage = sqlite3_errmsg(db) {
-                print("❌ SQLiteQueueManager: Error: \(String(cString: errorMessage))")
-            }
         } else {
             
             // Enable foreign key support
@@ -45,7 +41,6 @@ class SQLiteQueueManager {
         if let db = db {
             sqlite3_close(db)
             self.db = nil
-            print("🔒 SQLiteQueueManager: Database closed")
         }
     }
     
@@ -66,10 +61,6 @@ class SQLiteQueueManager {
         """
         
         if sqlite3_exec(db, createTableSQL, nil, nil, nil) != SQLITE_OK {
-            print("❌ SQLiteQueueManager: Unable to create table")
-            if let errorMessage = sqlite3_errmsg(db) {
-                print("❌ SQLiteQueueManager: Error: \(String(cString: errorMessage))")
-            }
         } else {
             }
     }
@@ -80,7 +71,6 @@ class SQLiteQueueManager {
     func addToQueue(_ item: QueueItem) -> Bool {
         // Validate required fields before inserting
         guard !item.id.isEmpty && !item.url.isEmpty else {
-            print("❌ SQLiteQueueManager: Cannot add item with empty id('\(item.id)') or url('\(item.url)')")
             return false
         }
         

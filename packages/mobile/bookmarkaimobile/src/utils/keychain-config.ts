@@ -45,7 +45,6 @@ export const withKeychainFallback = async <T>(
   } catch (error: any) {
     // If it fails with entitlement error, try without access group (simulator compatibility)
     if (error.message?.includes('entitlement') || error.message?.includes('Internal error')) {
-      console.log('⚠️ Keychain access group failed, retrying without access group');
       return await operation(getSafeKeychainOptions());
     }
     throw error;
