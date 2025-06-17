@@ -1,0 +1,7 @@
+// BookmarkAI Share Extension Configuration Settings
+// This file defines environment-specific settings for the share extension
+
+// Import base configuration
+#include "BookmarkAI.xcconfig"
+
+// Share extension inherits API_BASE_URL from main app configuration

@@ -79,7 +79,7 @@ if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 || httpRespo
 ### Visual Indicators Added (Later Removed)
 During debugging, we added visual alerts to show the authentication state:
 - " Immediate Mode" - Tokens found, attempting direct upload
-- "=� Queue Mode" - No tokens found, using offline queue
+- "=� Queue Mode" - No tokens found, using offline queue
 
 ### Debug Logging
 Added NSLog statements throughout the token retrieval process to trace the flow in Xcode console.
@@ -123,6 +123,32 @@ let apiBaseURL = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "https:/
 
 ## Future Considerations
 1. Consider migrating from React Native's default bundle IDs to proper `com.bookmarkai` identifiers
-2. Implement environment-based configuration for API URLs
-3. Add retry logic for failed immediate posts before falling back to queue
-4. Consider adding a small delay before showing the success/failure alert to ensure better UX
+2. ~~Implement environment-based configuration for API URLs~~ ✅ COMPLETED
+3. ~~Add retry logic for failed immediate posts before falling back to queue~~ ✅ COMPLETED
+4. ~~Consider adding a small delay before showing the success/failure alert to ensure better UX~~ ✅ COMPLETED
+
+## Implemented Improvements
+
+### Environment-Based Configuration (Completed)
+- Added `API_BASE_URL` to both Info.plist files
+- Created `.xcconfig` files for build configurations
+- Updated ShareViewController to read from Info.plist
+- React Native automatically switches based on `__DEV__`
+- Debug builds use development URL, Release builds use production URL
+
+### Retry Logic for Failed Posts (Completed)
+- Implemented intelligent retry mechanism with time budget:
+  - First attempt: 2.0 second timeout
+  - Retry (if needed): 1.5 second timeout
+  - Total time budget stays within 5 seconds
+- Smart retry conditions:
+  - Retries on: timeout, 5xx errors, network connection issues
+  - No retry on: 4xx client errors, authentication failures
+- Added 200ms delay between attempts
+- Enhanced error messages for better user feedback
+
+### Success Alert Delay (Completed)
+- Added 0.5 second delay before showing success alert
+- Provides smoother transition from "Saving..." to "Success!"
+- No delay on failures to maintain responsiveness
+- Improved processing alert messaging for clarity

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
 import { Platform, Alert, ToastAndroid, NativeModules, View, Text, ActivityIndicator } from 'react-native';
@@ -11,6 +11,7 @@ import RootNavigator from '../src/navigation';
 import { useAppTheme } from '../src/theme';
 import { useShareExtension } from '../src/services/ShareExtensionHandler';
 import { useCreateShare, shareKeys } from '../src/hooks/useShares';
+import { initializeIOSConfiguration } from '../src/utils/ios-config-sync';
 
 interface ShareData {
   url: string;
@@ -22,6 +23,11 @@ interface ShareData {
 function AppContent(): React.JSX.Element {
   const { mutate: createShare } = useCreateShare();
   const queryClient = useQueryClient();
+  
+  // Initialize iOS configuration on app launch
+  useEffect(() => {
+    initializeIOSConfiguration();
+  }, []);
   
   // Helper function to invalidate shares cache and trigger UI refresh
   const refreshSharesList = React.useCallback(() => {

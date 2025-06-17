@@ -42,7 +42,7 @@ class ShareViewController: SLComposeServiceViewController {
     private func attemptImmediatePostingThenFallback(url: URL) {
         
         // Get authentication tokens
-        let (accessToken, refreshToken) = KeychainHelper.shared.getAuthTokens()
+        let (accessToken, _) = KeychainHelper.shared.getAuthTokens()
         
         // Check if we have valid tokens
         guard let accessToken = accessToken, !accessToken.isEmpty else {
@@ -53,9 +53,9 @@ class ShareViewController: SLComposeServiceViewController {
         // Show immediate processing feedback
         self.showProcessingAlert()
         
-        // Start immediate posting with timeout
+        // Start immediate posting with retry logic
         Task {
-            let result = await self.postShareImmediately(
+            let result = await self.postShareWithRetry(
                 url: url.absoluteString,
                 title: self.extractTitleFromURL(url),
                 notes: self.contentText,
@@ -71,12 +71,17 @@ class ShareViewController: SLComposeServiceViewController {
     
     private func handleImmediatePostResult(result: SharePostResult, url: URL) {
         switch result {
-        case .success(let shareId):
-            showSuccessAlert(url: url, immediate: true)
+        case .success(_):
+            // Add small delay for smooth UX on success
+            Task {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                await MainActor.run {
+                    self.showSuccessAlert(url: url, immediate: true)
+                }
+            }
             
         case .failure(let error):
-            
-            // Show queue fallback feedback
+            // No delay on failure - show immediately
             showFallbackAlert(url: url, reason: error.description)
         }
     }
@@ -87,8 +92,8 @@ class ShareViewController: SLComposeServiceViewController {
     
     private func showProcessingAlert() {
         let alert = UIAlertController(
-            title: "Saving Bookmark... ⚡", 
-            message: "Attempting immediate upload", 
+            title: "Saving Bookmark...", 
+            message: "Please wait a moment", 
             preferredStyle: .alert
         )
         present(alert, animated: true)
@@ -306,17 +311,74 @@ class ShareViewController: SLComposeServiceViewController {
     
     // MARK: - Immediate Posting Implementation
     
-    private func postShareImmediately(
+    private func postShareWithRetry(
         url: String,
         title: String?,
         notes: String?,
         accessToken: String,
         userId: String
     ) async -> SharePostResult {
+        // First attempt with 2 second timeout
+        var result = await postShareImmediately(
+            url: url,
+            title: title,
+            notes: notes,
+            accessToken: accessToken,
+            userId: userId,
+            timeout: 2.0
+        )
         
-        // Prepare request - use the same API URL as the main app
-        let apiBaseURL = "https://bookmarkai-dev.ngrok.io" // Development URL
-        guard let apiURL = URL(string: "\(apiBaseURL)/api/v1/shares") else {
+        // Check if we should retry
+        if shouldRetry(result: result) {
+            // Wait a brief moment before retry
+            try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+            
+            // Retry with 1.5 second timeout
+            result = await postShareImmediately(
+                url: url,
+                title: title,
+                notes: notes,
+                accessToken: accessToken,
+                userId: userId,
+                timeout: 1.5
+            )
+        }
+        
+        return result
+    }
+    
+    private func shouldRetry(result: SharePostResult) -> Bool {
+        switch result {
+        case .success:
+            return false
+        case .failure(let error):
+            switch error {
+            // Retry on timeout
+            case .timeout:
+                return true
+            // Retry on 5xx server errors
+            case .serverError(let code):
+                return code >= 500
+            // Don't retry on auth failures or API validation errors
+            case .authenticationFailed, .invalidURL, .jsonError, .invalidResponse, .apiError:
+                return false
+            // Retry on network errors (connection issues)
+            case .networkError:
+                return true
+            }
+        }
+    }
+    
+    private func postShareImmediately(
+        url: String,
+        title: String?,
+        notes: String?,
+        accessToken: String,
+        userId: String,
+        timeout: TimeInterval = 5.0
+    ) async -> SharePostResult {
+        // Get API URL from shared configuration using App Groups
+        guard let apiURL = SharedConfiguration.shared.sharesEndpointURL else {
             return .failure(.invalidURL)
         }
         
@@ -330,13 +392,12 @@ class ShareViewController: SLComposeServiceViewController {
         let idempotencyKey = UUID().uuidString
         request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
         
-        request.timeoutInterval = 5.0 // Essential for share extension
+        request.timeoutInterval = timeout // Dynamic timeout for retry logic
         
         // Prepare request body
         let requestBody: [String: Any] = [
             "url": url
         ]
-        
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -354,7 +415,6 @@ class ShareViewController: SLComposeServiceViewController {
             }
             
             
-            
             if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 || httpResponse.statusCode == 202 {
                 // Parse response to get share ID from envelope format
                 if let responseData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -369,6 +429,12 @@ class ShareViewController: SLComposeServiceViewController {
             } else if httpResponse.statusCode == 409 {
                 return .success(nil) // Treat duplicates as success
             } else {
+                // Try to parse error message from response
+                if let responseData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let error = responseData["error"] as? [String: Any],
+                   let message = error["message"] as? String {
+                    return .failure(.apiError(message))
+                }
                 return .failure(.serverError(httpResponse.statusCode))
             }
             
@@ -395,6 +461,7 @@ enum SharePostError {
     case timeout
     case networkError(Error)
     case serverError(Int)
+    case apiError(String) // New case for API validation errors
     
     var description: String {
         switch self {
@@ -409,9 +476,20 @@ enum SharePostError {
         case .timeout:
             return "Request timed out"
         case .networkError(let error):
+            let nsError = error as NSError
+            if nsError.code == NSURLErrorNotConnectedToInternet {
+                return "No internet connection"
+            } else if nsError.code == NSURLErrorCannotConnectToHost {
+                return "Cannot connect to server"
+            }
             return "Network error: \(error.localizedDescription)"
         case .serverError(let code):
-            return "Server error: \(code)"
+            if code >= 500 {
+                return "Server error (\(code)) - temporary issue"
+            }
+            return "Request error: \(code)"
+        case .apiError(let message):
+            return message
         }
     }
 }

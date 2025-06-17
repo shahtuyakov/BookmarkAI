@@ -59,7 +59,6 @@ class URLSessionNetworkAdapter: RCTEventEmitter {
     queue.async { [weak self] in
       guard let self = self else { return }
       
-      do {
         // Create request
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -138,9 +137,6 @@ class URLSessionNetworkAdapter: RCTEventEmitter {
         // Start the task
         task.resume()
         
-      } catch {
-        reject("REQUEST_ERROR", "Failed to create request", error)
-      }
     }
   }
   
