@@ -159,10 +159,16 @@ export class BookmarkAIClient {
               requestConfig = await this.interceptorManager.applyRequestInterceptors(config);
               response = await this.networkAdapter.request<T>(requestConfig);
               response = await this.interceptorManager.applyResponseInterceptors(response);
-            } catch (refreshError) {
+            } catch (refreshError: any) {
               // Token refresh failed, the AuthService already emitted 'auth-error'
-              // Just re-throw the error
-              throw refreshError;
+              // Create a non-retryable error
+              const authError = {
+                code: 'AUTH_ERROR',
+                message: refreshError.message || 'Authentication failed',
+                status: 401,
+                retryable: false,
+              } as BookmarkAIError;
+              throw authError;
             }
           }
 
@@ -274,7 +280,7 @@ export class BookmarkAIClient {
       message: data?.message || response.statusText,
       details: data?.details,
       status: response.status,
-      retryable: data?.retryable || response.status >= 500,
+      retryable: response.status === 401 ? false : (data?.retryable || response.status >= 500),
       retryAfter: data?.retryAfter || 
         (response.headers['retry-after'] ? 
           parseInt(response.headers['retry-after']) : undefined),
