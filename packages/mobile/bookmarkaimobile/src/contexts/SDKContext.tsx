@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import { BookmarkAIClient, ReactNativeStorageAdapter } from '@bookmarkai/sdk';
 import { MMKV } from 'react-native-mmkv';
 import { SyncService } from '../services/SyncService';
@@ -71,6 +72,14 @@ export function SDKProvider({ children }: SDKProviderProps) {
   };
 
   useEffect(() => {
+    // Listen for auth errors to ensure SDK state is cleared
+    const handleAuthError = () => {
+      console.log('🔴 SDKContext: Auth error detected - clearing SDK auth state');
+      // The SDK will handle its own token clearing when auth-error is emitted
+    };
+    
+    const authErrorSubscription = DeviceEventEmitter.addListener('auth-error', handleAuthError);
+    
     async function initializeSDK() {
       try {
         // Use the shared storage adapter
@@ -201,6 +210,7 @@ export function SDKProvider({ children }: SDKProviderProps) {
 
     // Cleanup on unmount
     return () => {
+      authErrorSubscription.remove();
       if (client) {
         client.destroy();
       }

@@ -12,7 +12,14 @@ export const queryClient = new QueryClient({
       // Default settings for all queries
       staleTime: 1000 * 60 * 5, // 5 minutes
       cacheTime: 1000 * 60 * 60 * 24, // 24 hours
-      retry: 3,
+      retry: (failureCount, error: any) => {
+        // Don't retry on authentication errors
+        if (error?.response?.status === 401 || error?.status === 401) {
+          return false;
+        }
+        // Default retry logic for other errors
+        return failureCount < 3;
+      },
       retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
       
       // By default, we assume data might be stale and needs refetching
@@ -24,8 +31,15 @@ export const queryClient = new QueryClient({
       networkMode: 'always',
     },
     mutations: {
-      // Mutations will retry 3 times with exponential backoff
-      retry: 3,
+      // Mutations will retry with custom logic
+      retry: (failureCount, error: any) => {
+        // Don't retry on authentication errors
+        if (error?.response?.status === 401 || error?.status === 401) {
+          return false;
+        }
+        // Default retry logic for other errors
+        return failureCount < 3;
+      },
       retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
       networkMode: 'always',
     },

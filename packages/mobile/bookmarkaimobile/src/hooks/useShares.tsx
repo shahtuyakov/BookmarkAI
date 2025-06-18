@@ -52,6 +52,15 @@ export function useSharesList(params: GetSharesParams = {}) {
     // Enable refetch on focus to catch updates from share extension
     refetchOnWindowFocus: true,
     refetchOnMount: true,
+    retry: (failureCount, error: any) => {
+      // Don't retry on authentication errors
+      if (error?.response?.status === 401) {
+        console.log('🔴 Authentication error in useSharesList - stopping retries');
+        return false;
+      }
+      // Default retry logic for other errors
+      return failureCount < 3;
+    },
   });
   
   const shares = queryResult.data?.pages.flatMap(page => page.items) || [];
@@ -87,6 +96,15 @@ export function useShareById(id: string) {
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
     refetchOnWindowFocus: true,
+    retry: (failureCount, error: any) => {
+      // Don't retry on authentication errors
+      if (error?.response?.status === 401) {
+        console.log('🔴 Authentication error in useShareById - stopping retries');
+        return false;
+      }
+      // Default retry logic for other errors
+      return failureCount < 3;
+    },
   });
   
   const refresh = useCallback(async () => {
