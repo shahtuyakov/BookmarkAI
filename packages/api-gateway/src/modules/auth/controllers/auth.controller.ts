@@ -11,7 +11,7 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { Request, Response } from 'express';
 import { ConfigService } from '../../../config/services/config.service';
 
-@Controller('auth')
+@Controller('v1/auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
   private readonly isProduction: boolean;

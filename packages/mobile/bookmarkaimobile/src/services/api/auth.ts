@@ -43,7 +43,7 @@ export const authAPI = {
   // Login
   login: async (credentials: LoginRequest) => {
     try {
-      const response = await apiClient.post<{data: AuthResponse}>('/auth/login', credentials);
+      const response = await apiClient.post<{data: AuthResponse}>('/v1/auth/login', credentials);
       
       const { accessToken, refreshToken, expiresIn } = response.data.data;
       
@@ -70,7 +70,7 @@ export const authAPI = {
   // Register
   register: async (userData: RegisterRequest) => {
     try {
-      const response = await apiClient.post<{data: AuthResponse}>('/auth/register', userData);
+      const response = await apiClient.post<{data: AuthResponse}>('/v1/auth/register', userData);
       
       const { accessToken, refreshToken, expiresIn } = response.data.data;
       
@@ -102,9 +102,9 @@ export const authAPI = {
         
         // Call the backend to invalidate token, including the refresh token
         if (tokens?.refreshToken) {
-          await apiClient.post('/auth/logout', { refreshToken: tokens.refreshToken });
+          await apiClient.post('/v1/auth/logout', { refreshToken: tokens.refreshToken });
         } else {
-          await apiClient.post('/auth/logout');
+          await apiClient.post('/v1/auth/logout');
         }
       } catch (error) {
         console.error('Error logging out from server', error);
@@ -116,23 +116,23 @@ export const authAPI = {
   
   // Get user profile
   getUserProfile: async () => {
-    const response = await apiClient.get<{data: User}>('/auth/profile');
+    const response = await apiClient.get<{data: User}>('/v1/auth/profile');
     return response.data.data;
   },
   
   // Request password reset
   requestPasswordReset: async (email: string) => {
-    await apiClient.post('/auth/forgot-password', { email });
+    await apiClient.post('/v1/auth/forgot-password', { email });
   },
   
   // Reset password with token
   resetPassword: async (data: ConfirmResetRequest) => {
-    await apiClient.post('/auth/reset-password', data);
+    await apiClient.post('/v1/auth/reset-password', data);
   },
   
   // Refresh token
   refreshToken: async (refreshToken: string) => {
-    const response = await apiClient.post<{data: AuthResponse}>('/auth/refresh', { refreshToken });
+    const response = await apiClient.post<{data: AuthResponse}>('/v1/auth/refresh', { refreshToken });
     const { accessToken, refreshToken: newRefreshToken, expiresIn } = response.data.data;
     await saveTokens(accessToken, newRefreshToken, expiresIn);
     return { accessToken, refreshToken: newRefreshToken };
