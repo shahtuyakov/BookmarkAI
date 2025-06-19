@@ -91,8 +91,8 @@ export function SDKProvider({ children }: SDKProviderProps) {
         // Determine API URL based on environment
         // SDK needs the full API base URL since it only adds endpoint paths like /shares
         const apiUrl = __DEV__ 
-          ? 'https://bookmarkai-dev.ngrok.io/api/v1'
-          : 'https://api.bookmarkai.com/v1';
+          ? 'https://bookmarkai-dev.ngrok.io/api'
+          : 'https://api.bookmarkai.com/api';
 
         // Initialize the client
         const bookmarkClient = new BookmarkAIClient({
