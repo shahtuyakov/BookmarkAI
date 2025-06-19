@@ -310,7 +310,7 @@ class EnhancedTokenSyncService {
       }
 
       // Check if tokens are expired before attempting sync
-      const currentTime = Math.floor(Date.now() / 1000);
+      const currentTime = Date.now();
       if (rnTokens.expiresAt < currentTime) {
         console.log('🔴 Tokens expired - skipping periodic sync');
         return;
