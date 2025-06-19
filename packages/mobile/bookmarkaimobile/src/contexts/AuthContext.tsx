@@ -158,6 +158,17 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         
         if (token) {
           try {
+            // Check if token is expired locally first
+            const tokens = await getTokens();
+            if (tokens && tokens.expiresAt < Date.now()) {
+              console.log('🔴 Token expired locally - clearing and requiring login');
+              await clearTokens();
+              await clearAndroidTokens();
+              setUser(null);
+              setIsLoading(false);
+              return;
+            }
+            
             const userData = await authAPI.getUserProfile();
             setUser(userData);
             
