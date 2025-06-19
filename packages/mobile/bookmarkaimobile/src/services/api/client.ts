@@ -186,8 +186,8 @@ axiosInstance.interceptors.response.use(
         { headers: { 'Content-Type': 'application/json' } }
       );
 
-      const { accessToken, refreshToken } = response.data.data;
-      await saveTokens(accessToken, refreshToken);
+      const { accessToken, refreshToken, expiresIn } = response.data.data;
+      await saveTokens(accessToken, refreshToken, expiresIn);
 
       // Update the failed requests with the new token
       processQueue(null, accessToken);
