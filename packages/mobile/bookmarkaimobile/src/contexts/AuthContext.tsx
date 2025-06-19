@@ -158,18 +158,6 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         
         if (token) {
           try {
-            // Check if token is expired locally first
-            const tokens = await getTokens();
-            if (tokens && tokens.expiresAt < Date.now()) {
-              console.log('🔴 Token expired locally - forcing logout');
-              await clearTokens();
-              await clearAndroidTokens();
-              setUser(null);
-              setError('Your session has expired. Please login again.');
-              setIsLoading(false);
-              return;
-            }
-            
             const userData = await authAPI.getUserProfile();
             setUser(userData);
             
@@ -181,18 +169,13 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
               setTimeout(() => verifyTokenSync(), 1000);
             }
             
-          } catch (err: any) {
+          } catch (err) {
             console.error('❌ AuthContext: Failed to get user profile:', err);
-            
-            // Check if it's a 401 error
-            if (err.response?.status === 401) {
-              console.log('🔴 Received 401 - token expired on server');
-            }
-            
             await clearTokens();
             await clearAndroidTokens();
             setUser(null);
-            setError('Your session has expired. Please login again.');
+            // Emit auth-error to trigger proper logout flow
+            DeviceEventEmitter.emit('auth-error');
           }
         } else {
           setUser(null);
@@ -213,29 +196,16 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     
     checkAuth();
     
-    const handleAuthError = async () => {
-      console.log('🔴 Auth error detected - forcing logout');
-      
-      // Clear all auth state immediately
+    const handleAuthError = () => {
       setUser(null);
-      setError('Your session has expired. Please login again.');
-      
-      // Clear all tokens
-      try {
-        await clearTokens();
-        await clearAndroidTokens();
-      } catch (err) {
-        console.error('Error clearing tokens during auth error:', err);
-      }
-      
-      // Force re-render by updating loading state
-      setIsLoading(false);
+      setError('Authentication failed. Please login again.');
+      clearAndroidTokens(); // Clear Android tokens on auth error
     };
     
-    const authErrorSubscription = DeviceEventEmitter.addListener('auth-error', handleAuthError);
+    DeviceEventEmitter.addListener('auth-error', handleAuthError);
     
     return () => {
-      authErrorSubscription.remove();
+      DeviceEventEmitter.removeAllListeners('auth-error');
     };
   }, []);
   
