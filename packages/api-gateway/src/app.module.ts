@@ -42,9 +42,9 @@ export class AppModule {
     consumer
       .apply(RateLimitMiddleware)
       .forRoutes(
-        { path: 'auth/login', method: RequestMethod.POST },
-        { path: 'auth/register', method: RequestMethod.POST },
-        { path: 'auth/refresh', method: RequestMethod.POST },
+        { path: 'v1/auth/login', method: RequestMethod.POST },
+        { path: 'v1/auth/register', method: RequestMethod.POST },
+        { path: 'v1/auth/refresh', method: RequestMethod.POST },
       );
   }
 }

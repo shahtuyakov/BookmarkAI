@@ -48,11 +48,11 @@ info:
     name: BookmarkAI Team
     email: support@bookmarkai.com
 servers:
-  - url: https://api.bookmarkai.com/api
+  - url: https://api.bookmarkai.com/v1
     description: Production server
-  - url: https://staging-api.bookmarkai.com/api
+  - url: https://staging-api.bookmarkai.com/v1
     description: Staging server
-  - url: http://localhost:3001/api
+  - url: http://localhost:3001/api/v1
     description: Local development server
 
 paths:

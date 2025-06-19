@@ -2,7 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { Public } from '../decorators/public.decorator';
 import { Roles } from '../decorators/roles.decorator';
 
-@Controller('test')
+@Controller('v1/test')
 export class TestController {
   @Get('protected')
   // No @Public() decorator means this route is protected

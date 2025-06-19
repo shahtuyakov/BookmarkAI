@@ -96,7 +96,7 @@ describe('BookmarkAIClient', () => {
             statusText: 'Unauthorized',
             headers: {},
           };
-        } else if (config.url.includes('/auth/refresh')) {
+        } else if (config.url.includes('/v1/auth/refresh')) {
           // Refresh request
           return {
             data: {
