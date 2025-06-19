@@ -308,6 +308,7 @@ export function useProcessShare() {
  */
 export function useQueuedShares() {
   const syncService = useSyncService();
+  const { isConnected } = useNetworkStatus();
 
   return useQuery({
     queryKey: ['queued-shares'],
@@ -316,7 +317,11 @@ export function useQueuedShares() {
       const stats = syncService.getQueueStats();
       return { shares, stats };
     },
-    refetchInterval: 5000, // Refresh every 5 seconds
+    // Only poll when we have network connectivity
+    // The SyncService already checks authentication internally
+    refetchInterval: isConnected ? 5000 : false,
+    // Disable the query when offline
+    enabled: isConnected,
   });
 }
 

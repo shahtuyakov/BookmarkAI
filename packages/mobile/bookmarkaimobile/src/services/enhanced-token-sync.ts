@@ -309,6 +309,13 @@ class EnhancedTokenSyncService {
         return; // No tokens to sync
       }
 
+      // Check if tokens are expired before attempting sync
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (rnTokens.expiresAt < currentTime) {
+        console.log('🔴 Tokens expired - skipping periodic sync');
+        return;
+      }
+
       const needsSync = await this.checkIfSyncNeeded(rnTokens);
       if (needsSync) {
         await this.syncToAndroid(rnTokens);
