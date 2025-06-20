@@ -135,9 +135,21 @@ class EnhancedTokenSyncService {
   }> {
     try {
       const rnTokens = await this.getReactNativeTokens();
-      const androidStatus = await androidTokenSync.checkAuthStatus();
-      
       const rnHasTokens = !!rnTokens;
+      
+      // Platform-specific handling
+      if (Platform.OS !== 'android') {
+        return {
+          isInSync: true,
+          rnHasTokens,
+          androidHasTokens: false,
+          lastSyncTime: this.lastSyncTime,
+          retryCount: this.retryCount,
+          recommendation: `Enhanced sync not available on ${Platform.OS} - React Native tokens managed separately`
+        };
+      }
+
+      const androidStatus = await androidTokenSync.checkAuthStatus();
       const androidHasTokens = androidStatus.isAuthenticated;
       
       let isInSync = false;
@@ -295,6 +307,13 @@ class EnhancedTokenSyncService {
       const rnTokens = await this.getReactNativeTokens();
       if (!rnTokens) {
         return; // No tokens to sync
+      }
+
+      // Check if tokens are expired before attempting sync
+      const currentTime = Date.now();
+      if (rnTokens.expiresAt < currentTime) {
+        console.log('🔴 Tokens expired - skipping periodic sync');
+        return;
       }
 
       const needsSync = await this.checkIfSyncNeeded(rnTokens);

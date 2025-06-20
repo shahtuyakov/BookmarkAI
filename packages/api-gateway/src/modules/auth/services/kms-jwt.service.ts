@@ -90,7 +90,7 @@ export class KmsJwtService implements OnModuleInit {
     const jti = uuidv4();
     const iat = Math.floor(Date.now() / 1000);
     
-    // Create access token (15 min)
+    // Create access token (15 minutes)
     const accessTokenExpiry = iat + 15 * 60;
     const accessTokenPayload: JwtPayload = {
       sub: userId,

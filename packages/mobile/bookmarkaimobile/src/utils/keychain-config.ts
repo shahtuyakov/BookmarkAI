@@ -2,7 +2,8 @@ import { Platform } from 'react-native';
 
 // Shared keychain configuration
 export const KEYCHAIN_SERVICE = 'com.bookmarkai.auth';
-export const SHARED_ACCESS_GROUP = 'com.bookmarkai';
+// Updated to match the actual bundle identifier pattern
+export const SHARED_ACCESS_GROUP = 'org.reactjs.native.example.BookmarkAI';
 
 /**
  * Get keychain options with conditional access group

@@ -11,7 +11,7 @@ export const idempotencyRecords = pgTable(
     userId: varchar('user_id', { length: 255 }).notNull(),
     endpoint: varchar('endpoint', { length: 255 }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('processing'),
-    requestHash: varchar('request_hash', { length: 64 }).notNull(),
+    requestHash: varchar('request_hash', { length: 128 }).notNull(),
     responseBody: text('response_body'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     completedAt: timestamp('completed_at'),

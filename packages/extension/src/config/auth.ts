@@ -15,9 +15,9 @@ function getEnvVar(key: string, defaultValue?: string): string {
  * Direct login approach with JWT tokens
  */
 export const AUTH_CONFIG = {
-  loginUrl: `${getEnvVar('VITE_API_BASE_URL')}/auth/login`,
-  refreshUrl: `${getEnvVar('VITE_API_BASE_URL')}/auth/refresh`,
-  userProfileUrl: `${getEnvVar('VITE_API_BASE_URL')}/auth/me`,
+  loginUrl: `${getEnvVar('VITE_API_BASE_URL')}/v1/auth/login`,
+  refreshUrl: `${getEnvVar('VITE_API_BASE_URL')}/v1/auth/refresh`,
+  userProfileUrl: `${getEnvVar('VITE_API_BASE_URL')}/v1/auth/profile`,
 };
 
 export const API_BASE_URL = getEnvVar('VITE_API_BASE_URL');

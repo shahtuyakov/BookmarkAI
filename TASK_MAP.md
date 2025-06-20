@@ -50,6 +50,10 @@
 | 2.11 | Implement rate-limit/back-off logic | Backend | 2 days | 2.2-2.4 | Create shared util for handling 429s across platforms |
 | 2.12 | Create replayable test fixtures | QA | 3 days | 2.2-2.4 | Build sample responses for TikTok & Reddit for CI tests |
 | 2.13 | Set up end-to-end tracing | DevOps | 3 days | 2.10 | Propagate traceparent in Redis messages for Node↔Python boundaries |
+| 2.14 | Implement Generic OpenGraph scraper | Backend | 2 days | 2.1 | Fallback for any URL without platform‑specific fetcher |
+| 2.15 | Add YouTube & Instagram fetchers | Backend | 4 days | 2.1 | Use official APIs; handle tokens and quotas |
+| 2.16 | Build URL canonicalization & deduplication service | Backend | 3 days | 2.7, 2.8 | Prevent duplicate neurons across users |
+| 2.17 | Conduct privacy & compliance review for external APIs | Security | 2 days | 2.2‑2.4, 2.15 | GDPR alignment and platform‑TOS audit |
 
 ## Phase 3: Whisper + LLM Enrichment (Weeks 5-6)
 
@@ -67,6 +71,9 @@
 | 3.10 | Create prompt-versioning registry | ML | 2 days | 3.4 | Implement YAML-based prompt registry with unit tests |
 | 3.11 | Develop synthetic profanity test-set | QA | 2 days | 3.2, 3.4 | Build test cases to validate content filtering pipeline |
 | 3.12 | Ensure exactly-once semantics in worker chain | Backend | 3 days | 3.7 | Prevent duplicate processing in the pipeline |
+| 3.13 | Implement expedited processing lane for short content | Backend/ML | 2 days | 3.7 | Meet ≤10 s insight SLA |
+| 3.14 | Add GPT‑call budget guard‑rails | Backend | 2 days | 3.4 | Cap summarization requests per user/day |
+| 3.15 | Implement embedding deduplication cache | Backend | 2 days | 3.5 | Re‑use vectors for identical text to save cost |
 
 ## Phase 4: Vector Search & UI (Weeks 7-8)
 
@@ -86,6 +93,9 @@
 | 4.12 | Create design system tokens | Frontend | 3 days | 4.1 | Implement colors, spacing, typography + Storybook |
 | 4.13 | Perform accessibility audit | QA | 2 days | 4.6, 4.7, 4.11 | Use axe-playwright for WCAG and app-store compliance |
 | 4.14 | Add Grafana Tempo exemplars | DevOps | 2 days | 2.13, 4.5 | Enhance tracing for API-to-DB spans |
+| 4.15 | Create React Native search & feed UI (mobile parity) | Mobile | 5 days | 4.5, 4.12 | Match web experience on iOS |
+| 4.16 | Develop ranking micro‑service for related‑neurons suggestions | Backend | 3 days | 4.3, 4.5 | Temporal workflow surfaces similar saves |
+| 4.17 | Perform dark‑mode contrast & accessibility audit | QA | 1 day | 4.12 | Ensure WCAG AA with neon palette |
 
 ## Phase 5: Payments & Cloud Deploy (Weeks 9-10)
 
@@ -106,6 +116,7 @@
 | 5.13 | Add infrastructure drift detection | DevOps | 2 days | 5.11 | Set up CDK Diff in CI to prevent env discrepancies |
 | 5.14 | Create data-retention policy documentation | Security | 2 days | 5.9 | Document S3 lifecycle, pg_dump cadence, GDPR procedures |
 | 5.15 | Implement KMS key-rotation playbook | Security | 2 days | 5.5 | Create annual automated rotation tests |
+| 5.16 | Wire feature‑flag hooks for subscription tiers | Backend | 3 days | 5.2, 5.3 | Rate limits & UI gating by plan |
 
 ## Phase 6: Beta & Hardening (Weeks 11-12)
 
@@ -143,3 +154,28 @@
 | 7.10 | Create analytics dashboards | Product/DevOps | 3 days | 7.9 | Visualize usage data |
 | 7.11 | Add in-app language switcher UI | Frontend | 3 days | 7.3 | Support opt-in auto-translate for summaries via GPT |
 | 7.12 | Implement BI export job | DevOps | 4 days | 7.9 | Create nightly Redshift/BigQuery dump for deep analytics |
+
+## Phase 8: Design Sprint (Weeks 13-14)
+
+| Task ID | Task Description | Owner | Est. Duration | Dependencies | Deliverable |
+|---------|-----------------|-------|---------------|--------------|-------------|
+| 8.1 | Value‑prop storyboard of three golden journeys (Save → Insight, Search → Related, Flashback resurfacing) | Product + UX | 0.5 day | — | Miro storyboard |
+| 8.2 | Guerrilla user interviews with 5 target users to validate pains & speed expectations | UX | 2 days | 8.1 | Interview notes |
+| 8.3 | Information architecture & screen flow for iOS (Capture, Home, Search, Detail, Settings) | UX | 1 day | 8.2 | Flow diagram |
+| 8.4 | Low‑fidelity wireframes for each screen | UX | 2 days | 8.3 | Figma wireframes |
+| 8.5 | Visual language & mood‑board (dark navy + neon cyan, calm‑UI 2025) | UI | 1 day | 8.4 | Style tile |
+| 8.6 | High‑fidelity mock‑ups incl. micro‑interactions | UI | 2 days | 8.5 | Clickable prototype |
+| 8.7 | Design‑token specification (colour, spacing, typography) | UI | 1 day | 8.6 | tokens.json |
+| 8.8 | Unmoderated usability test on prototype | UX | 1 day | 8.6 | Usability findings |
+| 8.9 | HIG + WCAG AA compliance audit | UX | 0.5 day | 8.6 | Accessibility checklist |
+| 8.10 | Developer hand‑off to engineering | UI/Dev | 0.5 day | 8.7‑8.9 | Zeplin/Figma specs |
+
+## Phase 9: iOS Parity & Internal TestFlight (Weeks 15-16)
+
+| Task ID | Task Description | Owner | Est. Duration | Dependencies | Notes |
+|---------|-----------------|-------|---------------|--------------|-------|
+| 9.1 | Set up React Native **iOS** project with design tokens & navigation shell | Mobile | 2 days | 0.7, 8.7 | Foundation for iOS work |
+| 9.2 | Implement iOS Share Extension (SwiftUI) with post‑capture animation | Mobile | 3 days | 9.1 | Seamless save UX |
+| 9.3 | Add offline queue & retry logic inside Share Extension (SQLite + BGTask) | Mobile | 3 days | 9.2 | Capture works offline |
+| 9.4 | Plug auth & `/shares` API | Mobile | 2 days | 1.2, 9.3 | End‑to‑end save |
+| 9.5 | Ship TestFlight “Save‑only” build to internal team | Mobile | 0.5 day | 9.4 | Acceptance: save works offline/online |

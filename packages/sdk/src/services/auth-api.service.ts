@@ -25,7 +25,7 @@ export class AuthApiService {
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await this.client.request<any>({
-      url: '/auth/login',
+      url: '/v1/auth/login',
       method: 'POST',
       data: credentials,
     });
@@ -51,7 +51,7 @@ export class AuthApiService {
    */
   async refresh(refreshToken: string): Promise<TokenPair> {
     const response = await this.client.request<any>({
-      url: '/auth/refresh',
+      url: '/v1/auth/refresh',
       method: 'POST',
       data: { refreshToken },
     });
@@ -67,7 +67,7 @@ export class AuthApiService {
   async logout(): Promise<void> {
     try {
       await this.client.request({
-        url: '/auth/logout',
+        url: '/v1/auth/logout',
         method: 'POST',
       });
     } finally {
@@ -81,7 +81,7 @@ export class AuthApiService {
    */
   async getCurrentUser(): Promise<User> {
     const response = await this.client.request<any>({
-      url: '/auth/me',
+      url: '/v1/auth/profile',
       method: 'GET',
     });
 

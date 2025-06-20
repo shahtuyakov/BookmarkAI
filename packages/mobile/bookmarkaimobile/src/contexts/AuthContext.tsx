@@ -55,8 +55,8 @@ async function syncTokensToNative(sdkSyncFn?: (accessToken: string, refreshToken
     // Sync to Android native storage
     if (Platform.OS === 'android') {
       // Calculate expires in from current time
-      const currentTime = Math.floor(Date.now() / 1000);
-      const expiresIn = Math.max(0, tokens.expiresAt - currentTime);
+      const currentTimeMs = Date.now();
+      const expiresIn = Math.max(0, Math.floor((tokens.expiresAt - currentTimeMs) / 1000));
 
       const result = await androidTokenSync.syncTokens(
         tokens.accessToken,
@@ -117,8 +117,8 @@ async function verifyTokenSync(): Promise<void> {
       if (Platform.OS === 'android') {
         const tokens = await getTokens();
         if (tokens) {
-          const currentTime = Math.floor(Date.now() / 1000);
-          const expiresIn = Math.max(0, tokens.expiresAt - currentTime);
+          const currentTimeMs = Date.now();
+          const expiresIn = Math.max(0, Math.floor((tokens.expiresAt - currentTimeMs) / 1000));
           await androidTokenSync.syncTokens(tokens.accessToken, tokens.refreshToken, expiresIn);
         }
       }
@@ -158,6 +158,17 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         
         if (token) {
           try {
+            // Check if token is expired locally first
+            const tokens = await getTokens();
+            if (tokens && tokens.expiresAt < Date.now()) {
+              console.log('🔴 Token expired locally - clearing and requiring login');
+              await clearTokens();
+              await clearAndroidTokens();
+              setUser(null);
+              setIsLoading(false);
+              return;
+            }
+            
             const userData = await authAPI.getUserProfile();
             setUser(userData);
             
