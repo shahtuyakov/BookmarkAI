@@ -3,10 +3,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
 import { Platform, Alert, ToastAndroid, NativeModules, View, Text, ActivityIndicator } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import { AuthProvider } from '../src/contexts/AuthContext';
+import { AuthProvider } from '../src/contexts/auth-provider';
 import { NetworkProvider } from '../src/hooks/useNetworkStatus';
 import { PersistentQueryClientProvider } from '../src/services/queryClient';
-import { SDKProvider, useSDK } from '../src/contexts/SDKContext';
+// SDKContext removed - SDK handled in auth-provider
 import RootNavigator from '../src/navigation';
 import { useAppTheme } from '../src/theme';
 import { useShareExtension } from '../src/services/ShareExtensionHandler';
@@ -201,47 +201,22 @@ function AppContent(): React.JSX.Element {
   return <RootNavigator />;
 }
 
-function AppWithSDK(): React.JSX.Element {
-  const { isInitialized, error } = useSDK();
-
-  if (!isInitialized) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 16 }}>Initializing BookmarkAI...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: 'red', textAlign: 'center', padding: 20 }}>
-          Failed to initialize SDK: {error.message}
-        </Text>
-      </View>
-    );
-  }
-
-  return <AppContent />;
-}
+// SDK initialization now handled in auth-provider
 
 function App(): React.JSX.Element {
   const theme = useAppTheme();
 
   return (
     <PersistentQueryClientProvider>
-      <SDKProvider>
-        <NetworkProvider>
-          <AuthProvider>
-            <PaperProvider theme={theme}>
-              <NavigationContainer>
-                <AppWithSDK />
-              </NavigationContainer>
-            </PaperProvider>
-          </AuthProvider>
-        </NetworkProvider>
-      </SDKProvider>
+      <NetworkProvider>
+        <AuthProvider>
+          <PaperProvider theme={theme}>
+            <NavigationContainer>
+              <AppContent />
+            </NavigationContainer>
+          </PaperProvider>
+        </AuthProvider>
+      </NetworkProvider>
     </PersistentQueryClientProvider>
   );
 }

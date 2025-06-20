@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { FAB, Searchbar, Text, useTheme, Dialog, Portal, Button, TextInput, Chip } from 'react-native-paper';
 import { HomeScreenNavigationProp } from '../../navigation/types';
-import { useInfiniteSharesList, useCreateShare } from '../../hooks/useShares';
+import { useSharesList, useCreateShare } from '../../hooks/useShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
@@ -40,7 +40,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useInfiniteSharesList({ limit: 20 });
+  } = useSharesList({ limit: 20 });
   
   // Flatten all pages into a single array
   const shares = data?.pages?.flatMap(page => page.items) || [];
