@@ -144,7 +144,7 @@ class ShareHandler: RCTEventEmitter {
       } else {
         // Mark old items as failed instead of processing them
         let failedItem = item.withStatus(.failed)
-        SQLiteQueueManager.shared.updateItem(failedItem)
+        _ = SQLiteQueueManager.shared.updateItem(failedItem)
       }
     }
     
@@ -173,7 +173,7 @@ class ShareHandler: RCTEventEmitter {
     // Migrate legacy queue items to SQLite
     for shareData in sharesQueue {
       if let queueItem = QueueItem.fromDictionary(shareData) {
-        SQLiteQueueManager.shared.addToQueue(queueItem)
+        _ = SQLiteQueueManager.shared.addToQueue(queueItem)
       }
     }
     

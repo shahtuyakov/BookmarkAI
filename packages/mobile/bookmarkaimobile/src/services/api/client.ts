@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import * as Keychain from 'react-native-keychain';
 import { DeviceEventEmitter } from 'react-native';
 import { API_BASE_URL } from './client-config';
-import { withKeychainFallback } from '../../utils/keychain-config';
+import { withKeychainFallback, KEYCHAIN_SERVICE, SHARED_ACCESS_GROUP } from '../../utils/keychain-config';
 
 
 // Create axios instance with default config
@@ -51,6 +51,13 @@ export const saveTokens = async (accessToken: string, refreshToken: string, expi
         options
       )
     );
+    
+    // Debug logging
+    console.log('✅ Tokens saved successfully');
+    console.log('Service:', KEYCHAIN_SERVICE);
+    console.log('Access Group:', SHARED_ACCESS_GROUP);
+    console.log('Token preview:', accessToken.substring(0, 20) + '...');
+    
     return true;
   } catch (error) {
     console.error('Error saving tokens to Keychain:', error);
@@ -174,13 +181,13 @@ axiosInstance.interceptors.response.use(
     try {
       // Call the refresh token endpoint
       const response = await axios.post(
-        `${API_BASE_URL}/auth/refresh`,
+        `${API_BASE_URL}/v1/auth/refresh`,
         { refreshToken: tokens.refreshToken },
         { headers: { 'Content-Type': 'application/json' } }
       );
 
-      const { accessToken, refreshToken } = response.data.data;
-      await saveTokens(accessToken, refreshToken);
+      const { accessToken, refreshToken, expiresIn } = response.data.data;
+      await saveTokens(accessToken, refreshToken, expiresIn);
 
       // Update the failed requests with the new token
       processQueue(null, accessToken);

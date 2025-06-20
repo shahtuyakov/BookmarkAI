@@ -16,12 +16,14 @@ export const API_URLS = {
   Development: 'https://bookmarkai-dev.ngrok.io/api',
   
   // For production server
-  Production: 'https://api.bookmarkai.com',
+  Production: 'https://api.bookmarkai.com/api',
 };
 
 // Select the appropriate URL based on environment
-// export const API_BASE_URL = API_URLS.IOSSimulator;
-export const API_BASE_URL = API_URLS.Development;
+// For React Native, we can use __DEV__ to determine debug vs release
+export const API_BASE_URL = __DEV__ 
+  ? API_URLS.Development 
+  : API_URLS.Production;
 
 
 // The key for storing tokens in Keychain

@@ -7,13 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0D8BF50A5833FFA4C3346EA4 /* libPods-BookmarkAI.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 92A547D2D47FC6AC8CDC5AE5 /* libPods-BookmarkAI.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		2AEA3CB77DC057136522B91D /* libPods-BookmarkAI.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 261AA07B8F62FE5023DA3D9F /* libPods-BookmarkAI.a */; };
 		6D0974BE2DDDEDA400966E22 /* BookmarkAIShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6D0974B42DDDEDA400966E22 /* BookmarkAIShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6D0974C92DDDEEA500966E22 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0974C82DDDEE9D00966E22 /* KeychainHelper.swift */; };
+		6D0E4D3D2E01A55000060B16 /* SharedConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0E4D3C2E01A55000060B16 /* SharedConfiguration.swift */; };
+		6D0E4D3E2E01A55000060B16 /* SharedConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0E4D3C2E01A55000060B16 /* SharedConfiguration.swift */; };
 		6D1605392DDE0FA800B2DB92 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1605342DDE0FA800B2DB92 /* KeychainHelper.swift */; };
 		6D16053A2DDE0FA800B2DB92 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1605372DDE0FA800B2DB92 /* ShareViewController.swift */; };
-		6D16053C2DDE0FA800B2DB92 /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6D1605362DDE0FA800B2DB92 /* MainInterface.storyboard */; };
 		6D9ADC342DDFE4720087F390 /* ShareHandler.m in Sources */ = {isa = PBXBuildFile; fileRef = 6D9ADC322DDFE4720087F390 /* ShareHandler.m */; };
 		6D9ADC352DDFE4720087F390 /* ShareHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9ADC332DDFE4720087F390 /* ShareHandler.swift */; };
 		6DQUEUEI12DDFE4720087F390 /* QueueItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DQUEUEI02DDFE4720087F390 /* QueueItem.swift */; };
@@ -56,16 +57,13 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = BookmarkAI/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = BookmarkAI/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = BookmarkAI/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		261AA07B8F62FE5023DA3D9F /* libPods-BookmarkAI.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BookmarkAI.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		46585105AF77A8D7EA06BB72 /* Pods-BookmarkAI.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BookmarkAI.debug.xcconfig"; path = "Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI.debug.xcconfig"; sourceTree = "<group>"; };
-		545D0E54C43FBB2B914A116F /* Pods-BookmarkAI.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BookmarkAI.release.xcconfig"; path = "Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI.release.xcconfig"; sourceTree = "<group>"; };
 		6D0974B42DDDEDA400966E22 /* BookmarkAIShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BookmarkAIShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D0974C42DDDEE1900966E22 /* BookmarkAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = BookmarkAI.entitlements; path = BookmarkAI/BookmarkAI.entitlements; sourceTree = "<group>"; };
 		6D0974C82DDDEE9D00966E22 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		6D0E4D3C2E01A55000060B16 /* SharedConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConfiguration.swift; sourceTree = "<group>"; };
 		6D1605322DDE0FA800B2DB92 /* BookmarkAIShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BookmarkAIShare.entitlements; sourceTree = "<group>"; };
 		6D1605332DDE0FA800B2DB92 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6D1605342DDE0FA800B2DB92 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
-		6D1605352DDE0FA800B2DB92 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/MainInterface.storyboard; sourceTree = "<group>"; };
 		6D1605372DDE0FA800B2DB92 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		6D9ADC322DDFE4720087F390 /* ShareHandler.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ShareHandler.m; sourceTree = "<group>"; };
 		6D9ADC332DDFE4720087F390 /* ShareHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareHandler.swift; sourceTree = "<group>"; };
@@ -75,7 +73,10 @@
 		6DURLSESS02DDFE4720087F390 /* URLSessionNetworkAdapter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = URLSessionNetworkAdapter.m; sourceTree = "<group>"; };
 		6DURLSESS03DDFE4720087F390 /* URLSessionNetworkAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLSessionNetworkAdapter.swift; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = BookmarkAI/AppDelegate.swift; sourceTree = "<group>"; };
+		77AC2801E9FE15D8B742D7A2 /* Pods-BookmarkAI.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BookmarkAI.release.xcconfig"; path = "Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI.release.xcconfig"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = BookmarkAI/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		864E6EF114888F24F92CF6C4 /* Pods-BookmarkAI.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BookmarkAI.debug.xcconfig"; path = "Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI.debug.xcconfig"; sourceTree = "<group>"; };
+		92A547D2D47FC6AC8CDC5AE5 /* libPods-BookmarkAI.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BookmarkAI.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -84,7 +85,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2AEA3CB77DC057136522B91D /* libPods-BookmarkAI.a in Frameworks */,
+				0D8BF50A5833FFA4C3346EA4 /* libPods-BookmarkAI.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,7 +117,7 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				261AA07B8F62FE5023DA3D9F /* libPods-BookmarkAI.a */,
+				92A547D2D47FC6AC8CDC5AE5 /* libPods-BookmarkAI.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -127,7 +128,6 @@
 				6D1605322DDE0FA800B2DB92 /* BookmarkAIShare.entitlements */,
 				6D1605332DDE0FA800B2DB92 /* Info.plist */,
 				6D1605342DDE0FA800B2DB92 /* KeychainHelper.swift */,
-				6D1605362DDE0FA800B2DB92 /* MainInterface.storyboard */,
 				6D1605372DDE0FA800B2DB92 /* ShareViewController.swift */,
 			);
 			path = BookmarkAIShare;
@@ -143,6 +143,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
+				6D0E4D3C2E01A55000060B16 /* SharedConfiguration.swift */,
 				6D9ADC322DDFE4720087F390 /* ShareHandler.m */,
 				6D9ADC332DDFE4720087F390 /* ShareHandler.swift */,
 				6DSQLITE02DDFE4720087F390 /* SQLiteQueueManager.swift */,
@@ -174,8 +175,8 @@
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				46585105AF77A8D7EA06BB72 /* Pods-BookmarkAI.debug.xcconfig */,
-				545D0E54C43FBB2B914A116F /* Pods-BookmarkAI.release.xcconfig */,
+				864E6EF114888F24F92CF6C4 /* Pods-BookmarkAI.debug.xcconfig */,
+				77AC2801E9FE15D8B742D7A2 /* Pods-BookmarkAI.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -187,14 +188,14 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "BookmarkAI" */;
 			buildPhases = (
-				6BC48B42FDF12FFB28FFDDCD /* [CP] Check Pods Manifest.lock */,
+				003441D67B5342B3C47B597A /* [CP] Check Pods Manifest.lock */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				6D0974BF2DDDEDA400966E22 /* Embed Foundation Extensions */,
-				B017E3FE655F5A94059B6A6B /* [CP] Embed Pods Frameworks */,
-				5501E0B02B10F1F0BF72AA08 /* [CP] Copy Pods Resources */,
+				D6B62A03AB0392C7821A3DB0 /* [CP] Embed Pods Frameworks */,
+				72B1058B10B29C9A2D640254 /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -275,47 +276,13 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6D16053C2DDE0FA800B2DB92 /* MainInterface.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/.xcode.env",
-			);
-			name = "Bundle React Native code and images";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"$WITH_ENVIRONMENT $REACT_NATIVE_XCODE\"\n";
-		};
-		5501E0B02B10F1F0BF72AA08 /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI-resources-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Copy Pods Resources";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		6BC48B42FDF12FFB28FFDDCD /* [CP] Check Pods Manifest.lock */ = {
+		003441D67B5342B3C47B597A /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -337,7 +304,44 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		B017E3FE655F5A94059B6A6B /* [CP] Embed Pods Frameworks */ = {
+		00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/.xcode.env",
+			);
+			name = "Bundle React Native code and images";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"$WITH_ENVIRONMENT $REACT_NATIVE_XCODE\"\n";
+		};
+		72B1058B10B29C9A2D640254 /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		D6B62A03AB0392C7821A3DB0 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -345,9 +349,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-BookmarkAI/Pods-BookmarkAI-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -364,6 +372,7 @@
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 				6D9ADC342DDFE4720087F390 /* ShareHandler.m in Sources */,
 				6D9ADC352DDFE4720087F390 /* ShareHandler.swift in Sources */,
+				6D0E4D3D2E01A55000060B16 /* SharedConfiguration.swift in Sources */,
 				6DSQLITE12DDFE4720087F390 /* SQLiteQueueManager.swift in Sources */,
 				6DQUEUEI12DDFE4720087F390 /* QueueItem.swift in Sources */,
 				6DURLSESS12DDFE4720087F390 /* URLSessionNetworkAdapter.m in Sources */,
@@ -377,6 +386,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6D1605392DDE0FA800B2DB92 /* KeychainHelper.swift in Sources */,
+				6D0E4D3E2E01A55000060B16 /* SharedConfiguration.swift in Sources */,
 				6D16053A2DDE0FA800B2DB92 /* ShareViewController.swift in Sources */,
 				6DSQLITE22DDFE4720087F390 /* SQLiteQueueManager.swift in Sources */,
 				6DQUEUEI22DDFE4720087F390 /* QueueItem.swift in Sources */,
@@ -393,26 +403,16 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin PBXVariantGroup section */
-		6D1605362DDE0FA800B2DB92 /* MainInterface.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				6D1605352DDE0FA800B2DB92 /* Base */,
-			);
-			name = MainInterface.storyboard;
-			sourceTree = "<group>";
-		};
-/* End PBXVariantGroup section */
-
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 46585105AF77A8D7EA06BB72 /* Pods-BookmarkAI.debug.xcconfig */;
+			baseConfigurationReference = 864E6EF114888F24F92CF6C4 /* Pods-BookmarkAI.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = BookmarkAI/BookmarkAI.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F34FLR2TKP;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = BookmarkAI/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -444,12 +444,13 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 545D0E54C43FBB2B914A116F /* Pods-BookmarkAI.release.xcconfig */;
+			baseConfigurationReference = 77AC2801E9FE15D8B742D7A2 /* Pods-BookmarkAI.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = BookmarkAI/BookmarkAI.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F34FLR2TKP;
 				INFOPLIST_FILE = BookmarkAI/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -640,10 +641,7 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
@@ -717,10 +715,7 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;

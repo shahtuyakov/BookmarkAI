@@ -174,7 +174,21 @@ export class AuthService {
    */
   async isAuthenticated(): Promise<boolean> {
     const tokens = await this.getStoredTokens();
-    return !!(tokens?.accessToken && tokens?.refreshToken);
+    if (!tokens?.accessToken || !tokens?.refreshToken) {
+      return false;
+    }
+    
+    // Check if access token is expired
+    if (tokens.accessTokenExpiry && Date.now() > tokens.accessTokenExpiry) {
+      return false;
+    }
+    
+    // Check if refresh token is expired
+    if (tokens.refreshTokenExpiry && Date.now() > tokens.refreshTokenExpiry) {
+      return false;
+    }
+    
+    return true;
   }
 
   /**

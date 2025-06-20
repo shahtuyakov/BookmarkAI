@@ -9,6 +9,17 @@ pnpm install
 cd packages/mobile/bookmarkaimobile/ios && pod install
 rm -rf Pods Podfile.lock && pod deintegrate
 pod cache clean --all
+
+# Clean up
+cd ios
+rm -rf build/
+rm -rf ~/Library/Developer/Xcode/DerivedData/BookmarkAI-*
+rm -rf Pods/
+rm Podfile.lock
+
+# Clear CocoaPods cache
+pod cache clean --all
+
 pod install --repo-update
 
 ### Database Operations

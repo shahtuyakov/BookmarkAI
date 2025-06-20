@@ -11,13 +11,11 @@ import {
 } from 'react-native';
 import { FAB, Searchbar, Text, useTheme, Dialog, Portal, Button, TextInput, Chip } from 'react-native-paper';
 import { HomeScreenNavigationProp } from '../../navigation/types';
-import { useSharesList, useCreateShare } from '../../hooks/useShares';
+import { useInfiniteSharesList, useCreateShare } from '../../hooks/useShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
 import { Share } from '@bookmarkai/sdk';
-import { TokenSyncTestSuite } from '../../utils/test-token-sync';
-import { runIOSSQLiteQueueTests, runDetailedIOSSQLiteQueueTests, clearIOSSQLiteQueue, addTestIOSSQLiteItem } from '../../utils/test-ios-sqlite-queue';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
@@ -28,21 +26,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogVisible, setIsAddDialogVisible] = useState(false);
   const [newUrl, setNewUrl] = useState('');
-  const [isTestDialogVisible, setIsTestDialogVisible] = useState(false);
   
   // Get network status
   const { isConnected } = useNetworkStatus();
   
-  // Get shares with React Query (SDK version)
+  // Get shares with infinite scrolling (SDK version)
   const { 
-    data: sharesResponse, 
+    data,
     isLoading, 
     error, 
     refetch,
-    isFetching
-  } = useSharesList({ limit: 10 });
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteSharesList({ limit: 20 });
   
-  const shares = sharesResponse?.items || [];
+  // Flatten all pages into a single array
+  const shares = data?.pages?.flatMap(page => page.items) || [];
   const isRefreshing = isFetching && !isLoading;
   
   // Create share mutation (SDK version)
@@ -62,7 +63,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   
   // Navigate to detail screen when a share is tapped
   const handleSharePress = (share: Share) => {
-    navigation.navigate('Detail', { id: share.id, title: share.metadata?.title || 'Details' });
+    const title = typeof share.metadata?.title === 'string' ? share.metadata.title : 'Details';
+    navigation.navigate('Detail', { id: share.id, title });
   };
   
   // Show add bookmark dialog
@@ -98,81 +100,49 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   };
   
-  // Test functions
-  const runTokenSyncTests = async () => {
-    try {
-      await TokenSyncTestSuite.runAllTests();
-      Alert.alert('Tests Complete', 'Check the console/logs for detailed results');
-    } catch (error: any) {
-      Alert.alert('Test Error', error.message);
-    }
-  };
-
-  const runSQLiteQueueTests = async () => {
-    try {
-      await runIOSSQLiteQueueTests();
-      Alert.alert('SQLite Tests Complete', 'Check the console/logs for detailed results');
-    } catch (error: any) {
-      Alert.alert('SQLite Test Error', error.message);
-    }
-  };
-
-  const runDetailedSQLiteTests = async () => {
-    try {
-      const report = await runDetailedIOSSQLiteQueueTests();
-      console.log('📊 Detailed SQLite Test Report:\n', report);
-      Alert.alert('Detailed SQLite Tests Complete', 'Full report logged to console');
-    } catch (error: any) {
-      Alert.alert('Detailed SQLite Test Error', error.message);
-    }
-  };
   
-  const runIndividualTest = async (testName: string) => {
-    try {
-      switch (testName) {
-        case 'tokenSync':
-          await TokenSyncTestSuite.testTokenSyncFromReactNative();
-          break;
-        case 'hardwareSecurity':
-          await TokenSyncTestSuite.testHardwareSecurityCapabilities();
-          break;
-        case 'persistence':
-          await TokenSyncTestSuite.testTokenPersistence();
-          break;
-        case 'manualSync':
-          await TokenSyncTestSuite.testManualTokenSync();
-          break;
-        case 'enhancedSync':
-          await TokenSyncTestSuite.testEnhancedTokenSync();
-          break;
-        case 'sqliteQueue':
-          await runSQLiteQueueTests();
-          break;
-        case 'sqliteDetailed':
-          await runDetailedSQLiteTests();
-          break;
-        case 'clearSqlite':
-          await clearIOSSQLiteQueue();
-          return; // Don't show completion alert for this one
-        case 'addTestItem':
-          await addTestIOSSQLiteItem();
-          return; // Don't show completion alert for this one
-      }
-      Alert.alert('Test Complete', `${testName} test finished. Check console for results.`);
-    } catch (error: any) {
-      Alert.alert('Test Error', error.message);
-    }
-  };
-  
-  // For SDK version, we don't have infinite scroll yet
-  // TODO: Implement pagination with cursor-based loading
+  // Handle loading more items when reaching the end
   const handleLoadMore = () => {
-    // Placeholder for future pagination implementation
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
   };
   
   // Render a loading footer when loading more items
   const renderFooter = () => {
-    // No pagination footer for now
+    if (isFetchingNextPage) {
+      return (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <Text style={styles.footerText}>Loading more...</Text>
+        </View>
+      );
+    }
+    
+    // Show retry button if there's an error and we have more pages
+    if (error && hasNextPage) {
+      return (
+        <View style={styles.footerError}>
+          <Text style={styles.footerErrorText}>Failed to load more</Text>
+          <Button 
+            mode="outlined" 
+            onPress={handleLoadMore}
+            compact
+            style={styles.footerRetryButton}>
+            Retry
+          </Button>
+        </View>
+      );
+    }
+    
+    if (!hasNextPage && shares.length > 0) {
+      return (
+        <View style={styles.footerEnd}>
+          <Text style={styles.footerEndText}>You've reached the end</Text>
+        </View>
+      );
+    }
+    
     return null;
   };
   
@@ -213,6 +183,48 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       );
     }
     
+    // Show error banner if there's an error but we have some data
+    if (error && shares.length > 0) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>
+              Failed to load more bookmarks
+            </Text>
+            <Button 
+              mode="text" 
+              onPress={() => refetch()}
+              compact
+              textColor="white">
+              Retry
+            </Button>
+          </View>
+          <FlatList
+            data={shares}
+            keyExtractor={getItemKey}
+            renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={refetch}
+                colors={[theme.colors.primary]}
+                tintColor={theme.colors.primary}
+              />
+            }
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.1}
+            ListFooterComponent={renderFooter}
+            removeClippedSubviews={true}
+            initialNumToRender={20}
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            getItemLayout={undefined}
+          />
+        </View>
+      );
+    }
+    
     if (!shares || shares.length === 0) {
       return <EmptyState onAddBookmark={showAddDialog} />;
     }
@@ -232,12 +244,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           />
         }
         onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.1}
         ListFooterComponent={renderFooter}
         removeClippedSubviews={true}
-        initialNumToRender={10}
-        maxToRenderPerBatch={5}
+        initialNumToRender={20}
+        maxToRenderPerBatch={10}
         windowSize={10}
+        getItemLayout={undefined} // Let FlatList calculate automatically for better performance
       />
     );
   };
@@ -257,18 +270,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           value={searchQuery}
           style={styles.searchBar}
         />
-        
-        {/* Development Test Button - Only show in debug mode */}
-        {__DEV__ && (
-          <Button 
-            mode="outlined" 
-            icon="test-tube" 
-            onPress={() => setIsTestDialogVisible(true)}
-            style={styles.testButton}
-            compact>
-            Tests
-          </Button>
-        )}
       </View>
       
       {renderContent()}
@@ -319,106 +320,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </Button>
           </Dialog.Actions>
         </Dialog>
-        
-        {/* Test Dialog */}
-        <Dialog visible={isTestDialogVisible} onDismiss={() => setIsTestDialogVisible(false)}>
-          <Dialog.Title>🧪 Development Tests</Dialog.Title>
-          <Dialog.Content>
-            <Text style={styles.testDescription}>
-              Test native integration, token synchronization, and iOS SQLite queue
-            </Text>
-            
-            <View style={styles.testButtonsContainer}>
-              <Button 
-                mode="contained" 
-                icon="play-circle"
-                onPress={runTokenSyncTests}
-                style={styles.testDialogButton}>
-                Run All Tests
-              </Button>
-              
-              <Button 
-                mode="outlined" 
-                icon="sync"
-                onPress={() => runIndividualTest('tokenSync')}
-                style={styles.testDialogButton}>
-                Token Sync Test
-              </Button>
-              
-              <Button 
-                mode="outlined" 
-                icon="shield-check"
-                onPress={() => runIndividualTest('hardwareSecurity')}
-                style={styles.testDialogButton}>
-                Hardware Security Test
-              </Button>
-              
-              <Button 
-                mode="outlined" 
-                icon="content-save"
-                onPress={() => runIndividualTest('persistence')}
-                style={styles.testDialogButton}>
-                Token Persistence Test
-              </Button>
-              
-              <Button 
-                mode="outlined" 
-                icon="refresh"
-                onPress={() => runIndividualTest('manualSync')}
-                style={styles.testDialogButton}>
-                Manual Sync Test
-              </Button>
-              
-              <Button 
-                mode="outlined" 
-                icon="auto-fix"
-                onPress={() => runIndividualTest('enhancedSync')}
-                style={styles.testDialogButton}>
-                Enhanced Auto Sync Test
-              </Button>
-              
-              {/* iOS SQLite Queue Tests */}
-              <Button 
-                mode="outlined" 
-                icon="database"
-                onPress={() => runIndividualTest('sqliteQueue')}
-                style={styles.testDialogButton}>
-                iOS SQLite Queue Test
-              </Button>
-              
-              <Button 
-                mode="outlined" 
-                icon="database-check"
-                onPress={() => runIndividualTest('sqliteDetailed')}
-                style={styles.testDialogButton}>
-                Detailed SQLite Test
-              </Button>
-              
-              <Button 
-                mode="outlined" 
-                icon="delete"
-                onPress={() => runIndividualTest('clearSqlite')}
-                style={styles.testDialogButton}>
-                Clear SQLite Queue
-              </Button>
-              
-              <Button 
-                mode="outlined" 
-                icon="bug"
-                onPress={() => runIndividualTest('addTestItem')}
-                style={styles.testDialogButton}>
-                Debug Queue Contents
-              </Button>
-            </View>
-            
-            <Text style={styles.testNote}>
-              💡 Check Metro console for detailed test results
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setIsTestDialogVisible(false)}>Close</Button>
-          </Dialog.Actions>
-        </Dialog>
       </Portal>
     </SafeAreaView>
   );
@@ -461,6 +362,18 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 16,
   },
+  errorBanner: {
+    backgroundColor: '#FF3B30',
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  errorBannerText: {
+    color: 'white',
+    fontSize: 14,
+    flex: 1,
+  },
   fab: {
     position: 'absolute',
     margin: 16,
@@ -470,6 +383,33 @@ const styles = StyleSheet.create({
   footerLoader: {
     paddingVertical: 20,
     alignItems: 'center',
+  },
+  footerText: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 14,
+  },
+  footerEnd: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  footerEndText: {
+    color: '#999',
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  footerError: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    backgroundColor: '#FFF5F5',
+  },
+  footerErrorText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  footerRetryButton: {
+    borderColor: '#FF3B30',
   },
   urlInput: {
     marginTop: 10,
@@ -505,28 +445,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     gap: 8,
-  },
-  testButton: {
-    minWidth: 70,
-  },
-  testDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  testButtonsContainer: {
-    gap: 8,
-  },
-  testDialogButton: {
-    marginVertical: 4,
-  },
-  testNote: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 16,
-    textAlign: 'center',
-    fontStyle: 'italic',
   },
 });
 
