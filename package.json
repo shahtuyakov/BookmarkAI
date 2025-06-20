@@ -24,28 +24,22 @@
     "seed:ci:local": "npm run seed:build && NODE_ENV=ci-local node scripts/dist/seed/ci.js",
     "seed:clean": "npm run seed:build && CLEAN_SEED=true node scripts/dist/seed/ci.js",
     "dev:tunnel": "node scripts/setup-ngrok.js",
-    
     "install:all": "pnpm install",
     "build:all": "pnpm -r build",
     "test:all": "pnpm -r test",
     "lint:all": "pnpm -r lint",
     "typecheck:all": "pnpm -r typecheck",
-    
     "dev:api": "pnpm --filter api-gateway start:dev",
     "dev:mobile": "pnpm --filter @bookmarkai/mobile start",
     "dev:extension": "pnpm --filter @bookmarkai/extension dev",
     "dev:sdk": "pnpm --filter @bookmarkai/sdk dev",
-    
     "build:extension": "pnpm --filter @bookmarkai/extension build",
     "build:sdk": "pnpm --filter @bookmarkai/sdk build",
-    
     "db:generate": "pnpm --filter api-gateway db:generate",
     "db:migrate": "pnpm --filter api-gateway db:migrate",
-    
     "mobile:ios": "pnpm --filter @bookmarkai/mobile ios",
     "mobile:android": "pnpm --filter @bookmarkai/mobile android",
     "mobile:metro": "pnpm --filter @bookmarkai/mobile start",
-    
     "deps:check": "pnpm -r outdated",
     "deps:update": "pnpm -r update",
     "deps:audit": "pnpm audit"
@@ -57,9 +51,11 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "ioredis": "^5.6.1",
+    "jwt-decode": "4.0.0",
     "pg": "^8.16.0"
   },
   "devDependencies": {
+    "@types/pg": "^8.10.9",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "chalk": "^4.1.2",
@@ -74,8 +70,7 @@
     "prettier": "^3.1.1",
     "pyright": "^1.1.350",
     "ts-prune": "^0.10.3",
-    "typescript": "^5.0.0",
-    "@types/pg": "^8.10.9"
+    "typescript": "^5.0.0"
   },
   "pnpm": {
     "overrides": {
