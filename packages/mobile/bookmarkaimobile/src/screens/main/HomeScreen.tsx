@@ -12,10 +12,12 @@ import {
 import { FAB, Searchbar, Text, useTheme, Dialog, Portal, Button, TextInput, Chip } from 'react-native-paper';
 import { HomeScreenNavigationProp } from '../../navigation/types';
 import { useSharesList, useCreateShare } from '../../hooks/useShares';
+import { useSDKSharesList, useSDKCreateShare } from '../../hooks/useSDKShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
 import { Share } from '@bookmarkai/sdk';
+import { isUsingSDKAuth, useSDKClient } from '../../contexts/auth-provider';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
@@ -30,7 +32,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   // Get network status
   const { isConnected } = useNetworkStatus();
   
-  // Get shares with infinite scrolling (SDK version)
+  // Get SDK client if using SDK auth
+  const sdkClient = useSDKClient();
+  const usingSDKAuth = isUsingSDKAuth();
+  
+  // Use SDK hooks if SDK auth is enabled, otherwise use direct API hooks
+  const directSharesResult = useSharesList({ limit: 20 });
+  const sdkSharesResult = useSDKSharesList(sdkClient!, { limit: 20 });
+  
+  const sharesResult = usingSDKAuth && sdkClient ? sdkSharesResult : directSharesResult;
+  
   const { 
     data,
     isLoading, 
@@ -40,17 +51,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useSharesList({ limit: 20 });
+  } = sharesResult;
   
   // Flatten all pages into a single array
   const shares = data?.pages?.flatMap(page => page.items) || [];
   const isRefreshing = isFetching && !isLoading;
   
-  // Create share mutation (SDK version)
+  // Create share mutations
+  const directCreateShare = useCreateShare();
+  const sdkCreateShare = useSDKCreateShare(sdkClient!);
+  
+  const createShareMutation = usingSDKAuth && sdkClient ? sdkCreateShare : directCreateShare;
+  
   const { 
     mutate: createShare, 
     isPending: isSubmitting
-  } = useCreateShare();
+  } = createShareMutation;
   
   // For now, set pendingCount to 0 since SDK version doesn't track this the same way
   const pendingCount = 0;

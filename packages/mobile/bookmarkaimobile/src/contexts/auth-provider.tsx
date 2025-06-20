@@ -74,7 +74,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   if (USE_SDK_AUTH) {
     console.log('🚀 Using SDK-based AuthProvider');
     const client = React.useMemo(() => createSDKClient(), []);
-    return <SDKAuthProvider client={client}>{children}</SDKAuthProvider>;
+    return (
+      <SDKClientProvider client={client}>
+        <SDKAuthProvider client={client}>{children}</SDKAuthProvider>
+      </SDKClientProvider>
+    );
   } else {
     console.log('📡 Using Direct API AuthProvider');
     return <DirectAuthProvider>{children}</DirectAuthProvider>;
@@ -92,3 +96,20 @@ export const useAuth = () => {
 
 // Export a helper to check which implementation is active
 export const isUsingSDKAuth = () => USE_SDK_AUTH;
+
+// Context to provide SDK client access
+const SDKClientContext = React.createContext<BookmarkAIClient | null>(null);
+
+// Hook to access SDK client
+export const useSDKClient = (): BookmarkAIClient | null => {
+  return React.useContext(SDKClientContext);
+};
+
+// Export the SDK client provider separately for use in components
+export const SDKClientProvider: React.FC<{ client: BookmarkAIClient; children: React.ReactNode }> = ({ client, children }) => {
+  return (
+    <SDKClientContext.Provider value={client}>
+      {children}
+    </SDKClientContext.Provider>
+  );
+};
