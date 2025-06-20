@@ -2,7 +2,6 @@
 // while leveraging SDK features for improved reliability
 
 import { BookmarkAIClient } from '@bookmarkai/sdk';
-import { saveTokens, clearTokens, getTokens } from '../api/client';
 import { Platform } from 'react-native';
 import { androidTokenSync } from '../android-token-sync';
 
@@ -55,10 +54,7 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
         // Extract tokens with default expiresIn
         const { accessToken, refreshToken, expiresIn = 15 * 60 } = loginResponse;
         
-        
-        // Save tokens once (fixing the double save issue)
-        await saveTokens(accessToken, refreshToken, expiresIn);
-        
+        // SDK already stores tokens automatically, so we only need to sync to Android
         // Sync to Android if needed
         await syncTokensToAndroid(accessToken, refreshToken, expiresIn);
         
@@ -95,9 +91,7 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
         // Extract tokens with default expiresIn
         const { accessToken, refreshToken, expiresIn = 15 * 60 } = registerResponse;
         
-        // Save tokens once
-        await saveTokens(accessToken, refreshToken, expiresIn);
-        
+        // SDK already stores tokens automatically, so we only need to sync to Android
         // Sync to Android if needed
         await syncTokensToAndroid(accessToken, refreshToken, expiresIn);
         
@@ -128,20 +122,18 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
     // Logout with graceful error handling
     logout: async () => {
       try {
-        // Get refresh token for logout request
-        const tokens = await getTokens();
+        // SDK handles logout, no need to get tokens manually
         
-        // Attempt server logout (don't let failures block local cleanup)
+        // Attempt server logout using SDK
         try {
-          if (tokens?.refreshToken) {
-            await client.auth.logout();
-          }
+          await client.auth.logout();
         } catch (serverError) {
           console.error('SDK logout server error (continuing with local cleanup):', serverError);
         }
         
-        // Always clear local tokens
-        await clearTokens();
+        // SDK handles token clearing automatically via client.auth.logout()
+        // We only need to clear Android tokens
+        // Note: Don't call clearTokens() as it conflicts with SDK's token management
         
         // Clear Android tokens
         if (Platform.OS === 'android') {
@@ -156,8 +148,7 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
         }
       } catch (error) {
         console.error('SDK Logout error:', error);
-        // Even on error, ensure tokens are cleared
-        await clearTokens();
+        // SDK handles token clearing automatically, no need for manual cleanup
       }
     },
 
@@ -197,20 +188,19 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
 };
 
 // Helper to verify token sync (dev only)
-export const verifySDKTokenSync = async (_client: BookmarkAIClient, accessToken?: string): Promise<void> => {
+export const verifySDKTokenSync = async (client: BookmarkAIClient, accessToken?: string): Promise<void> => {
   if (Platform.OS !== 'android' || !__DEV__) return;
   
   try {
-    const tokens = await getTokens();
-    const isValid = await androidTokenSync.verifySync(tokens?.accessToken || accessToken);
+    // Get current access token from SDK
+    const currentToken = await client.getAccessToken() || accessToken;
     
-    if (!isValid) {
-      console.warn('⚠️ SDK Auth: Token sync verification failed');
-      // Re-sync if needed
-      if (tokens) {
-        const currentTimeMs = Date.now();
-        const expiresIn = Math.max(0, Math.floor((tokens.expiresAt - currentTimeMs) / 1000));
-        await androidTokenSync.syncTokens(tokens.accessToken, tokens.refreshToken, expiresIn);
+    if (currentToken) {
+      const isValid = await androidTokenSync.verifySync(currentToken);
+      
+      if (!isValid) {
+        console.warn('⚠️ SDK Auth: Token sync verification failed');
+        // SDK manages tokens, so we can't re-sync manually
       }
     }
   } catch (error) {
