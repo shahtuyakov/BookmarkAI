@@ -145,16 +145,17 @@ export class KmsJwtService implements OnModuleInit {
       
       // Check expiration with clock skew tolerance
       const now = Math.floor(Date.now() / 1000);
-      const clockSkewTolerance = 30; // 30 seconds tolerance
+      const clockSkewTolerance = 300; // 5 minutes tolerance for development
+      
       
       // Check if token is from the future (clock skew)
       if (payload.iat > (now + clockSkewTolerance)) {
-        throw new Error('Token issued in the future');
+        throw new Error(`Token issued in the future (iat: ${payload.iat}, now: ${now}, diff: ${payload.iat - now}s)`);
       }
       
       // Check if token has expired
       if (payload.exp < (now - clockSkewTolerance)) {
-        throw new Error('Token has expired');
+        throw new Error(`Token has expired (exp: ${payload.exp}, now: ${now}, diff: ${now - payload.exp}s)`);
       }
       
       // Verify signature

@@ -51,14 +51,10 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
         // SDK's login method returns the data directly (not wrapped in response)
         const loginResponse = await client.auth.login(credentials);
         
-        console.log('Login response structure:', {
-          hasUser: !!loginResponse.user,
-          hasTokens: !!(loginResponse.accessToken && loginResponse.refreshToken),
-          userFields: loginResponse.user ? Object.keys(loginResponse.user) : []
-        });
         
         // Extract tokens with default expiresIn
         const { accessToken, refreshToken, expiresIn = 15 * 60 } = loginResponse;
+        
         
         // Save tokens once (fixing the double save issue)
         await saveTokens(accessToken, refreshToken, expiresIn);
