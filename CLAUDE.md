@@ -24,13 +24,23 @@ BookmarkAI is a social media content capture and enrichment platform that captur
 
 ## Core Services Structure
 ```
-apps/api/
-docker/
-packages/
-├── api-gateway/    # Main API service (NestJS)
-├── mobile/bookmarkaimobile         # React Native app
-├── sdk/           # Shared TypeScript SDK
-scripts/
+BookmarkAI/
+  ├── apps/api/                    # API specifications
+  ├── packages/                    # Monorepo packages
+  │   ├── api-gateway/            # NestJS backend (main API)
+  │   ├── mobile/bookmarkaimobile/# React Native app
+  │   ├── sdk/                    # Shared TypeScript SDK
+  │   ├── extension/              # Browser extension
+  │   └── orchestrator/           # Service orchestration
+  ├── python/                     # ML/AI services
+  │   ├── caption-service/        # Image captioning
+  │   ├── llm-service/           # LLM integration
+  │   ├── vector-service/        # Embeddings
+  │   └── whisper-service/       # Transcription
+  ├── infrastructure/            # AWS CDK definitions
+  ├── docker/                    # Docker & monitoring setup
+  ├── docs/                      # Documentation & ADRs
+  └── scripts/ 
 ```
 
 ## Code Style and Structure
