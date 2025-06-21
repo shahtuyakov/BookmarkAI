@@ -84,11 +84,13 @@ export const createSDKSharesService = (client: BookmarkAIClient) => {
 
     // Get a specific share by ID
     getShareById: async (id: string): Promise<Share> => {
+      console.log('📡 [SDK Shares] Fetching share by ID:', id);
       try {
         const sdkShare = await client.shares.get(id);
+        console.log('✅ [SDK Shares] Share fetched successfully:', sdkShare.id);
         return transformSDKShare(sdkShare);
       } catch (error) {
-        console.error('SDK Shares: getShareById failed:', error);
+        console.error('❌ [SDK Shares] getShareById failed:', error);
         throw error;
       }
     },
