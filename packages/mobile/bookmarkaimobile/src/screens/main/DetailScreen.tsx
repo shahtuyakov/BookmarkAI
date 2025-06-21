@@ -21,6 +21,10 @@ const getPlatformColor = (platform: string) => {
     case 'twitter':
     case 'x':
       return '#1DA1F2';
+    case 'youtube':
+      return '#FF0000';
+    case 'generic':
+      return '#4CAF50';
     default:
       return '#666666';
   }
@@ -139,17 +143,17 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
       )}
       
       <Card style={styles.card}>
-        {share.metadata?.thumbnailUrl && (
-          <Card.Cover source={{ uri: share.metadata.thumbnailUrl }} style={styles.coverImage} />
+        {(share.thumbnailUrl || share.metadata?.thumbnailUrl) && (
+          <Card.Cover source={{ uri: share.thumbnailUrl || share.metadata?.thumbnailUrl }} style={styles.coverImage} />
         )}
         
         <Card.Content style={styles.cardContent}>
           <Text style={styles.title}>
-            {share.metadata?.title || 'Untitled Bookmark'}
+            {share.title || share.metadata?.title || 'Untitled Bookmark'}
           </Text>
           
-          {share.metadata?.author && (
-            <Text style={styles.author}>By {share.metadata.author}</Text>
+          {(share.author || share.metadata?.author) && (
+            <Text style={styles.author}>By {share.author || share.metadata?.author}</Text>
           )}
           
           <View style={styles.metaContainer}>
@@ -172,7 +176,7 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
           
           <Text style={styles.sectionTitle}>Description</Text>
           <Text style={styles.description}>
-            {share.metadata?.description || 'No description available'}
+            {share.description || share.metadata?.description || 'No description available'}
           </Text>
           
           <Divider style={styles.divider} />
@@ -191,6 +195,27 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
           </Button>
           
           <Divider style={styles.divider} />
+          
+          {share.mediaType && (
+            <>
+              <Text style={styles.sectionTitle}>Media</Text>
+              <View style={styles.detailsContainer}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Type:</Text>
+                  <Text style={styles.detailValue}>{share.mediaType}</Text>
+                </View>
+                {share.mediaUrl && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Media URL:</Text>
+                    <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="middle">
+                      {share.mediaUrl}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Divider style={styles.divider} />
+            </>
+          )}
           
           <Text style={styles.sectionTitle}>Details</Text>
           <View style={styles.detailsContainer}>

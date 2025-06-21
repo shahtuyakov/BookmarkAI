@@ -1,4 +1,4 @@
-import { pgTable, uuid, timestamp, varchar, text, index, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, timestamp, varchar, text, index, unique, jsonb } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 export const shares = pgTable('shares', {
@@ -8,6 +8,14 @@ export const shares = pgTable('shares', {
   platform: varchar('platform', { length: 50 }).notNull(),
   status: varchar('status', { length: 50}).notNull().default('pending'),
   idempotencyKey: varchar('idempotency_key', { length: 100 }).unique(),
+  // Content metadata fields
+  title: text('title'),
+  description: text('description'),
+  author: varchar('author', { length: 255 }),
+  thumbnailUrl: text('thumbnail_url'),
+  mediaUrl: text('media_url'),
+  mediaType: varchar('media_type', { length: 50 }),
+  platformData: jsonb('platform_data'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 }, (table) => {
