@@ -75,7 +75,7 @@ export abstract class BaseContentFetcher implements ContentFetcherInterface {
     const prefix = `FETCHER_${this.platform.toUpperCase()}`;
     
     return {
-      apiKey: this.configService.get<string>(`${prefix}_API_KEY`),
+      apiKey: this.configService.get<string>(`${prefix}_API_KEY`, null),
       oauth: this.loadOAuthConfig(prefix),
       cookies: this.loadCookies(prefix),
     };
@@ -85,16 +85,16 @@ export abstract class BaseContentFetcher implements ContentFetcherInterface {
    * Load OAuth configuration if available
    */
   protected loadOAuthConfig(prefix: string) {
-    const clientId = this.configService.get<string>(`${prefix}_CLIENT_ID`);
-    const clientSecret = this.configService.get<string>(`${prefix}_CLIENT_SECRET`);
+    const clientId = this.configService.get<string>(`${prefix}_CLIENT_ID`, null);
+    const clientSecret = this.configService.get<string>(`${prefix}_CLIENT_SECRET`, null);
     
     if (!clientId || !clientSecret) return undefined;
     
     return {
       clientId,
       clientSecret,
-      accessToken: this.configService.get<string>(`${prefix}_ACCESS_TOKEN`),
-      refreshToken: this.configService.get<string>(`${prefix}_REFRESH_TOKEN`),
+      accessToken: this.configService.get<string>(`${prefix}_ACCESS_TOKEN`, null),
+      refreshToken: this.configService.get<string>(`${prefix}_REFRESH_TOKEN`, null),
     };
   }
 
@@ -102,7 +102,7 @@ export abstract class BaseContentFetcher implements ContentFetcherInterface {
    * Load cookies configuration
    */
   protected loadCookies(prefix: string): Record<string, string> | undefined {
-    const cookiesJson = this.configService.get<string>(`${prefix}_COOKIES`);
+    const cookiesJson = this.configService.get<string>(`${prefix}_COOKIES`, null);
     if (!cookiesJson) return undefined;
     
     try {
