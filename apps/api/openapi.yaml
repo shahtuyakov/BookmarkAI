@@ -1155,6 +1155,7 @@ components:
         - reddit
         - twitter
         - x
+        - youtube
         - generic
         - unknown
       description: |
