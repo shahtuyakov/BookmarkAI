@@ -24,7 +24,7 @@ export class ContentFetcherRegistry {
     // Load enabled platforms for compliance
     this.enabledPlatforms = new Set(
       this.configService
-        .get<string>('ENABLED_PLATFORMS', 'tiktok,reddit,generic')
+        .get<string>('ENABLED_PLATFORMS', 'tiktok,reddit,twitter,x,youtube,generic')
         .split(',')
         .map((p) => p.trim() as Platform)
     );

@@ -17,6 +17,8 @@ const getPlatformColor = (platform: string) => {
     case 'twitter':
     case 'x':
       return '#1DA1F2';
+    case 'youtube':
+      return '#FF0000';
     case 'generic':
       return '#4CAF50';
     default:
@@ -33,6 +35,8 @@ const getPlatformIcon = (platform: string) => {
     case 'twitter':
     case 'x':
       return 'twitter';
+    case 'youtube':
+      return 'youtube';
     case 'generic':
       return 'web';
     default:

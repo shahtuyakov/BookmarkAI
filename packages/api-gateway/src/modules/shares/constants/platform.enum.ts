@@ -6,6 +6,7 @@ export enum Platform {
     REDDIT = 'reddit',
     TWITTER = 'twitter',
     X = 'x',
+    YOUTUBE = 'youtube',
     GENERIC = 'generic',
     UNKNOWN = 'unknown',
   }
@@ -24,6 +25,7 @@ export enum Platform {
       if (host.includes('reddit.com')) return Platform.REDDIT;
       if (host.includes('twitter.com')) return Platform.TWITTER;
       if (host.includes('x.com')) return Platform.X;
+      if (host.includes('youtube.com') || host.includes('youtu.be')) return Platform.YOUTUBE;
       
       // Use GENERIC for any other valid URL instead of UNKNOWN
       return Platform.GENERIC;

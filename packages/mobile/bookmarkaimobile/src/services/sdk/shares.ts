@@ -8,7 +8,7 @@ import { Share as SDKShare, CreateShareRequest } from '@bookmarkai/sdk';
 export interface Share {
   id: string;
   url: string;
-  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'generic' | 'unknown';
+  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'youtube' | 'generic' | 'unknown';
   status: 'pending' | 'processing' | 'fetching' | 'done' | 'error';
   title?: string;
   description?: string;
