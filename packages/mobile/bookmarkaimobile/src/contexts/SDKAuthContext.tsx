@@ -106,13 +106,24 @@ export const SDKAuthProvider: React.FC<SDKAuthProviderProps> = ({ children, clie
             
             // User profile retrieved successfully
             
-          } catch (err) {
+          } catch (err: any) {
             console.error('❌ [SDKAuthContext] Failed to get user profile:', err);
-            // Failed to get user profile
-            // Let SDK handle token clearing
-            await client?.logout();
-            await clearAndroidTokens();
-            setUser(null);
+            // Only logout if it's an authentication error (401)
+            if (err?.status === 401 || err?.response?.status === 401) {
+              console.log('🔒 [SDKAuthContext] 401 error - logging out');
+              // Failed to get user profile due to auth error
+              await client?.logout();
+              await clearAndroidTokens();
+              setUser(null);
+            } else {
+              console.log('⚠️ [SDKAuthContext] Non-auth error getting profile, keeping user logged in');
+              // For other errors, keep the user logged in but without profile data
+              setUser({
+                id: 'unknown',
+                email: 'User',
+                name: 'User'
+              });
+            }
           }
         } else {
           setUser(null);
@@ -134,16 +145,17 @@ export const SDKAuthProvider: React.FC<SDKAuthProviderProps> = ({ children, clie
     // Check auth when component mounts
     checkAuth();
     
-    const handleAuthError = () => {
+    const handleAuthError = (event?: any) => {
+      console.log('🚨 [SDKAuthContext] Auth error event received:', event);
       setUser(null);
       setError('Authentication failed. Please login again.');
       clearAndroidTokens(); // Clear Android tokens on auth error
     };
     
-    DeviceEventEmitter.addListener('auth-error', handleAuthError);
+    const authErrorListener = DeviceEventEmitter.addListener('auth-error', handleAuthError);
     
     return () => {
-      DeviceEventEmitter.removeAllListeners('auth-error');
+      authErrorListener.remove();
     };
   }, [authService, client]);
   
