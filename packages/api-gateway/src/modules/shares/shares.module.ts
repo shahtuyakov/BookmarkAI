@@ -12,6 +12,7 @@ import { SharesRateLimitMiddleware } from './middlewares/rate-limit.middleware';
 import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ErrorService } from './services/error.service';
 import { ShareProcessor } from './queue/share-processor';
+import { FetchersModule } from './fetchers/fetchers.module';
 
 /**
  * Module for share management functionality
@@ -20,6 +21,9 @@ import { ShareProcessor } from './queue/share-processor';
   imports: [
     // Import AuthModule to access JwtAuthGuard and KmsJwtService
     AuthModule,
+
+    // Import FetchersModule for content fetching
+    FetchersModule,
 
     // Register BullMQ queue with enhanced configuration from ADR
     BullModule.registerQueueAsync({
