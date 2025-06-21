@@ -72,7 +72,7 @@ export class AuthService {
         const newTokens = await this.refreshTokens();
         return newTokens.accessToken;
       } catch (error) {
-        console.error('Failed to refresh token:', error);
+        // Token refresh failed, return existing token
         // Return existing token and let request fail with 401
         return tokens.accessToken;
       }
@@ -255,8 +255,8 @@ export class AuthService {
     
     if (refreshAt > 0) {
       this.refreshTimer = setTimeout(() => {
-        this.refreshTokens().catch(error => {
-          console.error('Scheduled token refresh failed:', error);
+        this.refreshTokens().catch(() => {
+          // Scheduled refresh failed
         });
       }, refreshAt);
     }

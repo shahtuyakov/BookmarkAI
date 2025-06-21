@@ -62,7 +62,7 @@ const createSDKClient = () => {
     },
     environment: __DEV__ ? 'development' : 'production',
     onTokenRefresh: (_tokens) => {
-      console.log('SDK token refresh callback triggered');
+      // SDK token refresh callback triggered
     },
   });
   
@@ -72,7 +72,7 @@ const createSDKClient = () => {
 // Export the appropriate provider based on feature flag
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   if (USE_SDK_AUTH) {
-    console.log('🚀 Using SDK-based AuthProvider');
+    // Using SDK-based AuthProvider
     const client = React.useMemo(() => createSDKClient(), []);
     return (
       <SDKClientProvider client={client}>
@@ -80,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       </SDKClientProvider>
     );
   } else {
-    console.log('📡 Using Direct API AuthProvider');
+    // Using Direct API AuthProvider
     return <DirectAuthProvider>{children}</DirectAuthProvider>;
   }
 };

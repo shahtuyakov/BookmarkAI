@@ -12,6 +12,7 @@ export interface Share {
   status: 'pending' | 'processing' | 'done' | 'error';
   createdAt: string;
   updatedAt: string;
+  userId?: string; // Add missing property from SDK type
   metadata?: {
     author?: string;
     title?: string;

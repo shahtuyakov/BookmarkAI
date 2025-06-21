@@ -54,7 +54,7 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
           return data[key] || null;
         }
       } catch (error) {
-        console.error('Failed to get secure item:', error);
+        // Silently handle errors
       }
       return null;
     }
@@ -65,7 +65,6 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
     }
 
     // Fallback: no storage available
-    console.warn('No storage adapter available for key:', key);
     return null;
   }
 
@@ -80,7 +79,7 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
           try {
             data = JSON.parse(credentials.password);
           } catch {
-            // Ignore parse errors
+            // Ignore parse errors, start fresh
           }
         }
 
@@ -95,7 +94,6 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
         );
         return;
       } catch (error) {
-        console.error('Failed to set secure item:', error);
         throw new Error('Failed to save secure data');
       }
     }
@@ -107,7 +105,6 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
     }
 
     // Fallback: no storage available
-    console.warn('No storage adapter available for key:', key);
   }
 
   async removeItem(key: string): Promise<void> {
@@ -132,7 +129,7 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
           }
         }
       } catch (error) {
-        console.error('Failed to remove secure item:', error);
+        // Silently handle errors
       }
       return;
     }
@@ -150,7 +147,7 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
       try {
         await this.keychain.resetInternetCredentials(this.server);
       } catch (error) {
-        console.error('Failed to clear secure storage:', error);
+        // Silently handle errors
       }
     }
 
