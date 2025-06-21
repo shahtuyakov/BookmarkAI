@@ -25,7 +25,8 @@ export enum Platform {
       if (host.includes('twitter.com')) return Platform.TWITTER;
       if (host.includes('x.com')) return Platform.X;
       
-      return Platform.UNKNOWN;
+      // Use GENERIC for any other valid URL instead of UNKNOWN
+      return Platform.GENERIC;
     } catch (error) {
       return Platform.UNKNOWN;
     }

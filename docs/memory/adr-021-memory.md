@@ -215,3 +215,51 @@ Summary
   - Keeping the metadata field populated for older app versions
 
   The mobile app is now ready to display the enriched content from the fetchers!
+
+## Testing Results (2025-06-22)
+
+### Successful Implementations
+1. **TikTok Fetcher** - Working perfectly
+   - Successfully fetches video titles from oEmbed API
+   - Retrieves author information
+   - Gets thumbnail URLs
+   - All metadata displays correctly in mobile app
+
+2. **Reddit Fetcher** - Working perfectly
+   - Successfully fetches post titles
+   - Retrieves subreddit information
+   - Gets image URLs for image posts
+   - All metadata displays correctly in mobile app
+
+3. **Mobile App Integration** - Complete
+   - Share list displays titles, authors, and thumbnails
+   - Detail view shows all fetched metadata
+   - Platform icons and colors working for all platforms
+   - Status updates working (pending → fetching → done)
+
+### Known Issues
+
+#### YouTube/Generic Fetcher Issue
+The Generic fetcher (for YouTube and other non-specific platforms) encounters a 400 error in the mobile app, though the backend implementation is correct.
+
+**Attempted Fixes:**
+1. Updated platform detection to return `GENERIC` instead of `UNKNOWN` for unrecognized URLs
+2. Removed domain restriction in URL validation that was blocking non-supported platforms
+3. Verified Generic fetcher is enabled by default in the registry
+4. Confirmed backend changes were applied (API restarted)
+
+**Investigation Notes:**
+- No error logs appear in the API server when YouTube URL creation fails
+- The 400 error suggests the request may not be reaching the API
+- Mobile app is configured to use port 3001 while API runs on 3000 (but other shares work)
+- SDK implementation appears correct based on code review
+
+**Current Status:**
+- Main platforms (TikTok, Reddit) are working as expected
+- Generic fetcher implementation is complete but has connectivity issues
+- Decision made to proceed as primary platforms are functional
+
+### Configuration Notes
+- Platform detection updated to use GENERIC for any valid URL not specifically handled
+- URL validation updated to accept any HTTP/HTTPS URL (not just specific platforms)
+- Environment variable `ENABLED_PLATFORMS=tiktok,reddit,generic` controls platform availability

@@ -109,18 +109,13 @@ import {
       try {
         const urlObj = new URL(url);
         
-        // Validate protocol
-        if (urlObj.protocol !== 'https:') {
-          this.throwError(ERROR_CODES.INVALID_URL, 'URL must use HTTPS protocol');
+        // Validate protocol - allow both http and https for development
+        if (urlObj.protocol !== 'https:' && urlObj.protocol !== 'http:') {
+          this.throwError(ERROR_CODES.INVALID_URL, 'URL must use HTTP or HTTPS protocol');
         }
         
-        // Validate domain
-        const supportedDomains = ['tiktok.com', 'reddit.com', 'twitter.com', 'x.com'];
-        const domain = urlObj.hostname.replace(/^www\./, '');
-        
-        if (!supportedDomains.some(d => domain.endsWith(d))) {
-          this.throwError(ERROR_CODES.UNSUPPORTED_PLATFORM);
-        }
+        // No longer restrict to specific domains - we have the Generic fetcher now
+        // Any valid URL is supported
       } catch (error) {
         if (error instanceof HttpException) {
           throw error;
