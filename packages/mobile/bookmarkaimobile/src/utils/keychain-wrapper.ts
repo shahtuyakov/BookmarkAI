@@ -72,4 +72,40 @@ export const keychainWrapper = {
       return false;
     }
   },
+
+  // Add generic password methods for share extension compatibility
+  async setGenericPassword(
+    username: string,
+    password: string,
+    options?: any
+  ): Promise<boolean> {
+    try {
+      const result = await Keychain.setGenericPassword(username, password, options);
+      return !!result;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async getGenericPassword(
+    options?: any
+  ): Promise<{ username: string; password: string } | false> {
+    try {
+      const credentials = await Keychain.getGenericPassword(options);
+      return credentials || false;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async resetGenericPassword(
+    options?: any
+  ): Promise<boolean> {
+    try {
+      await Keychain.resetGenericPassword(options);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  },
 };
