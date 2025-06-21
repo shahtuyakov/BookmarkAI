@@ -36,10 +36,10 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
       );
       
       if (!result.success) {
-        console.error('❌ SDK Auth: Failed to sync tokens to Android:', result.message);
+        // Token sync failed, but continue silently
       }
     } catch (error) {
-      console.error('❌ SDK Auth: Android token sync error:', error);
+      // Android token sync error, but continue silently
     }
   };
 
@@ -47,6 +47,13 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
     // Login with improved error handling and single token save
     login: async (credentials: { email: string; password: string }) => {
       try {
+        // Force logout first to clear any stale tokens
+        try {
+          await client.logout();
+        } catch (e) {
+          // Ignore logout errors - we just want to ensure clean state
+        }
+        
         // SDK's login method returns the data directly (not wrapped in response)
         const loginResponse = await client.auth.login(credentials);
         
@@ -77,7 +84,6 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
           }
         };
       } catch (error) {
-        console.error('SDK Login error:', error);
         throw error;
       }
     },
@@ -114,7 +120,6 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
           }
         };
       } catch (error) {
-        console.error('SDK Registration error:', error);
         throw error;
       }
     },
@@ -128,7 +133,7 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
         try {
           await client.auth.logout();
         } catch (serverError) {
-          console.error('SDK logout server error (continuing with local cleanup):', serverError);
+          // Server logout error (continuing with local cleanup)
         }
         
         // SDK handles token clearing automatically via client.auth.logout()
@@ -140,14 +145,13 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
           try {
             const result = await androidTokenSync.clearTokens();
             if (!result.success) {
-              console.error('❌ SDK Auth: Failed to clear Android tokens:', result.message);
+              // Failed to clear Android tokens, but continue
             }
           } catch (error) {
-            console.error('❌ SDK Auth: Android token clear error:', error);
+            // Android token clear error, but continue
           }
         }
       } catch (error) {
-        console.error('SDK Logout error:', error);
         // SDK handles token clearing automatically, no need for manual cleanup
       }
     },
@@ -187,23 +191,3 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
   };
 };
 
-// Helper to verify token sync (dev only)
-export const verifySDKTokenSync = async (client: BookmarkAIClient, accessToken?: string): Promise<void> => {
-  if (Platform.OS !== 'android' || !__DEV__) return;
-  
-  try {
-    // Get current access token from SDK
-    const currentToken = await client.getAccessToken() || accessToken;
-    
-    if (currentToken) {
-      const isValid = await androidTokenSync.verifySync(currentToken);
-      
-      if (!isValid) {
-        console.warn('⚠️ SDK Auth: Token sync verification failed');
-        // SDK manages tokens, so we can't re-sync manually
-      }
-    }
-  } catch (error) {
-    console.error('❌ SDK Auth: Token sync verification error:', error);
-  }
-};

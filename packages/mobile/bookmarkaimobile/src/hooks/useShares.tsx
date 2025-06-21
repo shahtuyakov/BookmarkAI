@@ -60,9 +60,9 @@ export function useSharesList(params: GetSharesParams = {}) {
     (queryResult.isFetching && !queryResult.isFetchingNextPage && shares.length === 0);
   
   const refresh = useCallback(async () => {
-    console.log('🔄 useSharesList: Manually refreshing shares list');
+    // Manually refreshing shares list
     const result = await queryResult.refetch();
-    console.log('✅ useSharesList: Manual refresh completed');
+    // Manual refresh completed
     return result;
   }, [queryResult]);
   

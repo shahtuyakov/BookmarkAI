@@ -52,15 +52,8 @@ export const saveTokens = async (accessToken: string, refreshToken: string, expi
       )
     );
     
-    // Debug logging
-    console.log('✅ Tokens saved successfully');
-    console.log('Service:', KEYCHAIN_SERVICE);
-    console.log('Access Group:', SHARED_ACCESS_GROUP);
-    console.log('Token preview:', accessToken.substring(0, 20) + '...');
-    
     return true;
   } catch (error) {
-    console.error('Error saving tokens to Keychain:', error);
     return false;
   }
 };
@@ -71,12 +64,14 @@ export const getTokens = async (): Promise<AuthTokens | null> => {
     const credentials = await withKeychainFallback((options) =>
       Keychain.getGenericPassword(options)
     );
+    
     if (!credentials) {
       return null;
     }
-    return JSON.parse(credentials.password);
+    
+    const tokens = JSON.parse(credentials.password);
+    return tokens;
   } catch (error) {
-    console.error('Error getting tokens from Keychain:', error);
     return null;
   }
 };
@@ -84,7 +79,12 @@ export const getTokens = async (): Promise<AuthTokens | null> => {
 // Get access token from secure storage
 export const getAccessToken = async (): Promise<string | null> => {
   const tokens = await getTokens();
-  return tokens ? tokens.accessToken : null;
+  
+  if (!tokens) {
+    return null;
+  }
+  
+  return tokens.accessToken;
 };
 
 // Clear tokens (logout)
@@ -95,7 +95,6 @@ export const clearTokens = async (): Promise<boolean> => {
     );
     return true;
   } catch (error) {
-    console.error('Error clearing tokens from Keychain:', error);
     return false;
   }
 };

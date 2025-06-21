@@ -16,8 +16,8 @@ import { useSDKSharesList, useSDKCreateShare } from '../../hooks/useSDKShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
-import { Share } from '@bookmarkai/sdk';
 import { isUsingSDKAuth, useSDKClient } from '../../contexts/auth-provider';
+import type { Share } from '../../services/api/shares';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
@@ -37,31 +37,25 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const usingSDKAuth = isUsingSDKAuth();
   
   // Use SDK hooks if SDK auth is enabled, otherwise use direct API hooks
-  const directSharesResult = useSharesList({ limit: 20 });
-  const sdkSharesResult = useSDKSharesList(sdkClient!, { limit: 20 });
-  
-  const sharesResult = usingSDKAuth && sdkClient ? sdkSharesResult : directSharesResult;
+  const sharesResult = usingSDKAuth && sdkClient 
+    ? useSDKSharesList(sdkClient, { limit: 20 })
+    : useSharesList({ limit: 20 });
   
   const { 
-    data,
+    shares,
     isLoading, 
     error, 
     refetch,
-    isFetching,
     fetchNextPage,
     hasNextPage,
-    isFetchingNextPage
+    isFetchingNextPage,
+    isRefreshing
   } = sharesResult;
   
-  // Flatten all pages into a single array
-  const shares = data?.pages?.flatMap(page => page.items) || [];
-  const isRefreshing = isFetching && !isLoading;
-  
-  // Create share mutations
-  const directCreateShare = useCreateShare();
-  const sdkCreateShare = useSDKCreateShare(sdkClient!);
-  
-  const createShareMutation = usingSDKAuth && sdkClient ? sdkCreateShare : directCreateShare;
+  // Create share mutation based on auth mode
+  const createShareMutation = usingSDKAuth && sdkClient 
+    ? useSDKCreateShare(sdkClient)
+    : useCreateShare();
   
   const { 
     mutate: createShare, 
@@ -216,7 +210,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </Button>
           </View>
           <FlatList
-            data={shares}
+            data={shares as Share[]}
             keyExtractor={getItemKey}
             renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
             contentContainerStyle={styles.listContent}
@@ -247,7 +241,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     
     return (
       <FlatList
-        data={shares}
+        data={shares as Share[]}
         keyExtractor={getItemKey}
         renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
         contentContainerStyle={styles.listContent}

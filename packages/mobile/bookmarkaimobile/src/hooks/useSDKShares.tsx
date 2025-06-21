@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { 
   useQuery, 
   useMutation, 
@@ -36,6 +36,35 @@ interface PendingShare {
 export function useSDKSharesList(client: BookmarkAIClient, params: GetSharesParams = {}) {
   const { isConnected } = useNetworkStatus();
   const sharesService = createSDKSharesService(client);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Check if SDK is authenticated
+  useEffect(() => {
+    let mounted = true;
+    
+    const checkAuth = async () => {
+      if (!mounted) return;
+      
+      const authenticated = await client.isAuthenticated();
+      setIsAuthenticated(authenticated);
+      
+      if (!authenticated) {
+        // Also check if we have an access token
+        await client.getAccessToken();
+      }
+    };
+    
+    // Initial check with delay
+    setTimeout(checkAuth, 1000);
+    
+    // Re-check every 2 seconds until authenticated
+    const interval = setInterval(checkAuth, 2000);
+    
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [client]);
   
   const queryResult = useInfiniteQuery<
     PaginatedResponse<Share>,
@@ -54,7 +83,7 @@ export function useSDKSharesList(client: BookmarkAIClient, params: GetSharesPara
     },
     initialPageParam: undefined,
     getNextPageParam: (lastPage) => lastPage.cursor,
-    enabled: isConnected,
+    enabled: isConnected && isAuthenticated,
     meta: {
       persist: true,
     },
@@ -69,9 +98,7 @@ export function useSDKSharesList(client: BookmarkAIClient, params: GetSharesPara
     (queryResult.isFetching && !queryResult.isFetchingNextPage && shares.length === 0);
   
   const refresh = useCallback(async () => {
-    console.log('🔄 SDK useSharesList: Manually refreshing shares list');
     const result = await queryResult.refetch();
-    console.log('✅ SDK useSharesList: Manual refresh completed');
     return result;
   }, [queryResult]);
   
@@ -112,7 +139,6 @@ export function useSDKShareById(client: BookmarkAIClient, id: string) {
 }
 
 export function useSDKCreateShare(client: BookmarkAIClient) {
-  console.log('🏗️ SDK useCreateShare hook initialized');
   
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
@@ -125,7 +151,6 @@ export function useSDKCreateShare(client: BookmarkAIClient) {
         return JSON.parse(pendingData);
       }
     } catch (error) {
-      console.error('Error loading pending shares:', error);
     }
     return [];
   };
@@ -134,7 +159,6 @@ export function useSDKCreateShare(client: BookmarkAIClient) {
     try {
       await AsyncStorage.setItem(PENDING_SHARES_KEY, JSON.stringify(pendingShares));
     } catch (error) {
-      console.error('Error saving pending shares:', error);
     }
   };
   
@@ -168,7 +192,6 @@ export function useSDKCreateShare(client: BookmarkAIClient) {
         await sharesService.createShare(pendingShare.url, pendingShare.idempotencyKey);
         await removeFromPendingQueue(pendingShare.id);
       } catch (error) {
-        console.error('Failed to sync pending share:', error);
       }
     }
     
@@ -184,11 +207,7 @@ export function useSDKCreateShare(client: BookmarkAIClient) {
   
   const mutation = useMutation({
     mutationFn: async ({ url }: { url: string }) => {
-      console.log(`🚀 SDK Creating share for URL: ${url}`);
-      console.log(`📶 Network connected: ${isConnected}`);
-      
       if (!isConnected) {
-        console.log('📴 Offline - adding to pending queue');
         const pendingShare = await addToPendingQueue(url);
         
         return {
@@ -202,23 +221,17 @@ export function useSDKCreateShare(client: BookmarkAIClient) {
         } as Share;
       }
       
-      console.log('🌐 Online - making SDK call');
       const idempotencyKey = uuidv4();
-      console.log(`🔑 Idempotency key: ${idempotencyKey}`);
       
       try {
         const result = await sharesService.createShare(url, idempotencyKey);
-        console.log('✅ SDK Share created successfully:', result);
         return result;
       } catch (error) {
-        console.error('❌ SDK call failed:', error);
         throw error;
       }
     },
     
     onMutate: async ({ url }) => {
-      console.log('🎯 SDK onMutate: Starting optimistic update');
-      
       await queryClient.cancelQueries({ queryKey: sharesKeys.lists() });
       
       const previousShares = queryClient.getQueryData(sharesKeys.lists());
@@ -256,12 +269,10 @@ export function useSDKCreateShare(client: BookmarkAIClient) {
         }
       );
       
-      console.log('✅ SDK Optimistic update applied');
       return { previousShares };
     },
     
     onSuccess: (newShare, variables) => {
-      console.log('🎉 SDK Share creation successful, updating cache with real data');
       
       queryClient.setQueriesData(
         { queryKey: sharesKeys.lists() },
@@ -298,11 +309,8 @@ export function useSDKCreateShare(client: BookmarkAIClient) {
         }
       );
       
-      console.log('✅ SDK Cache updated with real share data');
-      
       // Force a background refresh to ensure we have the latest server state
       setTimeout(() => {
-        console.log('🔄 SDK useCreateShare: Triggering background refresh after successful creation');
         queryClient.invalidateQueries({ 
           queryKey: sharesKeys.lists(),
           refetchType: 'active'  // Only refetch if currently active
@@ -310,27 +318,19 @@ export function useSDKCreateShare(client: BookmarkAIClient) {
       }, 1000);
     },
     
-    onError: (error, _variables, context) => {
-      console.error('💥 SDK Share creation failed:', error);
-      
+    onError: (_error, _variables, context) => {
       if (context?.previousShares) {
         queryClient.setQueryData(sharesKeys.lists(), context.previousShares);
-      }
-      
-      if (!isConnected) {
-        console.log('📴 Offline error - keeping optimistic update as pending');
       }
     },
     
     onSettled: () => {
-      console.log('🏁 SDK Share creation settled');
     }
   });
   
   return {
     ...mutation,
     createShare: (url: string) => {
-      console.log(`📝 SDK createShare called with: ${url}`);
       return mutation.mutate({ url });
     },
     pendingCount: mutation.isPending ? 1 : 0,
