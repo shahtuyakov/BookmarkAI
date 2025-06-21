@@ -4,7 +4,9 @@ import { Text, Card, Button, Chip, Divider, ActivityIndicator, useTheme, Banner 
 import { RouteProp } from '@react-navigation/native';
 import { HomeStackParamList } from '../../navigation/types';
 import { useShareById } from '../../hooks/useShares';
+import { useSDKShareById } from '../../hooks/useSDKShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { isUsingSDKAuth, useSDKClient } from '../../contexts/auth-provider';
 
 type Props = {
   route: RouteProp<HomeStackParamList, 'Detail'>;
@@ -29,14 +31,22 @@ const DetailScreen: React.FC<Props> = ({ route }) => {
   const theme = useTheme();
   const { isConnected } = useNetworkStatus();
   
-  // Get share details with React Query
+  // Get SDK client if using SDK auth
+  const sdkClient = useSDKClient();
+  const usingSDKAuth = isUsingSDKAuth();
+  
+  // Use SDK hook if SDK auth is enabled, otherwise use direct API hook
+  const shareResult = usingSDKAuth && sdkClient 
+    ? useSDKShareById(sdkClient, id)
+    : useShareById(id);
+  
   const { 
     share, 
     isLoading, 
     isRefreshing, 
     error, 
     refresh 
-  } = useShareById(id);
+  } = shareResult;
   
   // Handle opening the URL in browser
   const openInBrowser = () => {

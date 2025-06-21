@@ -11,11 +11,13 @@ import {
 } from 'react-native';
 import { FAB, Searchbar, Text, useTheme, Dialog, Portal, Button, TextInput, Chip } from 'react-native-paper';
 import { HomeScreenNavigationProp } from '../../navigation/types';
-import { useInfiniteSharesList, useCreateShare } from '../../hooks/useShares';
+import { useSharesList, useCreateShare } from '../../hooks/useShares';
+import { useSDKSharesList, useSDKCreateShare } from '../../hooks/useSDKShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
-import { Share } from '@bookmarkai/sdk';
+import { isUsingSDKAuth, useSDKClient } from '../../contexts/auth-provider';
+import type { Share } from '../../services/api/shares';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
@@ -30,27 +32,47 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   // Get network status
   const { isConnected } = useNetworkStatus();
   
-  // Get shares with infinite scrolling (SDK version)
+  // Get SDK client if using SDK auth
+  const sdkClient = useSDKClient();
+  const usingSDKAuth = isUsingSDKAuth();
+  
+  // Use SDK hooks if SDK auth is enabled, otherwise use direct API hooks
+  const sharesResult = usingSDKAuth && sdkClient 
+    ? useSDKSharesList(sdkClient, { limit: 20 })
+    : useSharesList({ limit: 20 });
+  
   const { 
-    data,
+    shares,
     isLoading, 
     error, 
     refetch,
-    isFetching,
     fetchNextPage,
     hasNextPage,
-    isFetchingNextPage
-  } = useInfiniteSharesList({ limit: 20 });
+    isFetchingNextPage,
+    isRefreshing
+  } = sharesResult;
   
-  // Flatten all pages into a single array
-  const shares = data?.pages?.flatMap(page => page.items) || [];
-  const isRefreshing = isFetching && !isLoading;
+  // Debug logging
+  React.useEffect(() => {
+    console.log('🏠 [HomeScreen] State:', {
+      usingSDKAuth,
+      hasSDKClient: !!sdkClient,
+      isConnected,
+      isLoading,
+      sharesCount: shares?.length || 0,
+      error: error?.message || null
+    });
+  }, [usingSDKAuth, sdkClient, isConnected, isLoading, shares, error]);
   
-  // Create share mutation (SDK version)
+  // Create share mutation based on auth mode
+  const createShareMutation = usingSDKAuth && sdkClient 
+    ? useSDKCreateShare(sdkClient)
+    : useCreateShare();
+  
   const { 
     mutate: createShare, 
     isPending: isSubmitting
-  } = useCreateShare();
+  } = createShareMutation;
   
   // For now, set pendingCount to 0 since SDK version doesn't track this the same way
   const pendingCount = 0;
@@ -200,7 +222,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </Button>
           </View>
           <FlatList
-            data={shares}
+            data={shares as Share[]}
             keyExtractor={getItemKey}
             renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
             contentContainerStyle={styles.listContent}
@@ -231,7 +253,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     
     return (
       <FlatList
-        data={shares}
+        data={shares as Share[]}
         keyExtractor={getItemKey}
         renderItem={({ item }) => <ShareCard share={item} onPress={handleSharePress} />}
         contentContainerStyle={styles.listContent}

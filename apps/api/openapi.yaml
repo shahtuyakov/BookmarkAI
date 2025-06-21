@@ -140,6 +140,44 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimitError'
 
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      operationId: register
+      parameters:
+        - $ref: '#/components/parameters/X-Request-ID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: User already exists
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/X-Request-ID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
   /auth/refresh:
     post:
       tags:
@@ -734,6 +772,28 @@ components:
           minLength: 8
           example: 'securePassword123'
 
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - name
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: 'user@example.com'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: 'John Doe'
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: 'securePassword123'
+
     # Updated to envelope format
     LoginResponse:
       allOf:
@@ -757,6 +817,37 @@ components:
                   example: 'rt_123e4567-e89b-12d3-a456-426614174000'
                 user:
                   $ref: '#/components/schemas/User'
+                expiresIn:
+                  type: integer
+                  description: Token expiration time in seconds
+                  example: 900
+
+    RegisterResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required:
+                - accessToken
+                - refreshToken
+                - user
+              properties:
+                accessToken:
+                  type: string
+                  description: JWT access token
+                  example: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'
+                refreshToken:
+                  type: string
+                  description: Refresh token for getting new access tokens
+                  example: 'rt_123e4567-e89b-12d3-a456-426614174000'
+                user:
+                  $ref: '#/components/schemas/User'
+                expiresIn:
+                  type: integer
+                  description: Token expiration time in seconds
+                  example: 900
 
     RefreshTokenRequest:
       type: object
@@ -785,6 +876,10 @@ components:
                 refreshToken:
                   type: string
                   example: 'rt_456e7890-e89b-12d3-a456-426614174001'
+                expiresIn:
+                  type: integer
+                  description: Token expiration time in seconds
+                  example: 900
 
     User:
       type: object

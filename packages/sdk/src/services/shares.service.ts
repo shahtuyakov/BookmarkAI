@@ -144,10 +144,10 @@ export class SharesService {
     while (attempt < MAX_ATTEMPTS) {
       try {
         const response = await this.client.request<ApiResponse<Share> | Share>({
-          url: '/shares',
+          url: '/v1/shares',
           method: 'POST',
           headers: {
-            'idempotency-key': key,
+            'Idempotency-Key': key,
           },
           data: request,
         });
@@ -181,7 +181,7 @@ export class SharesService {
     const response = await this.client.request<
       ApiResponse<CreateSharesBatchResponse> | CreateSharesBatchResponse
     >({
-      url: '/shares/batch',
+      url: '/v1/shares/batch',
       method: 'POST',
       data: { shares: sharesWithKeys },
     });
@@ -199,7 +199,7 @@ export class SharesService {
     platform?: Share['platform'];
   }): Promise<ShareListResponse> {
     const response = await this.client.request<ApiResponse<ShareListResponse> | ShareListResponse>({
-      url: '/shares',
+      url: '/v1/shares',
       method: 'GET',
       params,
     });
@@ -212,7 +212,7 @@ export class SharesService {
    */
   async get(shareId: string): Promise<Share> {
     const response = await this.client.request<ApiResponse<Share> | Share>({
-      url: `/shares/${shareId}`,
+      url: `/v1/shares/${shareId}`,
       method: 'GET',
     });
 

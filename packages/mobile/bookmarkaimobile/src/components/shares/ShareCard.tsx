@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Card, Text, Chip, useTheme, Avatar } from 'react-native-paper';
-import { Share } from '@bookmarkai/sdk';
+import type { Share } from '../../services/api/shares';
 
 interface ShareCardProps {
   share: Share;

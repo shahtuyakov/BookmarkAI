@@ -15,10 +15,7 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
       try {
         const urlSessionAdapter = new IOSURLSessionAdapter();
         this.adapter = urlSessionAdapter;
-        console.log('✅ iOS URLSession adapter initialized successfully');
       } catch (error) {
-        console.log('❌ iOS URLSession adapter initialization failed:', error);
-        console.log('🔄 Falling back to React Native fetch adapter');
         this.adapter = new ReactNativeNetworkAdapter();
       }
     } else if (Platform.OS === 'android') {
@@ -26,13 +23,10 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
         const okHttpAdapter = createAndroidOkHttpAdapter();
         if (okHttpAdapter) {
           this.adapter = okHttpAdapter;
-          console.log('✅ Android OkHttp adapter initialized successfully');
         } else {
           throw new Error('OkHttp adapter not available');
         }
       } catch (error) {
-        console.log('❌ Android OkHttp adapter initialization failed:', error);
-        console.log('🔄 Falling back to React Native fetch adapter');
         this.adapter = new ReactNativeNetworkAdapter();
       }
     } else {
@@ -41,7 +35,12 @@ export class PlatformNetworkAdapter implements NetworkAdapter {
   }
 
   async request<T = any>(config: any): Promise<any> {
-    return this.adapter.request<T>(config);
+    try {
+      const response = await this.adapter.request<T>(config);
+      return response;
+    } catch (error: any) {
+      throw error;
+    }
   }
 
   /**

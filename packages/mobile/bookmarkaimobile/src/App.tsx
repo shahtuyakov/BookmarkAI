@@ -3,15 +3,14 @@ import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
 import { Platform, Alert, ToastAndroid, NativeModules, View, Text, ActivityIndicator } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import { AuthProvider } from '../src/contexts/AuthContext';
-import { NetworkProvider } from '../src/hooks/useNetworkStatus';
-import { PersistentQueryClientProvider } from '../src/services/queryClient';
-import { SDKProvider, useSDK } from '../src/contexts/SDKContext';
-import RootNavigator from '../src/navigation';
-import { useAppTheme } from '../src/theme';
-import { useShareExtension } from '../src/services/ShareExtensionHandler';
-import { useCreateShare, shareKeys } from '../src/hooks/useShares';
-import { initializeIOSConfiguration } from '../src/utils/ios-config-sync';
+import { AuthProvider } from './contexts/auth-provider';
+import { NetworkProvider } from './hooks/useNetworkStatus';
+import { PersistentQueryClientProvider } from './services/queryClient';
+import RootNavigator from './navigation';
+import { useAppTheme } from './theme';
+import { useShareExtension } from './services/ShareExtensionHandler';
+import { useCreateShare, sharesKeys } from './hooks/useShares';
+import { initializeIOSConfiguration } from './utils/ios-config-sync';
 
 interface ShareData {
   url: string;
@@ -24,6 +23,7 @@ function AppContent(): React.JSX.Element {
   const { mutate: createShare } = useCreateShare();
   const queryClient = useQueryClient();
   
+  
   // Initialize iOS configuration on app launch
   useEffect(() => {
     initializeIOSConfiguration();
@@ -34,12 +34,12 @@ function AppContent(): React.JSX.Element {
     
     // Invalidate all shares queries to trigger refetch
     queryClient.invalidateQueries({ 
-      queryKey: shareKeys.lists() 
+      queryKey: sharesKeys.lists() 
     });
     
     // Also invalidate individual share details that might be cached
     queryClient.invalidateQueries({ 
-      queryKey: shareKeys.details() 
+      queryKey: sharesKeys.details() 
     });
     
   }, [queryClient]);
@@ -77,7 +77,7 @@ function AppContent(): React.JSX.Element {
             try {
               await NativeModules.ShareHandler.markShareAsProcessed(share.id);
             } catch (err) {
-              console.error(`❌ Failed to mark share ${share.id} as processed:`, err);
+              // Failed to mark share as processed
             }
           }
           
@@ -95,7 +95,7 @@ function AppContent(): React.JSX.Element {
         }
       } catch (err) {
         failureCount++;
-        console.error(`❌ Failed to process share ${i + 1}: ${share.url}`, err);
+        // Failed to process share
       }
     }
     
@@ -142,7 +142,7 @@ function AppContent(): React.JSX.Element {
       } else {
       }
     } catch (err) {
-      console.error('❌ createShare failed:', err);
+      // createShare failed
       
       // For errors, we might still want to show feedback even in silent mode
       if (!silent) {
@@ -201,47 +201,22 @@ function AppContent(): React.JSX.Element {
   return <RootNavigator />;
 }
 
-function AppWithSDK(): React.JSX.Element {
-  const { isInitialized, error } = useSDK();
-
-  if (!isInitialized) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 16 }}>Initializing BookmarkAI...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: 'red', textAlign: 'center', padding: 20 }}>
-          Failed to initialize SDK: {error.message}
-        </Text>
-      </View>
-    );
-  }
-
-  return <AppContent />;
-}
+// SDK initialization now handled in auth-provider
 
 function App(): React.JSX.Element {
   const theme = useAppTheme();
 
   return (
     <PersistentQueryClientProvider>
-      <SDKProvider>
-        <NetworkProvider>
-          <AuthProvider>
-            <PaperProvider theme={theme}>
-              <NavigationContainer>
-                <AppWithSDK />
-              </NavigationContainer>
-            </PaperProvider>
-          </AuthProvider>
-        </NetworkProvider>
-      </SDKProvider>
+      <NetworkProvider>
+        <AuthProvider>
+          <PaperProvider theme={theme}>
+            <NavigationContainer>
+              <AppContent />
+            </NavigationContainer>
+          </PaperProvider>
+        </AuthProvider>
+      </NetworkProvider>
     </PersistentQueryClientProvider>
   );
 }

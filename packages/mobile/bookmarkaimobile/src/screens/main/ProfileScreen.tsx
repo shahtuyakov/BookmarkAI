@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
 import { Avatar, Text, Button, Divider, List, Dialog, Portal } from 'react-native-paper';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/auth-provider';
 import * as biometricService from '../../services/biometrics';
 
 const ProfileScreen = () => {

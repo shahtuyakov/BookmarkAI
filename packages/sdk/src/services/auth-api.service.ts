@@ -6,7 +6,17 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface RegisterRequest {
+  email: string;
+  name: string;
+  password: string;
+}
+
 export interface LoginResponse extends TokenPair {
+  user: User;
+}
+
+export interface RegisterResponse extends TokenPair {
   user: User;
 }
 
@@ -41,9 +51,35 @@ export class AuthApiService {
     await this.client.setTokens({
       accessToken: loginData.accessToken,
       refreshToken: loginData.refreshToken,
-    });
+    }, loginData.expiresIn);
 
     return loginData;
+  }
+
+  /**
+   * Register a new user
+   */
+  async register(userData: RegisterRequest): Promise<RegisterResponse> {
+    const response = await this.client.request<any>({
+      url: '/v1/auth/register',
+      method: 'POST',
+      data: userData,
+    });
+
+    // Handle nested response structure
+    const registerData = response.data.data || response.data;
+    
+    if (!registerData.accessToken || !registerData.refreshToken) {
+      throw new Error('Invalid register response: missing tokens');
+    }
+
+    // Automatically set tokens in the client
+    await this.client.setTokens({
+      accessToken: registerData.accessToken,
+      refreshToken: registerData.refreshToken,
+    });
+
+    return registerData;
   }
 
   /**

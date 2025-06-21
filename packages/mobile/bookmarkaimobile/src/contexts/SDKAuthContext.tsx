@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { DeviceEventEmitter, Alert, Platform } from 'react-native';
-import { getAccessToken, clearTokens, getTokens } from '../services/api/client';
-import { authAPI, User } from '../services/api/auth';
+import { createSDKAuthService, User } from '../services/sdk/auth';
 import * as biometricService from '../services/biometrics';
 import { androidTokenSync } from '../services/android-token-sync';
-// SDK Context removed - using direct API approach
+import { BookmarkAIClient } from '@bookmarkai/sdk';
 
 interface AuthContextType {
   user: User | null;
@@ -23,7 +22,7 @@ interface AuthContextType {
   disableBiometrics: () => Promise<boolean>;
 }
 
-const AuthContext = createContext<AuthContextType>({
+const SDKAuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: false,
   error: null,
@@ -40,40 +39,7 @@ const AuthContext = createContext<AuthContextType>({
   disableBiometrics: async () => false,
 });
 
-export const useAuth = () => useContext(AuthContext);
-
-/**
- * Sync authentication tokens to Android native storage
- */
-async function syncTokensToNative(): Promise<void> {
-  try {
-    const tokens = await getTokens();
-    if (!tokens) {
-      return;
-    }
-
-    // Sync to Android native storage
-    if (Platform.OS === 'android') {
-      // Calculate expires in from current time
-      const currentTimeMs = Date.now();
-      const expiresIn = Math.max(0, Math.floor((tokens.expiresAt - currentTimeMs) / 1000));
-
-      const result = await androidTokenSync.syncTokens(
-        tokens.accessToken,
-        tokens.refreshToken,
-        expiresIn
-      );
-
-      if (!result.success) {
-        console.error('❌ AuthContext: Failed to sync tokens to Android:', result.message);
-      }
-    }
-
-    // SDK sync removed - handled separately if needed
-  } catch (error) {
-    console.error('❌ AuthContext: Token sync error:', error);
-  }
-}
+export const useAuth = () => useContext(SDKAuthContext);
 
 /**
  * Clear tokens from Android native storage
@@ -85,43 +51,19 @@ async function clearAndroidTokens(): Promise<void> {
     const result = await androidTokenSync.clearTokens();
     
     if (!result.success) {
-      console.error('❌ AuthContext: Failed to clear Android tokens:', result.message);
+      // Failed to clear Android tokens
     }
   } catch (error) {
-    console.error('❌ AuthContext: Token clear error:', error);
+    // Token clear error
   }
 }
 
-/**
- * Verify token synchronization status
- */
-async function verifyTokenSync(): Promise<void> {
-  if (Platform.OS !== 'android' || !__DEV__) return;
-  
-  try {
-    const tokens = await getTokens();
-    const isValid = await androidTokenSync.verifySync(tokens?.accessToken);
-    
-    if (isValid) {
-    } else {
-      console.warn('⚠️ AuthContext: Token sync verification failed - attempting re-sync');
-      // Note: We can't access SDK context here since this is outside the component
-      // Only re-sync to Android for now
-      if (Platform.OS === 'android') {
-        const tokens = await getTokens();
-        if (tokens) {
-          const currentTimeMs = Date.now();
-          const expiresIn = Math.max(0, Math.floor((tokens.expiresAt - currentTimeMs) / 1000));
-          await androidTokenSync.syncTokens(tokens.accessToken, tokens.refreshToken, expiresIn);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('❌ AuthContext: Token sync verification error:', error);
-  }
+interface SDKAuthProviderProps {
+  children: React.ReactNode;
+  client: BookmarkAIClient;
 }
 
-export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+export const SDKAuthProvider: React.FC<SDKAuthProviderProps> = ({ children, client }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +71,10 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   const [isBiometricsEnabled, setIsBiometricsEnabled] = useState<boolean>(false);
   const [biometryType, setBiometryType] = useState<string | undefined>(undefined);
   
-  // SDK removed - token sync handled differently
+  // Initialize auth service with provided client
+  const authService = React.useMemo(() => {
+    return createSDKAuthService(client);
+  }, [client]);
   
   const checkBiometrics = async () => {
     const { available, biometryType } = await biometricService.checkBiometricAvailability();
@@ -142,43 +87,43 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
   
-  // Check for existing session on app start
+  // Check for existing session on app start (same logic as original)
   useEffect(() => {
     const checkAuth = async () => {
+      console.log('🔐 [SDKAuthContext] Checking authentication on mount...');
       try {
-        const token = await getAccessToken();
+        // Let SDK check if authenticated
+        const isAuthenticated = await client?.isAuthenticated();
+        console.log('🔑 [SDKAuthContext] SDK isAuthenticated:', isAuthenticated);
         
-        if (token) {
+        if (isAuthenticated && authService) {
           try {
-            // Check if token is expired locally first
-            const tokens = await getTokens();
-            if (tokens && tokens.expiresAt < Date.now()) {
-              console.log('🔴 Token expired locally - clearing and requiring login');
-              await clearTokens();
+            console.log('👤 [SDKAuthContext] Fetching user profile...');
+            // Try to get user profile using SDK
+            const userData = await authService.getUserProfile();
+            setUser(userData);
+            console.log('✅ [SDKAuthContext] User profile retrieved:', userData?.email);
+            
+            // User profile retrieved successfully
+            
+          } catch (err: any) {
+            console.error('❌ [SDKAuthContext] Failed to get user profile:', err);
+            // Only logout if it's an authentication error (401)
+            if (err?.status === 401 || err?.response?.status === 401) {
+              console.log('🔒 [SDKAuthContext] 401 error - logging out');
+              // Failed to get user profile due to auth error
+              await client?.logout();
               await clearAndroidTokens();
               setUser(null);
-              setIsLoading(false);
-              return;
+            } else {
+              console.log('⚠️ [SDKAuthContext] Non-auth error getting profile, keeping user logged in');
+              // For other errors, keep the user logged in but without profile data
+              setUser({
+                id: 'unknown',
+                email: 'User',
+                name: 'User'
+              });
             }
-            
-            const userData = await authAPI.getUserProfile();
-            setUser(userData);
-            
-            // Sync tokens to Android after successful session restoration
-            await syncTokensToNative();
-            
-            // Verify sync in development
-            if (__DEV__) {
-              setTimeout(() => verifyTokenSync(), 1000);
-            }
-            
-          } catch (err) {
-            console.error('❌ AuthContext: Failed to get user profile:', err);
-            await clearTokens();
-            await clearAndroidTokens();
-            setUser(null);
-            // Emit auth-error to trigger proper logout flow
-            DeviceEventEmitter.emit('auth-error');
           }
         } else {
           setUser(null);
@@ -188,7 +133,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         
         await checkBiometrics();
       } catch (err) {
-        console.error('❌ AuthContext: Auth check failed', err);
+        // Auth check failed
         setError('Session expired. Please login again.');
         setUser(null);
         await clearAndroidTokens();
@@ -197,38 +142,48 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       }
     };
     
+    // Check auth when component mounts
     checkAuth();
     
-    const handleAuthError = () => {
+    const handleAuthError = (event?: any) => {
+      console.log('🚨 [SDKAuthContext] Auth error event received:', event);
       setUser(null);
       setError('Authentication failed. Please login again.');
       clearAndroidTokens(); // Clear Android tokens on auth error
     };
     
-    DeviceEventEmitter.addListener('auth-error', handleAuthError);
+    const authErrorListener = DeviceEventEmitter.addListener('auth-error', handleAuthError);
     
     return () => {
-      DeviceEventEmitter.removeAllListeners('auth-error');
+      authErrorListener.remove();
     };
-  }, []);
+  }, [authService, client]);
   
   const login = async (email: string, password: string) => {
+    if (!authService) {
+      setError('SDK not initialized');
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     
     try {
-      const { user: userData } = await authAPI.login({ email, password });
+      console.log('🔐 [SDKAuthContext] Attempting login for:', email);
+      const { user: userData } = await authService.login({ email, password });
+      console.log('✅ [SDKAuthContext] Login successful, user:', userData?.email);
       setUser(userData);
       
-      // Sync tokens to Android immediately after successful login
-      await syncTokensToNative();
+      // Add a delay to ensure tokens are properly stored and SDK is ready
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Verify sync in development
-      if (__DEV__) {
-        setTimeout(() => verifyTokenSync(), 1000);
-      }
+      // Check if SDK is authenticated after login
+      const isAuth = await client?.isAuthenticated();
+      console.log('🔑 [SDKAuthContext] Post-login authentication check:', isAuth);
       
-      // After successful login, check if biometrics should be offered
+      // Login successful
+      
+      // After successful login, check if biometrics should be offered (same as original)
       if (isBiometricsAvailable && !isBiometricsEnabled) {
         const biometricName = biometricService.getBiometricName(biometryType);
         Alert.alert(
@@ -252,9 +207,11 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         );
       }
     } catch (err: any) {
-      console.error('❌ AuthContext: Login failed', err);
+      console.error('❌ SDKAuthContext: Login failed', err);
       
-      const errorMessage = err.response?.data?.error?.message || 
+      // Extract error message (SDK provides better error structure)
+      const errorMessage = err.message || 
+                           err.response?.data?.error?.message || 
                            'Login failed. Please check your credentials.';
       setError(errorMessage);
       throw err;
@@ -264,6 +221,11 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   };
   
   const loginWithBiometrics = async () => {
+    if (!authService) {
+      setError('SDK not initialized');
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     
@@ -289,22 +251,18 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         return;
       }
       
-      const userData = await authAPI.getUserProfile();
+      const userData = await authService.getUserProfile();
       if (userData) {
         setUser(userData);
         
-        // Sync tokens after biometric login
-        await syncTokensToNative();
-        
-        if (__DEV__) {
-          setTimeout(() => verifyTokenSync(), 1000);
-        }
+        // Biometric login successful
       } else {
         setError('Failed to retrieve user data');
       }
     } catch (err: any) {
-      console.error('❌ AuthContext: Biometric login failed', err);
-      const errorMessage = err.response?.data?.error?.message || 
+      // Biometric login failed
+      const errorMessage = err.message || 
+                           err.response?.data?.error?.message || 
                            'Biometric login failed. Please try again.';
       setError(errorMessage);
     } finally {
@@ -313,29 +271,28 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   };
   
   const register = async (email: string, name: string, password: string) => {
+    if (!authService) {
+      setError('SDK not initialized');
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     
     try {
-      const { user: userData } = await authAPI.register({ email, name, password });
+      const { user: userData } = await authService.register({ email, name, password });
       setUser(userData);
       
-      // Sync tokens to Android immediately after successful registration
-      await syncTokensToNative();
-      
-      // Verify sync in development
-      if (__DEV__) {
-        setTimeout(() => verifyTokenSync(), 1000);
-      }
+      // Registration successful
     } catch (err: any) {
-      console.error('❌ AuthContext: Registration failed', err);
+      console.error('❌ SDKAuthContext: Registration failed', err);
       
       let errorMessage = 'Registration failed. Please try again.';
       
-      if (err.response?.data?.error?.message) {
-        errorMessage = err.response.data.error.message;
-      } else if (err.message) {
+      if (err.message) {
         errorMessage = err.message;
+      } else if (err.response?.data?.error?.message) {
+        errorMessage = err.response.data.error.message;
       }
       
       setError(errorMessage);
@@ -346,22 +303,22 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   };
   
   const logout = async () => {
+    if (!authService) {
+      // Even without SDK, clear local state
+      setUser(null);
+      await clearAndroidTokens();
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
-      
-      // Clear Android tokens first
-      await clearAndroidTokens();
-      
-      // Then clear React Native tokens and call server logout
-      await authAPI.logout();
+      await authService.logout();
       setUser(null);
-      
     } catch (err) {
-      console.error('❌ AuthContext: Logout failed', err);
-      // Even if the server-side logout fails, we still want to clear local data
+      console.error('❌ SDKAuthContext: Logout failed', err);
+      // Even if logout fails, clear local state (same as original)
       setUser(null);
-      await clearTokens();
       await clearAndroidTokens();
     } finally {
       setIsLoading(false);
@@ -369,15 +326,21 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   };
   
   const resetPassword = async (email: string) => {
+    if (!authService) {
+      setError('SDK not initialized');
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     
     try {
-      await authAPI.requestPasswordReset(email);
+      await authService.requestPasswordReset(email);
     } catch (err: any) {
-      console.error('❌ AuthContext: Password reset request failed', err);
+      console.error('❌ SDKAuthContext: Password reset request failed', err);
       
-      const errorMessage = err.response?.data?.error?.message || 
+      const errorMessage = err.message || 
+                           err.response?.data?.error?.message || 
                            'Password reset failed. Please try again.';
       setError(errorMessage);
       throw err;
@@ -401,7 +364,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       
       return success;
     } catch (err) {
-      console.error('❌ AuthContext: Failed to enable biometrics:', err);
+      console.error('❌ SDKAuthContext: Failed to enable biometrics:', err);
       setError('Failed to enable biometric login. Please try again.');
       return false;
     }
@@ -417,7 +380,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       
       return success;
     } catch (err) {
-      console.error('❌ AuthContext: Failed to disable biometrics:', err);
+      console.error('❌ SDKAuthContext: Failed to disable biometrics:', err);
       setError('Failed to disable biometric login. Please try again.');
       return false;
     }
@@ -441,8 +404,8 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   };
   
   return (
-    <AuthContext.Provider value={value}>
+    <SDKAuthContext.Provider value={value}>
       {children}
-    </AuthContext.Provider>
+    </SDKAuthContext.Provider>
   );
 };

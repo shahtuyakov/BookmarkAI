@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { TextInput, Button, Text, HelperText, Snackbar } from 'react-native-paper';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/auth-provider';
 import { AuthScreenNavigationProp } from '../../navigation/types';
 
 type Props = {
