@@ -41,30 +41,48 @@ export function useSDKSharesList(client: BookmarkAIClient, params: GetSharesPara
   // Check if SDK is authenticated
   useEffect(() => {
     let mounted = true;
+    let interval: NodeJS.Timeout | null = null;
     
     const checkAuth = async () => {
       if (!mounted) return;
       
+      console.log('🔍 [useSDKShares] Checking SDK authentication...');
       const authenticated = await client.isAuthenticated();
+      console.log('✅ [useSDKShares] SDK authenticated:', authenticated);
       setIsAuthenticated(authenticated);
       
       if (!authenticated) {
-        // Also check if we have an access token
-        await client.getAccessToken();
+        console.log('🔄 [useSDKShares] Not authenticated, attempting to get access token...');
+        try {
+          const token = await client.getAccessToken();
+          console.log('🎫 [useSDKShares] Access token obtained:', !!token);
+        } catch (error) {
+          console.error('❌ [useSDKShares] Failed to get access token:', error);
+        }
+      } else {
+        // Clear interval once authenticated
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
       }
     };
     
-    // Initial check with delay
-    setTimeout(checkAuth, 1000);
+    // Initial check immediately
+    checkAuth();
     
-    // Re-check every 2 seconds until authenticated
-    const interval = setInterval(checkAuth, 2000);
+    // Only re-check if not authenticated
+    if (!isAuthenticated) {
+      interval = setInterval(checkAuth, 2000);
+    }
     
     return () => {
       mounted = false;
-      clearInterval(interval);
+      if (interval) {
+        clearInterval(interval);
+      }
     };
-  }, [client]);
+  }, [client, isAuthenticated]);
   
   const queryResult = useInfiniteQuery<
     PaginatedResponse<Share>,

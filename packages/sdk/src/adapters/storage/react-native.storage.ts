@@ -29,6 +29,7 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
   private keychain?: KeychainModule;
   private mmkv?: MMKVModule;
   private server = 'com.bookmarkai.app';
+  private keychainWriteQueue: Promise<void> = Promise.resolve();
   
   // Keys that should be stored securely
   private secureKeys = new Set([
@@ -45,66 +46,82 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
   }
 
   async getItem(key: string): Promise<string | null> {
+    console.log(`📖 [RN Storage] Getting item: ${key}, isSecure: ${this.secureKeys.has(key)}`);
     if (this.secureKeys.has(key) && this.keychain) {
       try {
         const credentials = await this.keychain.getInternetCredentials(this.server);
         if (credentials && credentials.password) {
           // Parse the stored JSON to get the specific key
           const data = JSON.parse(credentials.password);
-          return data[key] || null;
+          console.log(`🔐 [RN Storage] Keychain data keys:`, Object.keys(data));
+          const value = data[key] || null;
+          console.log(`✅ [RN Storage] Retrieved ${key} from keychain:`, value ? 'exists' : 'not found');
+          return value;
         }
+        console.log(`❌ [RN Storage] No credentials found in keychain for ${key}`);
       } catch (error) {
-        // Silently handle errors
+        console.error(`❌ [RN Storage] Error getting ${key} from keychain:`, error);
       }
       return null;
     }
 
     // Use MMKV for non-secure storage
     if (this.mmkv) {
-      return this.mmkv.getString(key) || null;
+      const value = this.mmkv.getString(key) || null;
+      console.log(`✅ [RN Storage] Retrieved ${key} from MMKV:`, value ? 'exists' : 'not found');
+      return value;
     }
 
-    // Fallback: no storage available
+    console.warn(`⚠️ [RN Storage] No storage available for ${key}`);
     return null;
   }
 
   async setItem(key: string, value: string): Promise<void> {
+    console.log(`💾 [RN Storage] Setting item: ${key}, isSecure: ${this.secureKeys.has(key)}`);
     if (this.secureKeys.has(key) && this.keychain) {
-      try {
-        // Get existing secure data
-        const credentials = await this.keychain.getInternetCredentials(this.server);
-        let data: Record<string, string> = {};
-        
-        if (credentials && credentials.password) {
-          try {
-            data = JSON.parse(credentials.password);
-          } catch {
-            // Ignore parse errors, start fresh
+      // Queue keychain writes to prevent race conditions
+      this.keychainWriteQueue = this.keychainWriteQueue.then(async () => {
+        try {
+          // Get existing secure data
+          const credentials = await this.keychain!.getInternetCredentials(this.server);
+          let data: Record<string, string> = {};
+          
+          if (credentials && credentials.password) {
+            try {
+              data = JSON.parse(credentials.password);
+            } catch {
+              // Ignore parse errors, start fresh
+            }
           }
+
+          // Update the specific key
+          data[key] = value;
+          console.log(`🔐 [RN Storage] Keychain data before save:`, Object.keys(data));
+
+          // Store back to keychain
+          await this.keychain!.setInternetCredentials(
+            this.server,
+            'bookmarkai_user',
+            JSON.stringify(data)
+          );
+          console.log(`✅ [RN Storage] Stored ${key} in keychain, total keys:`, Object.keys(data));
+        } catch (error) {
+          console.error(`❌ [RN Storage] Failed to store ${key} in keychain:`, error);
+          throw new Error('Failed to save secure data');
         }
-
-        // Update the specific key
-        data[key] = value;
-
-        // Store back to keychain
-        await this.keychain.setInternetCredentials(
-          this.server,
-          'bookmarkai_user',
-          JSON.stringify(data)
-        );
-        return;
-      } catch (error) {
-        throw new Error('Failed to save secure data');
-      }
+      });
+      
+      return this.keychainWriteQueue;
     }
 
     // Use MMKV for non-secure storage
     if (this.mmkv) {
       this.mmkv.set(key, value);
+      console.log(`✅ [RN Storage] Stored ${key} in MMKV`);
       return;
     }
 
-    // Fallback: no storage available
+    console.warn(`⚠️ [RN Storage] No storage available for ${key}`);
   }
 
   async removeItem(key: string): Promise<void> {

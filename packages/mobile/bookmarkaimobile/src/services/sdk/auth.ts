@@ -46,6 +46,7 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
   return {
     // Login with improved error handling and single token save
     login: async (credentials: { email: string; password: string }) => {
+      console.log('🔐 [SDK Auth Service] Starting login for:', credentials.email);
       try {
         // Force logout first to clear any stale tokens
         try {
@@ -55,7 +56,13 @@ export const createSDKAuthService = (client: BookmarkAIClient) => {
         }
         
         // SDK's login method returns the data directly (not wrapped in response)
+        console.log('📡 [SDK Auth Service] Calling SDK login...');
         const loginResponse = await client.auth.login(credentials);
+        console.log('✅ [SDK Auth Service] Login response received:', {
+          hasAccessToken: !!loginResponse.accessToken,
+          hasRefreshToken: !!loginResponse.refreshToken,
+          hasUser: !!loginResponse.user
+        });
         
         
         // Extract tokens with default expiresIn
