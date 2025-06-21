@@ -52,6 +52,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     isRefreshing
   } = sharesResult;
   
+  // Debug logging
+  React.useEffect(() => {
+    console.log('🏠 [HomeScreen] State:', {
+      usingSDKAuth,
+      hasSDKClient: !!sdkClient,
+      isConnected,
+      isLoading,
+      sharesCount: shares?.length || 0,
+      error: error?.message || null
+    });
+  }, [usingSDKAuth, sdkClient, isConnected, isLoading, shares, error]);
+  
   // Create share mutation based on auth mode
   const createShareMutation = usingSDKAuth && sdkClient 
     ? useSDKCreateShare(sdkClient)

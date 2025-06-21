@@ -55,12 +55,19 @@ export const createSDKSharesService = (client: BookmarkAIClient) => {
   return {
     // Get all shares with pagination
     getShares: async (params?: GetSharesParams): Promise<PaginatedResponse<Share>> => {
+      console.log('📡 [SDK Shares] Fetching shares with params:', params);
       try {
         const response = await client.shares.list({
           cursor: params?.cursor,
           limit: params?.limit || 20,
           status: params?.status as SDKShare['status'],
           platform: params?.platform as SDKShare['platform'],
+        });
+
+        console.log('✅ [SDK Shares] Shares fetched successfully:', {
+          count: response.items.length,
+          hasMore: response.hasMore,
+          cursor: response.cursor
         });
 
         return {
@@ -70,7 +77,7 @@ export const createSDKSharesService = (client: BookmarkAIClient) => {
           limit: params?.limit || 20,
         };
       } catch (error) {
-        console.error('SDK Shares: getShares failed:', error);
+        console.error('❌ [SDK Shares] getShares failed:', error);
         throw error;
       }
     },

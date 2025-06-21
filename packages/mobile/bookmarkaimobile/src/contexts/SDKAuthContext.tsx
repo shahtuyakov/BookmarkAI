@@ -90,19 +90,24 @@ export const SDKAuthProvider: React.FC<SDKAuthProviderProps> = ({ children, clie
   // Check for existing session on app start (same logic as original)
   useEffect(() => {
     const checkAuth = async () => {
+      console.log('🔐 [SDKAuthContext] Checking authentication on mount...');
       try {
         // Let SDK check if authenticated
         const isAuthenticated = await client?.isAuthenticated();
+        console.log('🔑 [SDKAuthContext] SDK isAuthenticated:', isAuthenticated);
         
         if (isAuthenticated && authService) {
           try {
+            console.log('👤 [SDKAuthContext] Fetching user profile...');
             // Try to get user profile using SDK
             const userData = await authService.getUserProfile();
             setUser(userData);
+            console.log('✅ [SDKAuthContext] User profile retrieved:', userData?.email);
             
             // User profile retrieved successfully
             
           } catch (err) {
+            console.error('❌ [SDKAuthContext] Failed to get user profile:', err);
             // Failed to get user profile
             // Let SDK handle token clearing
             await client?.logout();
@@ -152,11 +157,17 @@ export const SDKAuthProvider: React.FC<SDKAuthProviderProps> = ({ children, clie
     setError(null);
     
     try {
+      console.log('🔐 [SDKAuthContext] Attempting login for:', email);
       const { user: userData } = await authService.login({ email, password });
+      console.log('✅ [SDKAuthContext] Login successful, user:', userData?.email);
       setUser(userData);
       
       // Add a delay to ensure tokens are properly stored and SDK is ready
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check if SDK is authenticated after login
+      const isAuth = await client?.isAuthenticated();
+      console.log('🔑 [SDKAuthContext] Post-login authentication check:', isAuth);
       
       // Login successful
       

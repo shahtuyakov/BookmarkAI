@@ -85,6 +85,7 @@ export class AuthService {
    * Store new tokens
    */
   async setTokens(tokens: TokenPair, expiresIn?: number): Promise<void> {
+    console.log('💾 [SDK AuthService] Storing tokens, expiresIn:', expiresIn);
     const accessTokenExpiry = expiresIn 
       ? Date.now() + (expiresIn * 1000) 
       : Date.now() + (15 * 60 * 1000); // Default 15 minutes
@@ -94,6 +95,11 @@ export class AuthService {
       accessTokenExpiry,
       refreshTokenExpiry: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
     };
+    
+    console.log('🔐 [SDK AuthService] Token expiry times:', {
+      accessTokenExpiry: new Date(accessTokenExpiry).toISOString(),
+      refreshTokenExpiry: new Date(storedTokens.refreshTokenExpiry!).toISOString()
+    });
 
     await Promise.all([
       this.config.storage.setItem(
@@ -175,20 +181,34 @@ export class AuthService {
    */
   async isAuthenticated(): Promise<boolean> {
     const tokens = await this.getStoredTokens();
+    console.log('🔍 [SDK AuthService] isAuthenticated check:', {
+      hasAccessToken: !!tokens?.accessToken,
+      hasRefreshToken: !!tokens?.refreshToken,
+      accessTokenExpiry: tokens?.accessTokenExpiry ? new Date(tokens.accessTokenExpiry).toISOString() : null,
+      refreshTokenExpiry: tokens?.refreshTokenExpiry ? new Date(tokens.refreshTokenExpiry).toISOString() : null,
+      now: new Date().toISOString(),
+      accessTokenExpired: tokens?.accessTokenExpiry ? Date.now() > tokens.accessTokenExpiry : false,
+      refreshTokenExpired: tokens?.refreshTokenExpiry ? Date.now() > tokens.refreshTokenExpiry : false
+    });
+    
     if (!tokens?.accessToken || !tokens?.refreshToken) {
+      console.log('❌ [SDK AuthService] No tokens found');
       return false;
     }
     
     // Check if access token is expired
     if (tokens.accessTokenExpiry && Date.now() > tokens.accessTokenExpiry) {
+      console.log('⏰ [SDK AuthService] Access token expired');
       return false;
     }
     
     // Check if refresh token is expired
     if (tokens.refreshTokenExpiry && Date.now() > tokens.refreshTokenExpiry) {
+      console.log('⏰ [SDK AuthService] Refresh token expired');
       return false;
     }
     
+    console.log('✅ [SDK AuthService] User is authenticated');
     return true;
   }
 
