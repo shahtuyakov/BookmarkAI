@@ -185,18 +185,24 @@ export class ShareProcessor {
    * Task 2.8 will implement the full storage logic
    */
   private async storeMetadata(shareId: string, fetchResult: any): Promise<void> {
-    this.logger.debug(`[Task 2.8 Placeholder] Storing metadata for share ${shareId}`);
+    this.logger.debug(`Storing metadata for share ${shareId}`);
     
-    // Basic metadata storage - will be expanded in Task 2.8
     try {
       await this.db.database
         .update(shares)
         .set({
           title: fetchResult.content?.text || fetchResult.content?.description,
+          description: fetchResult.content?.description,
+          author: fetchResult.metadata?.author,
+          thumbnailUrl: fetchResult.media?.thumbnailUrl,
+          mediaUrl: fetchResult.media?.url,
+          mediaType: fetchResult.media?.type,
           platformData: fetchResult.platformData,
           updatedAt: new Date(),
         })
         .where(eq(shares.id, shareId));
+      
+      this.logger.log(`Successfully stored metadata for share ${shareId}`);
     } catch (error) {
       this.logger.error(`Failed to store metadata for share ${shareId}: ${error.message}`);
       throw error;

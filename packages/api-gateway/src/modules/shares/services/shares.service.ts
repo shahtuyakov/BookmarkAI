@@ -98,19 +98,16 @@ export class SharesService {
         // Get rate limit configuration for the platform
         const rateLimitConfig = this.fetcherRegistry.getRateLimitConfig(platform);
         
-        // Queue background processing job with platform-specific rate limiting
+        // Queue background processing job
+        // Note: BullMQ rate limiting is handled at the worker level, not job level
         await this.shareQueue.add(
           SHARE_QUEUE.JOBS.PROCESS,
           { shareId: newShare.id },
           { 
             attempts: 3, 
             backoff: { type: 'exponential', delay: 5000 },
-            // Add rate limiting per platform
-            rateLimiter: {
-              max: rateLimitConfig.max,
-              duration: rateLimitConfig.duration,
-              groupKey: `fetcher:${platform}`,
-            },
+            // TODO: Implement rate limiting at worker level or use a different approach
+            // Rate limit config: max: ${rateLimitConfig.max}, duration: ${rateLimitConfig.duration}ms
           },
         );
 
@@ -120,6 +117,13 @@ export class SharesService {
           url: newShare.url,
           platform: newShare.platform as Platform,
           status: newShare.status as ShareStatus,
+          title: newShare.title,
+          description: newShare.description,
+          author: newShare.author,
+          thumbnailUrl: newShare.thumbnailUrl,
+          mediaUrl: newShare.mediaUrl,
+          mediaType: newShare.mediaType,
+          platformData: newShare.platformData,
           createdAt: newShare.createdAt,
           updatedAt: newShare.updatedAt,
         };
@@ -158,6 +162,13 @@ export class SharesService {
                 url: existingShare.url,
                 platform: existingShare.platform as Platform,
                 status: existingShare.status as ShareStatus,
+                title: existingShare.title,
+                description: existingShare.description,
+                author: existingShare.author,
+                thumbnailUrl: existingShare.thumbnailUrl,
+                mediaUrl: existingShare.mediaUrl,
+                mediaType: existingShare.mediaType,
+                platformData: existingShare.platformData,
                 createdAt: existingShare.createdAt,
                 updatedAt: existingShare.updatedAt,
               };
@@ -275,6 +286,13 @@ export class SharesService {
         url: item.url,
         platform: item.platform as Platform,
         status: item.status as ShareStatus,
+        title: item.title,
+        description: item.description,
+        author: item.author,
+        thumbnailUrl: item.thumbnailUrl,
+        mediaUrl: item.mediaUrl,
+        mediaType: item.mediaType,
+        platformData: item.platformData,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));
@@ -313,6 +331,13 @@ export class SharesService {
         url: share.url,
         platform: share.platform as Platform,
         status: share.status as ShareStatus,
+        title: share.title,
+        description: share.description,
+        author: share.author,
+        thumbnailUrl: share.thumbnailUrl,
+        mediaUrl: share.mediaUrl,
+        mediaType: share.mediaType,
+        platformData: share.platformData,
         createdAt: share.createdAt,
         updatedAt: share.updatedAt,
       };

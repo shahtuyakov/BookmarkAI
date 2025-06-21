@@ -3,10 +3,18 @@ import apiClient from './client';
 export interface Share {
   id: string;
   url: string;
-  platform: 'tiktok' | 'reddit' | 'twitter' | 'x';
-  status: 'pending' | 'processing' | 'done' | 'error';
+  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'generic' | 'unknown';
+  status: 'pending' | 'processing' | 'fetching' | 'done' | 'error';
+  title?: string;
+  description?: string;
+  author?: string;
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+  mediaType?: 'video' | 'image' | 'audio' | 'none';
+  platformData?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
+  // Legacy metadata field for backward compatibility
   metadata?: {
     author?: string;
     title?: string;

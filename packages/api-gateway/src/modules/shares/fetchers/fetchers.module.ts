@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule } from '../../../config/config.module';
 import { ContentFetcherRegistry } from './content-fetcher.registry';
 import {
   TikTokFetcher,
