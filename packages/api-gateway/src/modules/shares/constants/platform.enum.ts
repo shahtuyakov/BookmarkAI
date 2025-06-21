@@ -6,6 +6,7 @@ export enum Platform {
     REDDIT = 'reddit',
     TWITTER = 'twitter',
     X = 'x',
+    GENERIC = 'generic',
     UNKNOWN = 'unknown',
   }
   

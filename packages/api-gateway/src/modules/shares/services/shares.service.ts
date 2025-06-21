@@ -21,6 +21,7 @@ import { shares } from '../../../db/schema/shares';
 import { DrizzleService } from '../../../database/services/drizzle.service';
 import { IdempotencyService } from './idempotency.service';
 import { ErrorService } from './error.service';
+import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
 
 /**
  * Service for managing share operations
@@ -33,6 +34,7 @@ export class SharesService {
     private readonly db: DrizzleService,
     private readonly idempotencyService: IdempotencyService,
     @InjectQueue(SHARE_QUEUE.NAME) private readonly shareQueue: Queue,
+    private readonly fetcherRegistry: ContentFetcherRegistry,
   ) {}
 
   /**
@@ -93,11 +95,23 @@ export class SharesService {
           })
           .returning();
 
-        // Queue background processing job
+        // Get rate limit configuration for the platform
+        const rateLimitConfig = this.fetcherRegistry.getRateLimitConfig(platform);
+        
+        // Queue background processing job with platform-specific rate limiting
         await this.shareQueue.add(
           SHARE_QUEUE.JOBS.PROCESS,
           { shareId: newShare.id },
-          { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+          { 
+            attempts: 3, 
+            backoff: { type: 'exponential', delay: 5000 },
+            // Add rate limiting per platform
+            rateLimiter: {
+              max: rateLimitConfig.max,
+              duration: rateLimitConfig.duration,
+              groupKey: `fetcher:${platform}`,
+            },
+          },
         );
 
         // Map to DTO for response

@@ -7,6 +7,9 @@ import { shares } from '../../../db/schema/shares';
 import { SHARE_QUEUE } from './share-queue.constants';
 import { eq } from 'drizzle-orm';
 import { ShareStatus } from '../constants/share-status.enum';
+import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
+import { FetcherError } from '../fetchers/interfaces/fetcher-error.interface';
+import { Platform } from '../constants/platform.enum';
 
 /**
  * Processor for share background tasks
@@ -20,6 +23,7 @@ export class ShareProcessor {
   constructor(
     private readonly db: DrizzleService,
     private readonly configService: ConfigService,
+    private readonly fetcherRegistry: ContentFetcherRegistry,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
@@ -56,15 +60,51 @@ export class ShareProcessor {
       // but we'll update the timestamp to mark when worker picked it up
       await this.updateShareStatus(job.data.shareId, ShareStatus.PROCESSING);
       
-      // Simulate processing time - In Phase 2 this will be replaced with platform-specific processing
-      this.logger.debug(`Simulating processing delay of ${this.processingDelayMs}ms`);
-      await this.delay(this.processingDelayMs);
-      
-      // In Phase 2, platform-specific processing will happen here
-      // await this.processPlatformContent(share.platform, share.url);
-      
-      // Update status to "done"
-      await this.updateShareStatus(job.data.shareId, ShareStatus.DONE);
+      // Phase 2: Fetch content using the fetcher registry
+      try {
+        await this.updateShareStatus(job.data.shareId, ShareStatus.FETCHING);
+        
+        const fetcher = this.fetcherRegistry.getFetcher(share.platform as Platform);
+        const fetchResult = await fetcher.fetchContent({
+          url: share.url,
+          shareId: share.id,
+          userId: share.userId,
+        });
+        
+        // Store the fetched metadata (Task 2.8 will implement this)
+        await this.storeMetadata(job.data.shareId, fetchResult);
+        
+        // Queue media download if needed (Task 2.7 will implement this)
+        if (fetchResult.media?.url) {
+          await this.queueMediaDownload(job.data.shareId, fetchResult.media);
+        }
+        
+        // Update status to "done"
+        await this.updateShareStatus(job.data.shareId, ShareStatus.DONE);
+      } catch (fetchError) {
+        if (fetchError instanceof FetcherError) {
+          this.logger.error(
+            `Fetcher error for share ${job.data.shareId}: ${fetchError.message} (Code: ${fetchError.code})`,
+            fetchError.stack
+          );
+          
+          // If it's not retryable, mark as error
+          if (!fetchError.isRetryable()) {
+            await this.updateShareStatus(job.data.shareId, ShareStatus.ERROR);
+            // Don't re-throw for non-retryable errors
+            return { 
+              id: share.id, 
+              url: share.url, 
+              status: ShareStatus.ERROR,
+              error: fetchError.message,
+              errorCode: fetchError.code
+            };
+          }
+        }
+        
+        // Re-throw to trigger Bull's retry mechanism
+        throw fetchError;
+      }
       
       this.logger.log(`Successfully processed share ${job.data.shareId}`);
       
@@ -141,12 +181,36 @@ export class ShareProcessor {
   }
 
   /**
-   * In Phase 2, this will process platform-specific content
-   * Currently a placeholder for architecture purposes
+   * Store fetched metadata in the database
+   * Task 2.8 will implement the full storage logic
    */
-  private async processPlatformContent(platform: string, url: string): Promise<void> {
-    // This is a placeholder for Phase 2 implementation
-    this.logger.debug(`[Phase 2 Placeholder] Processing ${platform} content from ${url}`);
-    // In Phase 2, this will dispatch to platform-specific processors
+  private async storeMetadata(shareId: string, fetchResult: any): Promise<void> {
+    this.logger.debug(`[Task 2.8 Placeholder] Storing metadata for share ${shareId}`);
+    
+    // Basic metadata storage - will be expanded in Task 2.8
+    try {
+      await this.db.database
+        .update(shares)
+        .set({
+          title: fetchResult.content?.text || fetchResult.content?.description,
+          platformData: fetchResult.platformData,
+          updatedAt: new Date(),
+        })
+        .where(eq(shares.id, shareId));
+    } catch (error) {
+      this.logger.error(`Failed to store metadata for share ${shareId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Queue media download job
+   * Task 2.7 will implement the media download queue
+   */
+  private async queueMediaDownload(shareId: string, media: any): Promise<void> {
+    this.logger.debug(
+      `[Task 2.7 Placeholder] Queueing media download for share ${shareId}: ${media.type} - ${media.url}`
+    );
+    // Task 2.7 will implement this with a separate media download queue
   }
 }
