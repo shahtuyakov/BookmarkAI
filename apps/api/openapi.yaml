@@ -980,6 +980,29 @@ components:
           type: string
           nullable: true
           example: 'Interesting TikTok video'
+        description:
+          type: string
+          nullable: true
+          example: 'This is a funny video about cats'
+        author:
+          type: string
+          nullable: true
+          example: 'johndoe'
+        thumbnailUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: 'https://example.com/thumbnail.jpg'
+        mediaUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: 'https://example.com/video.mp4'
+        mediaType:
+          type: string
+          nullable: true
+          enum: ['video', 'image', 'audio', 'none']
+          example: 'video'
         notes:
           type: string
           nullable: true
@@ -992,6 +1015,15 @@ components:
           type: string
           format: uuid
           example: 'user123e4567-e89b-12d3-a456-426614174000'
+        platformData:
+          type: object
+          nullable: true
+          description: Raw platform-specific data from content fetcher
+          additionalProperties: true
+          example:
+            duration: 30
+            viewCount: 1000000
+            author_name: 'username'
         metadata:
           type: object
           nullable: true
@@ -1104,14 +1136,16 @@ components:
       enum:
         - pending
         - processing
+        - fetching
         - done
-        - failed
+        - error
       description: |
         Processing status:
         - `pending`: Queued for processing
         - `processing`: Currently being processed
+        - `fetching`: Fetching content from platform
         - `done`: Successfully processed
-        - `failed`: Processing failed
+        - `error`: Processing failed
       example: 'done'
 
     Platform:
@@ -1121,6 +1155,8 @@ components:
         - reddit
         - twitter
         - x
+        - youtube
+        - generic
         - unknown
       description: |
         Detected platform from URL:
@@ -1128,6 +1164,7 @@ components:
         - `reddit`: Reddit posts
         - `twitter`: Twitter posts
         - `x`: X (formerly Twitter) posts
+        - `generic`: Generic OpenGraph fallback
         - `unknown`: Unsupported or undetected platform
       example: 'tiktok'
 

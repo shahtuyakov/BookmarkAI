@@ -8,11 +8,19 @@ import { Share as SDKShare, CreateShareRequest } from '@bookmarkai/sdk';
 export interface Share {
   id: string;
   url: string;
-  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'unknown';
-  status: 'pending' | 'processing' | 'done' | 'error';
+  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'youtube' | 'generic' | 'unknown';
+  status: 'pending' | 'processing' | 'fetching' | 'done' | 'error';
+  title?: string;
+  description?: string;
+  author?: string;
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+  mediaType?: 'video' | 'image' | 'audio' | 'none';
+  platformData?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
   userId?: string; // Add missing property from SDK type
+  // Legacy metadata field for backward compatibility
   metadata?: {
     author?: string;
     title?: string;
@@ -40,12 +48,26 @@ const transformSDKShare = (sdkShare: SDKShare): Share => ({
   id: sdkShare.id,
   url: sdkShare.url,
   platform: sdkShare.platform as Share['platform'],
-  status: sdkShare.status === 'failed' ? 'error' : sdkShare.status as Share['status'],
+  status: sdkShare.status as Share['status'],
+  title: sdkShare.title || undefined,
+  description: sdkShare.description || undefined,
+  author: sdkShare.author || undefined,
+  thumbnailUrl: sdkShare.thumbnailUrl || undefined,
+  mediaUrl: sdkShare.mediaUrl || undefined,
+  mediaType: sdkShare.mediaType || undefined,
+  platformData: sdkShare.platformData || undefined,
   createdAt: sdkShare.createdAt,
   updatedAt: sdkShare.updatedAt,
-  metadata: sdkShare.metadata ? {
+  userId: sdkShare.userId,
+  // Map to legacy metadata format for backward compatibility
+  metadata: (sdkShare.title || sdkShare.author || sdkShare.description || sdkShare.thumbnailUrl) ? {
+    author: sdkShare.author || (sdkShare.metadata as any)?.author,
+    title: sdkShare.title || (sdkShare.metadata as any)?.title,
+    description: sdkShare.description || (sdkShare.metadata as any)?.description,
+    thumbnailUrl: sdkShare.thumbnailUrl || (sdkShare.metadata as any)?.thumbnailUrl,
+  } : sdkShare.metadata ? {
     author: (sdkShare.metadata as any)?.author,
-    title: (sdkShare.metadata as any)?.title || sdkShare.title,
+    title: (sdkShare.metadata as any)?.title,
     description: (sdkShare.metadata as any)?.description,
     thumbnailUrl: (sdkShare.metadata as any)?.thumbnailUrl,
   } : undefined,
