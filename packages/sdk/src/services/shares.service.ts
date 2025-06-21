@@ -147,7 +147,7 @@ export class SharesService {
           url: '/v1/shares',
           method: 'POST',
           headers: {
-            'idempotency-key': key,
+            'Idempotency-Key': key,
           },
           data: request,
         });

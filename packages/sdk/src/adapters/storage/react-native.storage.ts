@@ -12,6 +12,21 @@ interface KeychainModule {
   ): Promise<{ username: string; password: string } | false>;
   
   resetInternetCredentials(server: string): Promise<boolean>;
+  
+  // Add generic password methods for share extension compatibility
+  setGenericPassword(
+    username: string,
+    password: string,
+    options?: any
+  ): Promise<boolean>;
+  
+  getGenericPassword(
+    options?: any
+  ): Promise<{ username: string; password: string } | false>;
+  
+  resetGenericPassword(
+    options?: any
+  ): Promise<boolean>;
 }
 
 interface MMKVModule {
@@ -36,6 +51,39 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
     'bookmarkai_access_token',
     'bookmarkai_refresh_token',
   ]);
+  
+  // Share extension compatibility - stores tokens in format expected by iOS share extension
+  private async syncTokensForShareExtension(accessToken?: string, refreshToken?: string): Promise<void> {
+    if (!this.keychain || !accessToken || !refreshToken) {
+      return;
+    }
+    
+    try {
+      // Format compatible with iOS share extension (direct API format)
+      const shareExtensionTokens = {
+        accessToken,
+        refreshToken,
+        expiresAt: Date.now() + (15 * 60 * 1000) // 15 minutes default
+      };
+      
+      const options = {
+        service: 'com.bookmarkai.auth'
+      };
+      
+      console.log('🔄 [RN Storage] Syncing tokens for share extension compatibility');
+      
+      // Store in format expected by iOS share extension
+      await this.keychain.setGenericPassword(
+        'auth_tokens',
+        JSON.stringify(shareExtensionTokens),
+        options
+      );
+      
+      console.log('✅ [RN Storage] Share extension tokens synced');
+    } catch (error) {
+      console.error('❌ [RN Storage] Failed to sync tokens for share extension:', error);
+    }
+  }
 
   constructor(options: {
     keychain?: KeychainModule;
@@ -105,6 +153,14 @@ export class ReactNativeStorageAdapter implements StorageAdapter {
             JSON.stringify(data)
           );
           console.log(`✅ [RN Storage] Stored ${key} in keychain, total keys:`, Object.keys(data));
+          
+          // Check if we now have both tokens and sync for share extension
+          if (data['bookmarkai_access_token'] && data['bookmarkai_refresh_token']) {
+            await this.syncTokensForShareExtension(
+              data['bookmarkai_access_token'],
+              data['bookmarkai_refresh_token']
+            );
+          }
         } catch (error) {
           console.error(`❌ [RN Storage] Failed to store ${key} in keychain:`, error);
           throw new Error('Failed to save secure data');
