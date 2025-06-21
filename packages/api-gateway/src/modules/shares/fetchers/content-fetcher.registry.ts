@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigService } from '../../../config/services/config.service';
 import { Platform } from '../constants/platform.enum';
 import { ContentFetcherInterface } from './interfaces/content-fetcher.interface';
 import { FetcherError, FetcherErrorCode } from './interfaces/fetcher-error.interface';

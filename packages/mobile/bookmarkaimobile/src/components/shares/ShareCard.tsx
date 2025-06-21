@@ -17,6 +17,8 @@ const getPlatformColor = (platform: string) => {
     case 'twitter':
     case 'x':
       return '#1DA1F2';
+    case 'generic':
+      return '#4CAF50';
     default:
       return '#666666';
   }
@@ -31,6 +33,8 @@ const getPlatformIcon = (platform: string) => {
     case 'twitter':
     case 'x':
       return 'twitter';
+    case 'generic':
+      return 'web';
     default:
       return 'link';
   }
@@ -41,6 +45,8 @@ const getStatusColor = (status: string, theme: any) => {
     case 'pending':
       return theme.colors.secondary;
     case 'processing':
+      return theme.colors.primary;
+    case 'fetching':
       return theme.colors.primary;
     case 'done':
       return theme.colors.tertiary;
@@ -74,12 +80,15 @@ const ShareCard: React.FC<ShareCardProps> = ({ share, onPress }) => {
   };
   
   // Format title or fallback to URL
-  const title = share.metadata?.title || `Content from ${getDomain(share.url)}`;
+  const title = share.title || share.metadata?.title || `Content from ${getDomain(share.url)}`;
+  const author = share.author || share.metadata?.author;
+  const description = share.description || share.metadata?.description;
+  const thumbnailUrl = share.thumbnailUrl || share.metadata?.thumbnailUrl;
   
   return (
     <Card style={styles.card} onPress={() => onPress(share)}>
-      {share.metadata?.thumbnailUrl ? (
-        <Card.Cover source={{ uri: share.metadata.thumbnailUrl }} style={styles.cardCover} />
+      {thumbnailUrl ? (
+        <Card.Cover source={{ uri: thumbnailUrl }} style={styles.cardCover} />
       ) : (
         <Card.Cover 
           source={{ uri: `https://picsum.photos/seed/${share.id}/400/200` }} 
@@ -99,15 +108,15 @@ const ShareCard: React.FC<ShareCardProps> = ({ share, onPress }) => {
           </Text>
         </View>
         
-        {share.metadata?.author && (
+        {author && (
           <Text style={styles.author} numberOfLines={1}>
-            By {share.metadata.author}
+            By {author}
           </Text>
         )}
         
-        {share.metadata?.description && (
+        {description && (
           <Text style={styles.description} numberOfLines={2}>
-            {share.metadata.description}
+            {description}
           </Text>
         )}
         

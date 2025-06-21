@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
+import { ConfigService } from '../../../../../config/services/config.service';
 import { TikTokFetcher } from '../tiktok.fetcher';
 import { Platform } from '../../../constants/platform.enum';
 import { FetcherErrorCode } from '../../interfaces/fetcher-error.interface';

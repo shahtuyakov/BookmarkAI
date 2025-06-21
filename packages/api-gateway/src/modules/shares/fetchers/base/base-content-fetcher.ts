@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigService } from '../../../../config/services/config.service';
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { Platform } from '../../constants/platform.enum';
 import {

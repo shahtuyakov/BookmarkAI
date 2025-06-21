@@ -34,6 +34,19 @@ exec(command, (error, stdout, stderr) => {
   console.log(stdout);
   console.log('✅ SDK generated successfully!');
 
+  // Fix duplicate ApiError export issue
+  const generatedIndexPath = path.join(OUTPUT_DIR, 'index.ts');
+  if (fs.existsSync(generatedIndexPath)) {
+    let content = fs.readFileSync(generatedIndexPath, 'utf-8');
+    // Replace the type export with an alias to avoid naming conflict
+    content = content.replace(
+      "export type { ApiError } from './models/ApiError';",
+      "export type { ApiError as ApiErrorResponse } from './models/ApiError';"
+    );
+    fs.writeFileSync(generatedIndexPath, content, 'utf-8');
+    console.log('✅ Fixed duplicate ApiError export');
+  }
+
   // Create index file that exports everything
   const indexContent = `// Auto-generated SDK exports
 export * from './generated';

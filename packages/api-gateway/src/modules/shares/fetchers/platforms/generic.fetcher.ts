@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigService } from '../../../../config/services/config.service';
 import * as cheerio from 'cheerio';
 import { Platform } from '../../constants/platform.enum';
 import { BaseContentFetcher } from '../base/base-content-fetcher';
