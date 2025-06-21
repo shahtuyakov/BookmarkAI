@@ -1,9 +1,5 @@
 import * as Keychain from 'react-native-keychain';
 
-// Shared keychain configuration for main app and share extension
-const KEYCHAIN_SERVICE = 'com.bookmarkai.auth';
-const SHARED_ACCESS_GROUP = 'org.reactjs.native.example.BookmarkAI'; // Updated to match bundle ID
-
 // Helper function to check if server should use AuthContext keychain service
 const shouldUseAuthService = (server: string): boolean => {
   return server === 'com.bookmarkai.app' || 
@@ -38,7 +34,6 @@ export const keychainWrapper = {
       const result = await Keychain.setInternetCredentials(server, username, password);
       return !!result;
     } catch (error) {
-      console.error('Keychain setInternetCredentials error:', error);
       return false;
     }
   },
@@ -47,64 +42,26 @@ export const keychainWrapper = {
     server: string
   ): Promise<{ username: string; password: string } | false> {
     try {
-      // For SDK token storage, check for SDK-specific data first
+      // For SDK token storage, use internet credentials only (no fallback)
       if (shouldUseAuthService(server)) {
-        // First try to get SDK-specific token storage
-        try {
-          const sdkCredentials = await Keychain.getInternetCredentials(server);
-          if (sdkCredentials) {
-            return sdkCredentials;
-          }
-        } catch (error) {
-          // Silently fall back to AuthContext tokens
-        }
-        
-        // Fallback: try to get AuthContext tokens and convert them
-        const credentials = await Keychain.getGenericPassword({
-          service: KEYCHAIN_SERVICE,
-          accessGroup: SHARED_ACCESS_GROUP
-        });
-        
-        if (credentials) {
-          // Parse the AuthContext token format
-          try {
-            const tokenData = JSON.parse(credentials.password);
-            
-            // Return in format expected by SDK ReactNativeStorageAdapter
-            const sdkTokenFormat = {
-              bookmarkai_access_token: tokenData.accessToken,
-              bookmarkai_refresh_token: tokenData.refreshToken || '',
-            };
-            
-            return {
-              username: 'bookmarkai_user',
-              password: JSON.stringify(sdkTokenFormat)
-            };
-          } catch (parseError) {
-            return false;
-          }
-        } else {
-          return false;
-        }
+        const sdkCredentials = await Keychain.getInternetCredentials(server);
+        return sdkCredentials || false;
       }
       
       // For other servers, use internet credentials as normal
       const credentials = await Keychain.getInternetCredentials(server);
       return credentials;
     } catch (error) {
-      console.error('Keychain getInternetCredentials error:', error);
       return false;
     }
   },
 
   async resetInternetCredentials(server: string): Promise<boolean> {
     try {
-      // For SDK token storage, use the same service as AuthContext
+      // For SDK token storage, properly reset internet credentials
       if (shouldUseAuthService(server)) {
-        await Keychain.resetGenericPassword({
-          service: KEYCHAIN_SERVICE,
-          accessGroup: SHARED_ACCESS_GROUP
-        });
+        // Reset the internet credentials for this server (SDK tokens)
+        await Keychain.resetInternetCredentials(server);
         return true;
       }
       
@@ -112,7 +69,42 @@ export const keychainWrapper = {
       await Keychain.resetInternetCredentials(server);
       return true;
     } catch (error) {
-      console.error('Keychain resetInternetCredentials error:', error);
+      return false;
+    }
+  },
+
+  // Add generic password methods for share extension compatibility
+  async setGenericPassword(
+    username: string,
+    password: string,
+    options?: any
+  ): Promise<boolean> {
+    try {
+      const result = await Keychain.setGenericPassword(username, password, options);
+      return !!result;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async getGenericPassword(
+    options?: any
+  ): Promise<{ username: string; password: string } | false> {
+    try {
+      const credentials = await Keychain.getGenericPassword(options);
+      return credentials || false;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async resetGenericPassword(
+    options?: any
+  ): Promise<boolean> {
+    try {
+      await Keychain.resetGenericPassword(options);
+      return true;
+    } catch (error) {
       return false;
     }
   },
