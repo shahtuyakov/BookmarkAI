@@ -5,7 +5,7 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import AuthNavigator from './auth/AuthNavigator';
 import MainNavigator from './main/MainNavigator';
 import { RootStackParamList } from './types';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/auth-provider';
 
 const Stack = createStackNavigator<RootStackParamList>();
 

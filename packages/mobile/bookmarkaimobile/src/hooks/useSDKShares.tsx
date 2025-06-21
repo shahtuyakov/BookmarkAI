@@ -1,17 +1,19 @@
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { 
   useQuery, 
   useMutation, 
   useQueryClient, 
-  useInfiniteQuery 
+  useInfiniteQuery,
+  InfiniteData 
 } from '@tanstack/react-query';
-import { NetworkProvider, useNetworkStatus } from './useNetworkStatus';
-import { sharesAPI, Share, GetSharesParams } from '../services/api/shares';
+import { useNetworkStatus } from './useNetworkStatus';
+import { Share, GetSharesParams, PaginatedResponse, createSDKSharesService } from '../services/sdk/shares';
+import { BookmarkAIClient } from '@bookmarkai/sdk';
 import { v4 as uuidv4 } from 'uuid';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 
-// Keys for querying shares
+// Keys for querying shares (compatible with existing keys)
 export const sharesKeys = {
   all: ['shares'] as const,
   lists: () => [...sharesKeys.all, 'list'] as const,
@@ -31,25 +33,79 @@ interface PendingShare {
   timestamp: number;
 }
 
-export function useSharesList(params: GetSharesParams = {}) {
+export function useSDKSharesList(client: BookmarkAIClient, params: GetSharesParams = {}) {
   const { isConnected } = useNetworkStatus();
+  const sharesService = createSDKSharesService(client);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   
-  const queryResult = useInfiniteQuery({
+  // Check if SDK is authenticated
+  useEffect(() => {
+    let mounted = true;
+    let interval: NodeJS.Timeout | null = null;
+    
+    const checkAuth = async () => {
+      if (!mounted) return;
+      
+      console.log('🔍 [useSDKShares] Checking SDK authentication...');
+      const authenticated = await client.isAuthenticated();
+      console.log('✅ [useSDKShares] SDK authenticated:', authenticated);
+      setIsAuthenticated(authenticated);
+      
+      if (!authenticated) {
+        console.log('🔄 [useSDKShares] Not authenticated, attempting to get access token...');
+        try {
+          const token = await client.getAccessToken();
+          console.log('🎫 [useSDKShares] Access token obtained:', !!token);
+        } catch (error) {
+          console.error('❌ [useSDKShares] Failed to get access token:', error);
+        }
+      } else {
+        // Clear interval once authenticated
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      }
+    };
+    
+    // Initial check immediately
+    checkAuth();
+    
+    // Only re-check if not authenticated
+    if (!isAuthenticated) {
+      interval = setInterval(checkAuth, 2000);
+    }
+    
+    return () => {
+      mounted = false;
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [client, isAuthenticated]);
+  
+  const queryResult = useInfiniteQuery<
+    PaginatedResponse<Share>,
+    Error,
+    InfiniteData<PaginatedResponse<Share>>,
+    readonly ['shares', 'list', GetSharesParams],
+    string | undefined
+  >({
     queryKey: sharesKeys.list(params),
-    queryFn: async ({ pageParam = undefined }) => {
+    queryFn: async ({ pageParam }) => {
       const queryParams = { 
         ...params,
-        cursor: pageParam as string | undefined
+        cursor: pageParam
       };
-      return await sharesAPI.getShares(queryParams);
+      return await sharesService.getShares(queryParams);
     },
+    initialPageParam: undefined,
     getNextPageParam: (lastPage) => lastPage.cursor,
-    enabled: isConnected,
+    enabled: isConnected && isAuthenticated,
     meta: {
       persist: true,
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
-    // Enable refetch on focus to catch updates from share extension
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   });
@@ -60,9 +116,7 @@ export function useSharesList(params: GetSharesParams = {}) {
     (queryResult.isFetching && !queryResult.isFetchingNextPage && shares.length === 0);
   
   const refresh = useCallback(async () => {
-    // Manually refreshing shares list
     const result = await queryResult.refetch();
-    // Manual refresh completed
     return result;
   }, [queryResult]);
   
@@ -75,12 +129,13 @@ export function useSharesList(params: GetSharesParams = {}) {
   };
 }
 
-export function useShareById(id: string) {
+export function useSDKShareById(client: BookmarkAIClient, id: string) {
   const { isConnected } = useNetworkStatus();
+  const sharesService = createSDKSharesService(client);
   
   const queryResult = useQuery({
     queryKey: sharesKeys.detail(id),
-    queryFn: async () => await sharesAPI.getShareById(id),
+    queryFn: async () => await sharesService.getShareById(id),
     enabled: !!id && isConnected,
     meta: {
       persist: true,
@@ -101,11 +156,11 @@ export function useShareById(id: string) {
   };
 }
 
-export function useCreateShare() {
-  console.log('🏗️ useCreateShare hook initialized');
+export function useSDKCreateShare(client: BookmarkAIClient) {
   
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
+  const sharesService = createSDKSharesService(client);
   
   const loadPendingShares = async (): Promise<PendingShare[]> => {
     try {
@@ -114,7 +169,6 @@ export function useCreateShare() {
         return JSON.parse(pendingData);
       }
     } catch (error) {
-      console.error('Error loading pending shares:', error);
     }
     return [];
   };
@@ -123,7 +177,6 @@ export function useCreateShare() {
     try {
       await AsyncStorage.setItem(PENDING_SHARES_KEY, JSON.stringify(pendingShares));
     } catch (error) {
-      console.error('Error saving pending shares:', error);
     }
   };
   
@@ -154,10 +207,9 @@ export function useCreateShare() {
     
     for (const pendingShare of pendingShares) {
       try {
-        await sharesAPI.createShare(pendingShare.url, pendingShare.idempotencyKey);
+        await sharesService.createShare(pendingShare.url, pendingShare.idempotencyKey);
         await removeFromPendingQueue(pendingShare.id);
       } catch (error) {
-        console.error('Failed to sync pending share:', error);
       }
     }
     
@@ -173,11 +225,7 @@ export function useCreateShare() {
   
   const mutation = useMutation({
     mutationFn: async ({ url }: { url: string }) => {
-      console.log(`🚀 Creating share for URL: ${url}`);
-      console.log(`📶 Network connected: ${isConnected}`);
-      
       if (!isConnected) {
-        console.log('📴 Offline - adding to pending queue');
         const pendingShare = await addToPendingQueue(url);
         
         return {
@@ -191,29 +239,23 @@ export function useCreateShare() {
         } as Share;
       }
       
-      console.log('🌐 Online - making API call');
       const idempotencyKey = uuidv4();
-      console.log(`🔑 Idempotency key: ${idempotencyKey}`);
       
       try {
-        const result = await sharesAPI.createShare(url, idempotencyKey);
-        console.log('✅ Share created successfully:', result);
+        const result = await sharesService.createShare(url, idempotencyKey);
         return result;
       } catch (error) {
-        console.error('❌ API call failed:', error);
         throw error;
       }
     },
     
     onMutate: async ({ url }) => {
-      console.log('🎯 onMutate: Starting optimistic update');
-      
       await queryClient.cancelQueries({ queryKey: sharesKeys.lists() });
       
       const previousShares = queryClient.getQueryData(sharesKeys.lists());
       
       const optimisticShare: Share & { _isOptimistic?: boolean } = {
-        id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `temp-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         url,
         platform: detectPlatformFromUrl(url),
         status: isConnected ? 'pending' : 'pending',
@@ -245,12 +287,10 @@ export function useCreateShare() {
         }
       );
       
-      console.log('✅ Optimistic update applied');
       return { previousShares };
     },
     
-    onSuccess: (newShare, variables, context) => {
-      console.log('🎉 Share creation successful, updating cache with real data');
+    onSuccess: (newShare, variables) => {
       
       queryClient.setQueriesData(
         { queryKey: sharesKeys.lists() },
@@ -287,11 +327,8 @@ export function useCreateShare() {
         }
       );
       
-      console.log('✅ Cache updated with real share data');
-      
       // Force a background refresh to ensure we have the latest server state
       setTimeout(() => {
-        console.log('🔄 useCreateShare: Triggering background refresh after successful creation');
         queryClient.invalidateQueries({ 
           queryKey: sharesKeys.lists(),
           refetchType: 'active'  // Only refetch if currently active
@@ -299,27 +336,19 @@ export function useCreateShare() {
       }, 1000);
     },
     
-    onError: (error, variables, context) => {
-      console.error('💥 Share creation failed:', error);
-      
+    onError: (_error, _variables, context) => {
       if (context?.previousShares) {
         queryClient.setQueryData(sharesKeys.lists(), context.previousShares);
-      }
-      
-      if (!isConnected) {
-        console.log('📴 Offline error - keeping optimistic update as pending');
       }
     },
     
     onSettled: () => {
-      console.log('🏁 Share creation settled');
     }
   });
   
   return {
     ...mutation,
     createShare: (url: string) => {
-      console.log(`📝 createShare called with: ${url}`);
       return mutation.mutate({ url });
     },
     pendingCount: mutation.isPending ? 1 : 0,

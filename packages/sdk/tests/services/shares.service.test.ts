@@ -42,7 +42,7 @@ describe('SharesService', () => {
       });
 
       expect(mockClient.request).toHaveBeenCalledWith({
-        url: '/shares',
+        url: '/v1/shares',
         method: 'POST',
         headers: {
           'Idempotency-Key': expect.stringMatching(/^share_\d+_\d+_[a-z0-9]+$/),
@@ -94,7 +94,7 @@ describe('SharesService', () => {
       });
 
       expect(mockClient.request).toHaveBeenCalledWith({
-        url: '/shares',
+        url: '/v1/shares',
         method: 'GET',
         params: {
           limit: 20,
