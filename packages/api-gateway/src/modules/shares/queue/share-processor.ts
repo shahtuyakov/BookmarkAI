@@ -10,6 +10,7 @@ import { ShareStatus } from '../constants/share-status.enum';
 import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
 import { FetcherError } from '../fetchers/interfaces/fetcher-error.interface';
 import { Platform } from '../constants/platform.enum';
+import { MlTasksService } from '../../ml-tasks/services/ml-tasks.service';
 
 /**
  * Processor for share background tasks
@@ -24,6 +25,7 @@ export class ShareProcessor {
     private readonly db: DrizzleService,
     private readonly configService: ConfigService,
     private readonly fetcherRegistry: ContentFetcherRegistry,
+    private readonly mlTasksService: MlTasksService,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
@@ -77,6 +79,9 @@ export class ShareProcessor {
         // Queue media download if needed (Task 2.7 will implement this)
         if (fetchResult.media?.url) {
           await this.queueMediaDownload(job.data.shareId, fetchResult.media);
+          
+          // Queue ML tasks for media processing
+          await this.queueMLTasks(job.data.shareId, fetchResult);
         }
         
         // Update status to "done"
@@ -218,5 +223,67 @@ export class ShareProcessor {
       `[Task 2.7 Placeholder] Queueing media download for share ${shareId}: ${media.type} - ${media.url}`
     );
     // Task 2.7 will implement this with a separate media download queue
+  }
+
+  /**
+   * Queue ML tasks for content processing
+   * Dispatches transcription, summarization, and embedding tasks
+   */
+  private async queueMLTasks(shareId: string, fetchResult: any): Promise<void> {
+    try {
+      const correlationId = `share-${shareId}-${Date.now()}`;
+
+      // Queue transcription if video/audio content
+      if (fetchResult.media?.type === 'video' || fetchResult.media?.type === 'audio') {
+        await this.mlTasksService.publishTranscriptionTask(
+          shareId,
+          {
+            mediaUrl: fetchResult.media.url,
+            language: null, // Auto-detect
+          },
+          correlationId,
+        );
+        this.logger.log(`Queued transcription task for share ${shareId}`);
+      }
+
+      // Queue summarization if text content exists
+      if (fetchResult.content?.text || fetchResult.content?.description) {
+        const textToSummarize = fetchResult.content.text || fetchResult.content.description;
+        await this.mlTasksService.publishSummarizationTask(
+          shareId,
+          {
+            text: textToSummarize,
+            maxTokens: 150,
+            style: 'concise',
+          },
+          correlationId,
+        );
+        this.logger.log(`Queued summarization task for share ${shareId}`);
+      }
+
+      // Queue embedding generation for search
+      const embeddingText = [
+        fetchResult.content?.text,
+        fetchResult.content?.description,
+        fetchResult.metadata?.title,
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      if (embeddingText) {
+        await this.mlTasksService.publishEmbeddingTask(
+          shareId,
+          {
+            text: embeddingText,
+            chunkSize: 512,
+          },
+          correlationId,
+        );
+        this.logger.log(`Queued embedding task for share ${shareId}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to queue ML tasks for share ${shareId}: ${error.message}`);
+      // Don't fail the entire share processing if ML tasks fail to queue
+    }
   }
 }

@@ -1,0 +1,177 @@
+"""Celery application configuration for BookmarkAI ML services."""
+
+import os
+from typing import Any, Dict
+
+from celery import Celery, Task
+from celery.signals import setup_logging, worker_process_init
+from celery_singleton import clear_locks
+from kombu import Exchange, Queue
+
+from .config import settings
+from .observability import init_telemetry
+
+
+# Configure Celery
+celery_app = Celery(
+    "bookmarkai",
+    broker=settings.rabbitmq_uri,
+    backend="rpc://",
+    include=[
+        "whisper_service.tasks",
+        "llm_service.tasks",
+        "vector_service.tasks",
+    ],
+)
+
+# Celery configuration
+celery_app.conf.update(
+    # Serialization
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+    
+    # Task execution
+    task_time_limit=settings.task_time_limit,
+    task_soft_time_limit=settings.task_soft_time_limit,
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    
+    # Worker configuration
+    worker_prefetch_multiplier=settings.worker_prefetch_multiplier,
+    worker_max_tasks_per_child=50,
+    worker_disable_rate_limits=False,
+    
+    # Result backend
+    result_expires=3600,  # 1 hour
+    result_persistent=True,
+    
+    # Singleton configuration
+    singleton_backend_url=settings.redis_uri,
+    singleton_key_prefix="celery_singleton:",
+)
+
+# Define exchanges and queues
+default_exchange = Exchange("ml.tasks", type="topic", durable=True)
+
+celery_app.conf.task_queues = (
+    Queue(
+        "ml.transcribe",
+        exchange=default_exchange,
+        routing_key="transcribe_whisper",
+        queue_arguments={
+            "x-queue-type": "quorum",
+            "x-max-priority": 10,
+        },
+    ),
+    Queue(
+        "ml.summarize",
+        exchange=default_exchange,
+        routing_key="summarize_llm",
+        queue_arguments={
+            "x-queue-type": "quorum",
+            "x-max-priority": 10,
+        },
+    ),
+    Queue(
+        "ml.embed",
+        exchange=default_exchange,
+        routing_key="embed_vectors",
+        queue_arguments={
+            "x-queue-type": "quorum",
+            "x-max-priority": 10,
+        },
+    ),
+)
+
+# Task routing
+celery_app.conf.task_routes = {
+    "whisper_service.tasks.transcribe_whisper": {
+        "queue": "ml.transcribe",
+        "routing_key": "transcribe_whisper",
+    },
+    "llm_service.tasks.summarize_llm": {
+        "queue": "ml.summarize",
+        "routing_key": "summarize_llm",
+    },
+    "vector_service.tasks.embed_vectors": {
+        "queue": "ml.embed",
+        "routing_key": "embed_vectors",
+    },
+}
+
+# Default queue configuration
+celery_app.conf.task_default_queue = "ml.summarize"
+celery_app.conf.task_default_exchange = "ml.tasks"
+celery_app.conf.task_default_exchange_type = "topic"
+celery_app.conf.task_default_routing_key = "ml.default"
+
+
+class MLTask(Task):
+    """Base task class with additional ML-specific functionality."""
+
+    autoretry_for = (Exception,)
+    max_retries = 3
+    retry_backoff = True
+    retry_backoff_max = 300
+    retry_jitter = True
+
+    def before_start(self, task_id: str, args: tuple, kwargs: dict, **options: Any) -> None:
+        """Called before task execution starts."""
+        # Add trace context if available
+        if "traceparent" in kwargs:
+            # Propagate trace context
+            pass
+
+    def on_failure(
+        self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo: Any
+    ) -> None:
+        """Called on task failure."""
+        # Log failure with context
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Task {self.name} failed",
+            extra={
+                "task_id": task_id,
+                "share_id": kwargs.get("share_id"),
+                "error": str(exc),
+            },
+            exc_info=True,
+        )
+
+
+# Signal handlers
+@setup_logging.connect
+def setup_custom_logging(**kwargs: Any) -> None:
+    """Configure JSON logging."""
+    import logging
+    from pythonjsonlogger import jsonlogger
+
+    # Configure root logger
+    logHandler = logging.StreamHandler()
+    formatter = jsonlogger.JsonFormatter(
+        "%(timestamp)s %(level)s %(name)s %(message)s",
+        timestamp=True,
+    )
+    logHandler.setFormatter(formatter)
+    
+    logging.root.handlers = [logHandler]
+    logging.root.setLevel(settings.log_level)
+
+
+@worker_process_init.connect
+def init_worker_process(**kwargs: Any) -> None:
+    """Initialize worker process."""
+    # Initialize OpenTelemetry
+    init_telemetry()
+    
+    # Clear any stale locks
+    clear_locks(celery_app)
+
+
+# Create task decorator with base class
+task = celery_app.task(base=MLTask)

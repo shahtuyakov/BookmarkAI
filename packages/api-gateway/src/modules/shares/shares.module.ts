@@ -13,6 +13,7 @@ import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ErrorService } from './services/error.service';
 import { ShareProcessor } from './queue/share-processor';
 import { FetchersModule } from './fetchers/fetchers.module';
+import { MlTasksModule } from '../ml-tasks/ml-tasks.module';
 
 /**
  * Module for share management functionality
@@ -24,6 +25,9 @@ import { FetchersModule } from './fetchers/fetchers.module';
 
     // Import FetchersModule for content fetching
     FetchersModule,
+
+    // Import MlTasksModule for ML task publishing
+    MlTasksModule,
 
     // Register BullMQ queue with enhanced configuration from ADR
     BullModule.registerQueueAsync({

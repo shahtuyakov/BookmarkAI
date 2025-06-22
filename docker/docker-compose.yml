@@ -84,6 +84,27 @@ services:
     entrypoint: ['sh', '/scripts/init.sh']
     restart: on-failure
 
+  # RabbitMQ for ML task queuing
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    ports:
+      - '5672:5672'     # AMQP port
+      - '15672:15672'   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ml
+      RABBITMQ_DEFAULT_PASS: ml_password
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # MinIO for S3-compatible storage
   minio:
     image: minio/minio:latest
@@ -151,6 +172,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  rabbitmq-data:
   minio-data:
   loki-data:
   tempo-data:

@@ -1,0 +1,93 @@
+{
+  "rabbit_version": "3.12",
+  "users": [
+    {
+      "name": "ml",
+      "password": "ml_password",
+      "tags": ["administrator"]
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "ml",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "ml.tasks",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "ml.transcribe",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-priority": 10
+      }
+    },
+    {
+      "name": "ml.summarize",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-priority": 10
+      }
+    },
+    {
+      "name": "ml.embed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-max-priority": 10
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "ml.tasks",
+      "vhost": "/",
+      "destination": "ml.transcribe",
+      "destination_type": "queue",
+      "routing_key": "transcribe_whisper",
+      "arguments": {}
+    },
+    {
+      "source": "ml.tasks",
+      "vhost": "/",
+      "destination": "ml.summarize",
+      "destination_type": "queue",
+      "routing_key": "summarize_llm",
+      "arguments": {}
+    },
+    {
+      "source": "ml.tasks",
+      "vhost": "/",
+      "destination": "ml.embed",
+      "destination_type": "queue",
+      "routing_key": "embed_vectors",
+      "arguments": {}
+    }
+  ]
+}
