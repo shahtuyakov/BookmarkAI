@@ -17,11 +17,6 @@ celery_app = Celery(
     "bookmarkai",
     broker=settings.rabbitmq_uri,
     backend="rpc://",
-    include=[
-        "whisper_service.tasks",
-        "llm_service.tasks",
-        "vector_service.tasks",
-    ],
 )
 
 # Celery configuration
@@ -38,11 +33,26 @@ celery_app.conf.update(
     task_soft_time_limit=settings.task_soft_time_limit,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    task_acks_on_failure_or_timeout=True,
     
     # Worker configuration
     worker_prefetch_multiplier=settings.worker_prefetch_multiplier,
     worker_max_tasks_per_child=50,
     worker_disable_rate_limits=False,
+    worker_cancel_long_running_tasks_on_connection_loss=False,
+    # Important: Disable consumer prefetch for quorum queues
+    broker_transport_options={
+        'priority_steps': list(range(10)),
+        'visibility_timeout': 43200,
+        'confirm_publish': True,
+        'max_retries': 3,
+        'interval_start': 0,
+        'interval_step': 0.2,
+        'interval_max': 0.5,
+        # Disable global QoS
+        'qos_prefetch_count': 0,
+        'qos_global': False,
+    },
     
     # Result backend
     result_expires=3600,  # 1 hour
@@ -63,7 +73,6 @@ celery_app.conf.task_queues = (
         routing_key="transcribe_whisper",
         queue_arguments={
             "x-queue-type": "quorum",
-            "x-max-priority": 10,
         },
     ),
     Queue(
@@ -72,7 +81,6 @@ celery_app.conf.task_queues = (
         routing_key="summarize_llm",
         queue_arguments={
             "x-queue-type": "quorum",
-            "x-max-priority": 10,
         },
     ),
     Queue(
@@ -81,7 +89,6 @@ celery_app.conf.task_queues = (
         routing_key="embed_vectors",
         queue_arguments={
             "x-queue-type": "quorum",
-            "x-max-priority": 10,
         },
     ),
 )

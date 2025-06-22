@@ -1,0 +1,15 @@
+# LLM service specific requirements
+-r requirements-base.txt
+
+# OpenAI API
+openai==1.6.1
+
+# Alternative LLM providers
+anthropic==0.8.1
+
+# Token counting
+tiktoken==0.5.2
+
+# Text processing
+langchain==0.0.352
+langchain-community==0.0.10

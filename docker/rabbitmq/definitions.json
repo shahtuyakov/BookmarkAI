@@ -39,8 +39,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-max-priority": 10
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -49,8 +48,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-max-priority": 10
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -59,8 +57,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-max-priority": 10
+        "x-queue-type": "quorum"
       }
     }
   ],

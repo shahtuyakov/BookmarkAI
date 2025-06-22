@@ -1,0 +1,148 @@
+services:
+  # Whisper transcription worker
+  whisper-worker:
+    build:
+      context: ../python
+      dockerfile: whisper-service/Dockerfile
+    working_dir: /app
+    command: ["celery", "-A", "whisper_service.celery_app", "worker", "-Q", "ml.transcribe", "--concurrency=1", "--prefetch-multiplier=1", "--loglevel=info", "--hostname=whisper@%h", "-O", "fair"]
+    environment:
+      - PYTHONPATH=/app
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=ml
+      - RABBITMQ_PASS=ml_password
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=bookmarkai
+      - POSTGRES_PASSWORD=bookmarkai_password
+      - POSTGRES_DB=bookmarkai_dev
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_USE_PATH_STYLE=true
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - LOG_LEVEL=INFO
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../python:/app
+    networks:
+      - bookmarkai-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+    restart: unless-stopped
+
+  # LLM summarization worker
+  llm-worker:
+    build:
+      context: ../python
+      dockerfile: llm-service/Dockerfile
+    working_dir: /app
+    command: ["celery", "-A", "llm_service.celery_app", "worker", "-Q", "ml.summarize", "--concurrency=4", "--prefetch-multiplier=8", "--loglevel=info", "--hostname=llm@%h", "-O", "fair"]
+    environment:
+      - PYTHONPATH=/app
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=ml
+      - RABBITMQ_PASS=ml_password
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=bookmarkai
+      - POSTGRES_PASSWORD=bookmarkai_password
+      - POSTGRES_DB=bookmarkai_dev
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - LOG_LEVEL=INFO
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../python:/app
+    networks:
+      - bookmarkai-network
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+    restart: unless-stopped
+
+  # Vector embedding worker
+  vector-worker:
+    build:
+      context: ../python
+      dockerfile: vector-service/Dockerfile
+    working_dir: /app
+    command: ["celery", "-A", "vector_service.celery_app", "worker", "-Q", "ml.embed", "--concurrency=4", "--prefetch-multiplier=8", "--loglevel=info", "--hostname=vector@%h", "-O", "fair"]
+    environment:
+      - PYTHONPATH=/app
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=ml
+      - RABBITMQ_PASS=ml_password
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=bookmarkai
+      - POSTGRES_PASSWORD=bookmarkai_password
+      - POSTGRES_DB=bookmarkai_dev
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - LOG_LEVEL=INFO
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../python:/app
+    networks:
+      - bookmarkai-network
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+    restart: unless-stopped
+
+  # Celery Flower for monitoring
+  flower:
+    image: mher/flower:2.0
+    environment:
+      - CELERY_BROKER_URL=amqp://ml:ml_password@rabbitmq:5672/
+      - FLOWER_PORT=5555
+    ports:
+      - '5555:5555'
+    depends_on:
+      - rabbitmq
+    networks:
+      - bookmarkai-network
+    restart: unless-stopped
+
+networks:
+  bookmarkai-network:
+    external: true
+    name: docker_default
