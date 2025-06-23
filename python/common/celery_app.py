@@ -36,10 +36,19 @@ celery_app.conf.update(
     task_acks_on_failure_or_timeout=True,
     
     # Worker configuration
-    worker_prefetch_multiplier=settings.worker_prefetch_multiplier,
+    worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=50,
-    worker_disable_rate_limits=False,
-    worker_cancel_long_running_tasks_on_connection_loss=False,
+    # Disable all distributed features
+    worker_enable_remote_control=False,
+    worker_send_task_events=False,  # Disable events
+    # Set connection retry
+    broker_connection_retry_on_startup=True,
+    # Use solo pool to avoid concurrency issues during startup
+    worker_pool='solo',
+    # CRITICAL: Disable broker heartbeat as it doesn't work well with librabbitmq
+    broker_heartbeat=0,
+    # Disable connection retry to fail fast
+    broker_connection_retry=False,
     # Important: Disable consumer prefetch for quorum queues
     broker_transport_options={
         'priority_steps': list(range(10)),
@@ -53,6 +62,11 @@ celery_app.conf.update(
         'qos_prefetch_count': 0,
         'qos_global': False,
     },
+    # Control queue settings
+    control_queue_expires=60.0,
+    control_queue_ttl=300.0,
+    # Ensure reply queues work
+    result_backend_transport_options={'master_name': "mymaster"},
     
     # Result backend
     result_expires=3600,  # 1 hour
@@ -67,28 +81,40 @@ celery_app.conf.update(
 default_exchange = Exchange("ml.tasks", type="topic", durable=True)
 
 celery_app.conf.task_queues = (
+    # Default celery queue for control messages - MUST be classic queue
+    Queue(
+        "celery",
+        Exchange("celery", type="direct"),
+        routing_key="celery",
+        queue_arguments={
+            "x-queue-type": "classic",  # Explicitly set as classic
+        },
+    ),
     Queue(
         "ml.transcribe",
         exchange=default_exchange,
         routing_key="transcribe_whisper",
+        # Temporarily use classic queues
         queue_arguments={
-            "x-queue-type": "quorum",
+            "x-queue-type": "classic",
         },
     ),
     Queue(
         "ml.summarize",
         exchange=default_exchange,
         routing_key="summarize_llm",
+        # Temporarily use classic queues
         queue_arguments={
-            "x-queue-type": "quorum",
+            "x-queue-type": "classic",
         },
     ),
     Queue(
         "ml.embed",
         exchange=default_exchange,
         routing_key="embed_vectors",
+        # Temporarily use classic queues
         queue_arguments={
-            "x-queue-type": "quorum",
+            "x-queue-type": "classic",
         },
     ),
 )
