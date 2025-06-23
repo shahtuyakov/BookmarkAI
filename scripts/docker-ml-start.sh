@@ -7,6 +7,12 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
+# Load environment variables if .env exists
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    echo "Loading environment variables from .env..."
+    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+fi
+
 echo "Starting BookmarkAI ML Services..."
 
 # Check if OPENAI_API_KEY is set

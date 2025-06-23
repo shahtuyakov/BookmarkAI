@@ -5,7 +5,7 @@ services:
       context: ../python
       dockerfile: whisper-service/Dockerfile
     working_dir: /app
-    command: ["sh", "-c", "cd /app/whisper-service && celery -A celery_app worker -Q ml.transcribe --concurrency=1 --loglevel=info"]
+    command: ["sh", "-c", "cd /app/whisper-service && celery -A celery_app worker -Q ml.transcribe --pool=solo --loglevel=info --hostname=whisper@%h -O fair --without-mingle"]
     environment:
       - PYTHONPATH=/app
       - RABBITMQ_HOST=rabbitmq
@@ -43,6 +43,12 @@ services:
           cpus: '2'
           memory: 4G
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep -q 'celery.*worker.*ml.transcribe' && echo 'healthy' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # LLM summarization worker
   llm-worker:
@@ -67,10 +73,6 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - LOG_LEVEL=INFO
-      - C_FORCE_ROOT=1
-      - CELERY_DISABLE_GOSSIP=1
-      - CELERY_DISABLE_MINGLE=1
-      - CELERY_DISABLE_HEARTBEAT=1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -89,6 +91,12 @@ services:
           cpus: '1'
           memory: 2G
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep -q 'celery.*worker.*ml.summarize' && echo 'healthy' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # Vector embedding worker
   vector-worker:
@@ -96,7 +104,7 @@ services:
       context: ../python
       dockerfile: vector-service/Dockerfile
     working_dir: /app
-    command: ["sh", "-c", "cd /app/vector-service && celery -A celery_app worker -Q ml.embed --concurrency=4 --loglevel=info"]
+    command: ["sh", "-c", "cd /app/vector-service && celery -A celery_app worker -Q ml.embed --pool=solo --loglevel=info --hostname=vector@%h -O fair --without-mingle"]
     environment:
       - PYTHONPATH=/app
       - RABBITMQ_HOST=rabbitmq
@@ -131,6 +139,12 @@ services:
           cpus: '1'
           memory: 2G
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep -q 'celery.*worker.*ml.embed' && echo 'healthy' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # Celery Flower for monitoring
   flower:

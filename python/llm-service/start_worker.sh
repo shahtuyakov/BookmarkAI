@@ -1,19 +1,17 @@
 #!/bin/sh
-# Start Celery worker with CloudAMQP recommended settings
+# Start Celery worker for LLM service
 
-echo "[WORKER] Starting Celery worker with CloudAMQP optimizations..."
-echo "[WORKER] Disabling mingle, gossip, and heartbeat as recommended"
+echo "[WORKER] Starting LLM Celery worker..."
+echo "[WORKER] Current directory: $(pwd)"
+echo "[WORKER] Python path: $PYTHONPATH"
 
-# Force environment variables
-export C_FORCE_ROOT=1
-export CELERY_DISABLE_RATE_LIMITS=1
-
-# Start worker with explicit flags
+# Start worker with standardized configuration
 exec celery -A celery_app worker \
     -Q ml.summarize \
     --loglevel=debug \
     --pool=solo \
-    --without-gossip \
+    --hostname=llm@%h \
+    -O fair \
     --without-mingle \
-    --without-heartbeat \
-    --hostname=llm@%h
+    --without-gossip \
+    --without-heartbeat

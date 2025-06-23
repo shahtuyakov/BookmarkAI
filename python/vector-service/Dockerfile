@@ -32,7 +32,7 @@ WORKDIR /app/vector_service
 CMD ["celery", "-A", "celery_app", "worker", \
      "-Q", "ml.embed", \
      "--concurrency=4", \
-     "--prefetch-multiplier=8", \
+     "--prefetch-multiplier=1", \
      "--loglevel=info", \
      "--hostname=vector@%h", \
      "-O", "fair"]
