@@ -21,6 +21,7 @@ import { MMKV } from 'react-native-mmkv';
 
 // Feature flag to control which implementation to use
 // Set to true to test SDK implementation
+
 const USE_SDK_AUTH = false;
 
 // Create SDK client instance for SDK auth provider
