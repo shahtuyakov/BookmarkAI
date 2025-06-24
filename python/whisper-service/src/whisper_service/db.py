@@ -315,3 +315,119 @@ def get_cost_summary(hours: int = 24) -> Dict[str, Any]:
                 'period_hours': hours,
                 'error': str(e)
             }
+
+
+def check_budget_limits(estimated_cost: float) -> Dict[str, Any]:
+    """Check if processing would exceed budget limits.
+    
+    Args:
+        estimated_cost: Estimated cost for the upcoming transcription
+        
+    Returns:
+        Dictionary with:
+            - allowed: bool - Whether the transcription is allowed
+            - reason: str - Reason if not allowed
+            - current_hourly_cost: float - Current hour's spending
+            - current_daily_cost: float - Current day's spending
+            - hourly_limit: float - Hourly limit from env
+            - daily_limit: float - Daily limit from env
+    """
+    # Get budget limits from environment
+    hourly_limit = float(os.getenv('WHISPER_HOURLY_COST_LIMIT', '1.00'))
+    daily_limit = float(os.getenv('WHISPER_DAILY_COST_LIMIT', '10.00'))
+    
+    # Skip budget checks if limits are set to 0 (unlimited)
+    if hourly_limit == 0 and daily_limit == 0:
+        return {
+            'allowed': True,
+            'reason': 'Budget checks disabled',
+            'current_hourly_cost': 0,
+            'current_daily_cost': 0,
+            'hourly_limit': hourly_limit,
+            'daily_limit': daily_limit
+        }
+    
+    with get_db_connection() as conn:
+        try:
+            with conn.cursor() as cur:
+                # Check if costs table exists
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'transcription_costs'
+                    )
+                """)
+                
+                if not cur.fetchone()['exists']:
+                    logger.warning("transcription_costs table does not exist, allowing request")
+                    return {
+                        'allowed': True,
+                        'reason': 'Cost tracking not yet initialized',
+                        'current_hourly_cost': 0,
+                        'current_daily_cost': 0,
+                        'hourly_limit': hourly_limit,
+                        'daily_limit': daily_limit
+                    }
+                
+                # Get current hourly spending
+                cur.execute("""
+                    SELECT COALESCE(SUM(billing_usd), 0) as hourly_cost
+                    FROM transcription_costs
+                    WHERE created_at >= NOW() - INTERVAL '1 hour'
+                    AND backend = 'api'
+                """)
+                current_hourly_cost = float(cur.fetchone()['hourly_cost'])
+                
+                # Get current daily spending
+                cur.execute("""
+                    SELECT COALESCE(SUM(billing_usd), 0) as daily_cost
+                    FROM transcription_costs
+                    WHERE created_at >= NOW() - INTERVAL '24 hours'
+                    AND backend = 'api'
+                """)
+                current_daily_cost = float(cur.fetchone()['daily_cost'])
+                
+                # Check hourly limit
+                if hourly_limit > 0 and (current_hourly_cost + estimated_cost) > hourly_limit:
+                    return {
+                        'allowed': False,
+                        'reason': f'Would exceed hourly limit: ${current_hourly_cost:.2f} + ${estimated_cost:.2f} > ${hourly_limit:.2f}',
+                        'current_hourly_cost': current_hourly_cost,
+                        'current_daily_cost': current_daily_cost,
+                        'hourly_limit': hourly_limit,
+                        'daily_limit': daily_limit
+                    }
+                
+                # Check daily limit
+                if daily_limit > 0 and (current_daily_cost + estimated_cost) > daily_limit:
+                    return {
+                        'allowed': False,
+                        'reason': f'Would exceed daily limit: ${current_daily_cost:.2f} + ${estimated_cost:.2f} > ${daily_limit:.2f}',
+                        'current_hourly_cost': current_hourly_cost,
+                        'current_daily_cost': current_daily_cost,
+                        'hourly_limit': hourly_limit,
+                        'daily_limit': daily_limit
+                    }
+                
+                return {
+                    'allowed': True,
+                    'reason': 'Within budget limits',
+                    'current_hourly_cost': current_hourly_cost,
+                    'current_daily_cost': current_daily_cost,
+                    'hourly_limit': hourly_limit,
+                    'daily_limit': daily_limit
+                }
+                
+        except psycopg2.Error as e:
+            logger.error(f"Failed to check budget limits: {e}")
+            # On error, allow the request but log the issue
+            return {
+                'allowed': True,
+                'reason': f'Budget check failed: {str(e)}',
+                'current_hourly_cost': 0,
+                'current_daily_cost': 0,
+                'hourly_limit': hourly_limit,
+                'daily_limit': daily_limit,
+                'error': str(e)
+            }

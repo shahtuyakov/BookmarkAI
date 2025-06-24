@@ -168,10 +168,26 @@ Database save attempted (failed due to test share_id not existing - expected)
   - Removed database migrations from start script (kept separate)
   - Created test-whisper-integration.sh for end-to-end testing
 
+### Week 1.5 Completed ✅
+- [x] Cost Budget Ceiling (whisper-6)
+  - Added check_budget_limits() function in db.py
+  - Integrated budget checks before processing (pre-flight and actual)
+  - Environment variables: WHISPER_DAILY_COST_LIMIT, WHISPER_HOURLY_COST_LIMIT
+  - Graceful rejection with clear error messages
+- [x] Pre-flight Checks (whisper-7)
+  - Created MediaPreflightService for early validation
+  - URL validation and media pattern detection
+  - Format support checking
+  - Duration limit enforcement (30 minutes max)
+  - File integrity validation with ffprobe
+- [x] Silence Detection (whisper-8)
+  - Added detect_silence() method to AudioProcessor
+  - Uses ffmpeg volumedetect for audio level analysis
+  - Configurable threshold via WHISPER_SILENCE_THRESHOLD_DB
+  - Skips silent audio to save costs
+  - Returns special result for silent content
+
 ### Next Steps 🚧
-- [ ] Week 1.5: Cost Budget Ceiling (whisper-6)
-- [ ] Week 1.5: Pre-flight Checks (whisper-7)
-- [ ] Week 1.5: Silence Detection (whisper-8)
 
 ### Whisper-Worker MVP — Practical Recommendations
 
@@ -209,11 +225,28 @@ def transcribe_whisper(job: dict, backend="api"):
 **Bottom line:**
 Ship the simple CPU/API worker first—it handles 5-10 min TikTok videos with affordable per-minute pricing and zero GPU ops risk. Lay down the extra queue, env-switch, and result schema today so sliding to local Faster-Whisper is a deploy-not-rewrite when volume or privacy concerns justify it.
 
+### Week 2 Tasks Partially Completed ✅
+- [x] Analytics API endpoints in api-gateway
+  - Created MLAnalyticsService with cost analysis methods
+  - Created MLAnalyticsController with 5 endpoints:
+    - GET /ml/analytics/transcription/costs - Cost summary
+    - GET /ml/analytics/transcription/costs/detailed - Detailed costs with pagination
+    - GET /ml/analytics/tasks/summary - Summary across all ML task types
+    - GET /ml/analytics/budget/status - Current budget usage
+    - GET /ml/analytics/transcription/result/:shareId - Get specific result
+  - Added Swagger documentation and DTOs
+  - Created test script and API documentation
+
 ### Pending Tasks
 - [x] ~~Update existing Whisper service to Celery pattern~~ ✅ COMPLETED
+- [x] ~~Cost Budget Ceiling~~ ✅ COMPLETED
+- [x] ~~Pre-flight Checks~~ ✅ COMPLETED  
+- [x] ~~Silence Detection~~ ✅ COMPLETED
+- [x] ~~Analytics API endpoints~~ ✅ COMPLETED
+- [ ] Add Prometheus metrics to Whisper service
+- [ ] Create Grafana dashboards for transcription monitoring
 - [ ] Implement ml.embed worker (vector service)
 - [ ] Add OpenTelemetry instrumentation
-- [ ] Create monitoring dashboards
 - [ ] Set up contract validation
 
 ## Whisper Worker Implementation Summary
@@ -478,7 +511,20 @@ Successfully tested end-to-end TikTok transcription:
 - **Generated**: 23 transcript segments with timestamps
 - **Full pipeline**: TikTok URL → Video extraction → Download → Audio processing → Transcription → Database
 
-**Minor fix needed**: Run `pnpm -w run db:migrate` to create transcription_costs table
+**Updated Test (June 24, 2025 - 6:16 PM)**:
+- **TikTok URL**: `@_chrisgallagher/video/7514438357821164831`
+- **yt-dlp extraction**: 5.2 seconds
+- **Video duration**: 73.7 seconds
+- **Transcription cost**: $0.0074
+- **Total processing time**: 14.3 seconds
+- **Generated**: 19 transcript segments
+- **Successfully saved to ml_results table**
+
+**Database Migration Applied**:
+- Manually ran `0008_transcription_costs.sql` migration
+- Created `transcription_costs` table for cost tracking
+- Created `daily_transcription_costs` materialized view
+- Cost tracking now fully operational
 
 ### Implementation Summary
 
@@ -503,6 +549,76 @@ Successfully tested end-to-end TikTok transcription:
 
 The current implementation is functional and tested but lacks production safety features and monitoring.
 
+## Week 1.5 & 2 Implementation Summary (June 24, 2025)
+
+### Completed Features:
+
+#### 1. Cost Budget Ceiling (whisper-6) ✅
+- **Implementation**: Added `check_budget_limits()` in db.py
+- **Features**:
+  - Hourly and daily cost limit enforcement
+  - Pre-flight estimation and actual cost validation
+  - Environment variables: `WHISPER_HOURLY_COST_LIMIT`, `WHISPER_DAILY_COST_LIMIT`
+  - Clear error messages with current usage details
+- **Files Modified**:
+  - `python/whisper-service/src/whisper_service/db.py`
+  - `python/whisper-service/src/whisper_service/tasks.py`
+  - `docker/docker-compose.ml.yml`
+
+#### 2. Pre-flight Checks (whisper-7) ✅
+- **Implementation**: Created `MediaPreflightService` class
+- **Features**:
+  - URL validation with media pattern detection
+  - Format support checking (audio/video extensions)
+  - Duration limit enforcement (30 minutes max)
+  - File integrity validation using ffprobe
+  - Early cost estimation before download
+- **Files Added**:
+  - `python/whisper-service/src/whisper_service/media_preflight.py`
+
+#### 3. Silence Detection (whisper-8) ✅
+- **Implementation**: Added `detect_silence()` to AudioProcessor
+- **Features**:
+  - ffmpeg volumedetect integration
+  - Configurable threshold via `WHISPER_SILENCE_THRESHOLD_DB`
+  - Automatic skipping of silent audio
+  - Cost savings by not processing silent content
+  - Special result returned for silent audio
+- **Files Modified**:
+  - `python/whisper-service/src/whisper_service/audio_processor.py`
+  - `python/whisper-service/src/whisper_service/tasks.py`
+
+#### 4. Analytics API Endpoints (analytics-api) ✅
+- **Implementation**: Created ML analytics module in api-gateway
+- **Features**:
+  - 5 RESTful endpoints for cost and usage analytics
+  - Real-time budget status monitoring
+  - Historical cost analysis with time windows
+  - Pagination support for detailed queries
+  - Full Swagger/OpenAPI documentation
+- **Files Added**:
+  - `packages/api-gateway/src/modules/ml/services/ml-analytics.service.ts`
+  - `packages/api-gateway/src/modules/ml/controllers/ml-analytics.controller.ts`
+  - `packages/api-gateway/src/modules/ml/dto/analytics.dto.ts`
+  - `packages/api-gateway/docs/ml-analytics-api.md`
+  - `packages/api-gateway/test-ml-analytics.js`
+
+### API Endpoints Created:
+1. `GET /ml/analytics/transcription/costs` - Aggregated cost summary (admin only)
+2. `GET /ml/analytics/transcription/costs/detailed` - Detailed cost records (admin only)
+3. `GET /ml/analytics/tasks/summary` - ML task statistics (admin only)
+4. `GET /ml/analytics/budget/status` - Current budget usage (admin only)
+5. `GET /ml/analytics/transcription/result/:shareId` - Get specific transcription (any authenticated user)
+
+### Production Safety Features Now Active:
+- ✅ Budget protection (prevents runaway costs)
+- ✅ Format validation (prevents unsupported files)
+- ✅ Duration limits (prevents excessive processing)
+- ✅ Silence detection (saves costs on empty audio)
+- ✅ Cost visibility (real-time analytics and monitoring)
+- ✅ Cost tracking database (transcription_costs table operational)
+- ✅ Admin-only analytics endpoints (role-based access control)
+
 ## Notes for Future Implementation
 
 1. **Vector Service**
@@ -511,9 +627,9 @@ The current implementation is functional and tested but lacks production safety 
    - Store embeddings in pgvector
 
 2. **Monitoring**
-   - Flower is configured but optional (profile: monitoring)
-   - Consider Prometheus metrics export
-   - Add custom metrics for ML-specific operations
+   - Prometheus metrics still needed for Whisper service
+   - Grafana dashboards for visualization
+   - Consider custom metrics for ML-specific operations
 
 3. **Performance Tuning**
    - Current settings: concurrency=4, prefetch=8, max-tasks=50

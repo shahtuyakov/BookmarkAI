@@ -1,5 +1,6 @@
 """Whisper transcription Celery tasks."""
 
+import os
 import logging
 import time
 from typing import Dict, Any, Optional
@@ -10,13 +11,19 @@ from celery.exceptions import SoftTimeLimitExceeded
 from .celery_app import app
 from .audio_processor import AudioProcessor
 from .transcription import TranscriptionService, TranscriptionResult
-from .db import save_transcription_result, track_transcription_cost
+from .db import save_transcription_result, track_transcription_cost, check_budget_limits
+from .media_preflight import MediaPreflightService
 
 logger = logging.getLogger(__name__)
 
 
 class TranscriptionError(Exception):
     """Custom exception for transcription failures."""
+    pass
+
+
+class BudgetExceededError(Exception):
+    """Exception raised when transcription would exceed budget limits."""
     pass
 
 
@@ -62,6 +69,55 @@ def transcribe_api(
     # Initialize services
     audio_processor = AudioProcessor()
     transcription_service = TranscriptionService()
+    preflight_service = MediaPreflightService()
+    
+    # Pre-flight validation
+    logger.info(f"Running pre-flight checks for {media_url}")
+    preflight_result = preflight_service.check_media_eligibility(
+        media_url,
+        max_duration=MediaPreflightService.MAX_DURATION_SECONDS,
+        max_cost=10.0  # Hard limit per single transcription
+    )
+    
+    if not preflight_result['eligible']:
+        logger.warning(
+            f"Media failed pre-flight checks for share_id {share_id}: "
+            f"{preflight_result['reason']}"
+        )
+        raise TranscriptionError(f"Pre-flight validation failed: {preflight_result['reason']}")
+    
+    # Log any warnings
+    if preflight_result['warnings']:
+        logger.warning(
+            f"Pre-flight warnings for share_id {share_id}: "
+            f"{', '.join(preflight_result['warnings'])}"
+        )
+    
+    # Use preflight metadata if available, otherwise use content metadata
+    preflight_metadata = preflight_result.get('metadata', {})
+    estimated_duration = (
+        preflight_metadata.get('duration_seconds') or 
+        content.get('duration', 300)  # Default 5 minutes if unknown
+    )
+    estimated_cost = (estimated_duration / 60.0) * TranscriptionService.COST_PER_MINUTE
+    
+    # Check budget limits before processing
+    budget_check = check_budget_limits(estimated_cost)
+    if not budget_check['allowed']:
+        logger.warning(
+            f"Transcription rejected due to budget limits for share_id {share_id}: "
+            f"{budget_check['reason']}"
+        )
+        raise BudgetExceededError(
+            f"Budget limit exceeded: {budget_check['reason']}. "
+            f"Current hourly: ${budget_check['current_hourly_cost']:.2f}/${budget_check['hourly_limit']:.2f}, "
+            f"Daily: ${budget_check['current_daily_cost']:.2f}/${budget_check['daily_limit']:.2f}"
+        )
+    
+    logger.info(
+        f"Budget check passed - Hourly: ${budget_check['current_hourly_cost']:.2f}/${budget_check['hourly_limit']:.2f}, "
+        f"Daily: ${budget_check['current_daily_cost']:.2f}/${budget_check['daily_limit']:.2f}"
+    )
     
     # Track all temporary files for cleanup
     temp_files = []
@@ -71,6 +127,13 @@ def transcribe_api(
         logger.info(f"Downloading media from: {media_url}")
         video_path = audio_processor.download_media(media_url)
         temp_files.append(video_path)
+        
+        # Validate downloaded file
+        local_validation = preflight_service.validate_local_file(video_path)
+        if not local_validation['valid']:
+            raise TranscriptionError(
+                f"Downloaded file validation failed: {local_validation['reason']}"
+            )
         
         # Phase 2: Extract and normalize audio
         logger.info("Extracting audio from video")
@@ -84,10 +147,68 @@ def transcribe_api(
             f"Audio extracted: duration={duration:.1f}s, size={file_size_mb:.2f}MB"
         )
         
+        # Recalculate cost with actual duration and check budget again
+        actual_cost = (duration / 60.0) * TranscriptionService.COST_PER_MINUTE
+        if actual_cost > estimated_cost * 1.5:  # If actual cost is significantly higher
+            budget_recheck = check_budget_limits(actual_cost)
+            if not budget_recheck['allowed']:
+                logger.warning(
+                    f"Transcription rejected after duration check for share_id {share_id}: "
+                    f"Actual duration {duration:.1f}s would cost ${actual_cost:.4f}"
+                )
+                raise BudgetExceededError(
+                    f"Budget limit exceeded with actual duration: {budget_recheck['reason']}. "
+                    f"Estimated: ${estimated_cost:.4f}, Actual: ${actual_cost:.4f}"
+                )
+        
         # Phase 3: Validate audio
         validation = audio_processor.validate_audio(audio_path)
         if not validation['valid']:
             raise TranscriptionError(f"Audio validation failed: {validation['reason']}")
+        
+        # Phase 3.5: Check for silence (optional based on configuration)
+        if options and options.get('skip_silent', True):
+            logger.info("Checking for silent audio")
+            silence_check = audio_processor.detect_silence(
+                audio_path,
+                silence_threshold_db=float(os.getenv('WHISPER_SILENCE_THRESHOLD_DB', '-40.0'))
+            )
+            
+            if silence_check['is_silent']:
+                logger.warning(
+                    f"Audio appears to be silent for share_id {share_id}: "
+                    f"{silence_check['reason']}"
+                )
+                
+                # Save a minimal result indicating silence
+                silence_result = TranscriptionResult(
+                    text="[Audio appears to be silent or extremely quiet]",
+                    segments=[],
+                    language="unknown",
+                    duration_seconds=duration,
+                    billing_usd=0.0,  # No charge for silent audio
+                    backend="skipped"
+                )
+                
+                db_result = save_transcription_result(
+                    share_id, 
+                    silence_result,
+                    metadata={'skipped_reason': 'silent_audio', **silence_check}
+                )
+                
+                return {
+                    'share_id': share_id,
+                    'success': True,
+                    'result': db_result,
+                    'skipped': True,
+                    'skip_reason': silence_check['reason'],
+                    'metrics': {
+                        'processing_time_seconds': time.time() - start_time,
+                        'audio_duration_seconds': duration,
+                        'mean_volume_db': silence_check.get('mean_volume'),
+                        'max_volume_db': silence_check.get('max_volume')
+                    }
+                }
         
         # Phase 4: Check if chunking needed
         needs_chunking = (

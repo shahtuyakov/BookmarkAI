@@ -265,6 +265,107 @@ class AudioProcessor:
                 'reason': f'Validation error: {str(e)}'
             }
     
+    def detect_silence(self, audio_path: str, silence_threshold_db: float = -40.0) -> dict:
+        """Detect if audio is mostly silence.
+        
+        Uses ffmpeg to analyze audio levels and determine if the content
+        is predominantly silent, which would waste transcription costs.
+        
+        Args:
+            audio_path: Path to audio file
+            silence_threshold_db: Threshold in dB below which audio is considered silent
+            
+        Returns:
+            Dictionary with silence detection results:
+                - is_silent: bool - Whether audio is predominantly silent
+                - mean_volume: float - Mean volume in dB
+                - max_volume: float - Maximum volume in dB
+                - silence_ratio: float - Ratio of silent segments (0-1)
+                - reason: str - Explanation if audio is considered silent
+        """
+        try:
+            # Use ffmpeg to analyze audio statistics
+            stats = ffmpeg.probe(audio_path, 
+                cmd='ffprobe',
+                select_streams='a:0',
+                show_entries='frame_tags=lavfi.astats.Overall.Mean_volume,'
+                           'lavfi.astats.Overall.Max_volume',
+                v='quiet',
+                af='astats'
+            )
+            
+            # Alternative approach using volumedetect filter
+            logger.info(f"Analyzing audio levels for silence detection")
+            
+            # Run volumedetect filter
+            process = (
+                ffmpeg
+                .input(audio_path)
+                .filter('volumedetect')
+                .output('-', format='null')
+                .run_async(pipe_stderr=True, quiet=True)
+            )
+            
+            _, stderr = process.communicate()
+            output = stderr.decode('utf-8')
+            
+            # Parse volumedetect output
+            mean_volume = None
+            max_volume = None
+            
+            for line in output.split('\n'):
+                if 'mean_volume:' in line:
+                    mean_volume = float(line.split('mean_volume:')[1].split('dB')[0].strip())
+                elif 'max_volume:' in line:
+                    max_volume = float(line.split('max_volume:')[1].split('dB')[0].strip())
+            
+            if mean_volume is None or max_volume is None:
+                logger.warning("Could not extract volume statistics")
+                return {
+                    'is_silent': False,
+                    'mean_volume': None,
+                    'max_volume': None,
+                    'silence_ratio': None,
+                    'reason': 'Unable to analyze audio levels'
+                }
+            
+            # Check if audio is too quiet
+            is_silent = mean_volume < silence_threshold_db
+            
+            # Additional check: if max volume is also very low
+            is_very_quiet = max_volume < (silence_threshold_db + 10)
+            
+            result = {
+                'is_silent': is_silent,
+                'mean_volume': mean_volume,
+                'max_volume': max_volume,
+                'silence_ratio': None,  # Could be calculated with more sophisticated analysis
+                'reason': None
+            }
+            
+            if is_silent:
+                if is_very_quiet:
+                    result['reason'] = f'Audio is nearly silent (mean: {mean_volume:.1f}dB, max: {max_volume:.1f}dB)'
+                else:
+                    result['reason'] = f'Audio is too quiet on average (mean: {mean_volume:.1f}dB)'
+            
+            logger.info(
+                f"Silence detection complete: mean={mean_volume:.1f}dB, "
+                f"max={max_volume:.1f}dB, is_silent={is_silent}"
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Silence detection failed: {str(e)}")
+            return {
+                'is_silent': False,
+                'mean_volume': None,
+                'max_volume': None,
+                'silence_ratio': None,
+                'reason': f'Silence detection error: {str(e)}'
+            }
+    
     def cleanup(self, additional_files: Optional[List[str]] = None):
         """Clean up all temporary files.
         
