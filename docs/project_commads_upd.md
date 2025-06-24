@@ -72,6 +72,37 @@ pnpm -w run build:all
 # List all running containers
 docker ps
 
+### ML Worker Services
+
+# Start ML workers (includes RabbitMQ, Redis, PostgreSQL if needed)
+./scripts/start-ml-services.sh
+
+# Stop ML workers
+./scripts/stop-ml-services.sh
+
+# View ML worker logs
+docker logs -f bookmarkai-llm-worker
+
+# Access RabbitMQ Management UI
+# URL: http://localhost:15672
+# Credentials: ml/ml_password
+
+# Monitor Celery workers with Flower (optional)
+docker compose -f docker/docker-compose.ml.yml --profile monitoring up -d flower
+# URL: http://localhost:5555
+# Credentials: admin/bookmarkai123
+
+# Test ML pipeline
+cd packages/api-gateway && pnpm test:ml-pipeline
+
+# Run ML worker locally for development
+cd python/llm-service
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ../shared
+pip install -e .
+celery -A llm_service.celery_app worker --loglevel=info --queues=ml.summarize
+
 ### Database Management
 
 # Get the port of the postgres container
@@ -94,6 +125,10 @@ psql -U bookmarkai -d bookmarkai_dev
 
 # Exit psql
 \q
+
+# Check ML results table
+\d ml_results
+SELECT * FROM ml_results;
 
 # Test Redis connectivity
 docker exec -it docker-redis-1 redis-cli ping
@@ -164,6 +199,13 @@ npx husky uninstall
 - `@bookmarkai/sdk` - TypeScript SDK  
 - `@bookmarkai/mobile` - React Native mobile app
 - Other packages: web, shared, fetchers, orchestrator
+
+### Python ML Services:
+- `python/llm-service` - LLM summarization worker
+- `python/whisper-service` - Audio/video transcription (to be migrated)
+- `python/vector-service` - Text embeddings (planned)
+- `python/caption-service` - Image captioning (planned)
+- `python/shared` - Shared Celery configuration
 
 ### Common Filter Commands:
 ```bash
