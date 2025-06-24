@@ -71,11 +71,13 @@ export class MLProducerService {
 
       await this.channel.assertQueue('ml.summarize', queueOptions);
       await this.channel.assertQueue('ml.transcribe', queueOptions);
+      await this.channel.assertQueue('ml.transcribe_local', queueOptions);
       await this.channel.assertQueue('ml.embed', queueOptions);
 
       // Bind queues to exchange
       await this.channel.bindQueue('ml.summarize', this.exchangeName, 'ml.summarize');
       await this.channel.bindQueue('ml.transcribe', this.exchangeName, 'ml.transcribe');
+      await this.channel.bindQueue('ml.transcribe_local', this.exchangeName, 'ml.transcribe_local');
       await this.channel.bindQueue('ml.embed', this.exchangeName, 'ml.embed');
 
       this.logger.log('Connected to RabbitMQ and initialized ML queues');
@@ -136,15 +138,31 @@ export class MLProducerService {
   async publishTranscriptionTask(
     shareId: string,
     mediaUrl: string,
-    language?: string
+    options?: {
+      language?: string;
+      backend?: 'api' | 'local';
+      normalize?: boolean;
+      prompt?: string;
+    }
   ): Promise<void> {
+    // Determine backend based on environment or load
+    const backend = options?.backend || 
+      (this.configService.get<string>('PREFERRED_STT', 'api') as 'api' | 'local');
+    
     const task: MLTaskPayload = {
       version: '1.0',
       taskType: 'transcribe_whisper',
       shareId,
       payload: {
-        mediaUrl,
-        language,
+        content: {
+          mediaUrl,
+        },
+        options: {
+          language: options?.language,
+          backend,
+          normalize: options?.normalize ?? true,
+          prompt: options?.prompt,
+        },
       },
       metadata: {
         correlationId: uuidv4(),
@@ -184,21 +202,31 @@ export class MLProducerService {
       throw new Error('RabbitMQ channel not initialized');
     }
 
-    const routingKey = `ml.${task.taskType.split('_')[0]}`;
+    // Determine routing key based on task type and backend
+    let routingKey = `ml.${task.taskType.split('_')[0]}`;
+    if (task.taskType === 'transcribe_whisper' && 
+        task.payload.options?.backend === 'local') {
+      routingKey = 'ml.transcribe_local';
+    }
     
     // Map task types to Celery task names
     const taskNameMap = {
-      'summarize_llm': 'summarize_content',
-      'transcribe_whisper': 'transcribe_audio',
-      'embed_vectors': 'generate_embeddings'
+      'summarize_llm': 'llm_service.tasks.summarize_content',
+      'transcribe_whisper': 'whisper.tasks.transcribe_api',
+      'embed_vectors': 'vector_service.tasks.generate_embeddings'
     };
     
-    const celeryTaskName = taskNameMap[task.taskType] || task.taskType;
+    // For transcription, check if we should use local queue
+    let celeryTaskName = taskNameMap[task.taskType] || task.taskType;
+    if (task.taskType === 'transcribe_whisper' && 
+        task.payload.options?.backend === 'local') {
+      celeryTaskName = 'whisper.tasks.transcribe_local';
+    }
     
     // Celery message format
     const celeryMessage = {
       id: task.metadata.correlationId,
-      task: `llm_service.tasks.${celeryTaskName}`,
+      task: celeryTaskName,
       args: [],
       kwargs: {
         share_id: task.shareId,
@@ -210,7 +238,7 @@ export class MLProducerService {
       expires: null,
       headers: {
         lang: 'js',
-        task: `llm_service.tasks.${celeryTaskName}`,
+        task: celeryTaskName,
         id: task.metadata.correlationId,
         retries: task.metadata.retryCount,
         root_id: task.metadata.correlationId,

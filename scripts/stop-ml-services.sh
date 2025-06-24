@@ -18,17 +18,36 @@ echo -e "${YELLOW}Stopping ML worker containers...${NC}"
 echo -e "${YELLOW}Stopping Docker services...${NC}"
 cd docker
 
+# Check which workers are running
+llm_running=false
+whisper_running=false
+
+if docker ps | grep -q bookmarkai-llm-worker; then
+    llm_running=true
+fi
+
+if docker ps | grep -q bookmarkai-whisper-worker; then
+    whisper_running=true
+fi
+
+# Report what's being stopped
+if [ "$llm_running" = true ] || [ "$whisper_running" = true ]; then
+    echo "Stopping:"
+    [ "$llm_running" = true ] && echo "  - LLM Worker"
+    [ "$whisper_running" = true ] && echo "  - Whisper Worker"
+fi
+
 # Stop ML services
 docker compose -f docker-compose.ml.yml down
 
 # Optionally stop infrastructure services
-read -p "Also stop infrastructure services (PostgreSQL, Redis)? [y/N] " -n 1 -r
+read -p "Also stop infrastructure services (PostgreSQL, Redis, RabbitMQ)? [y/N] " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     docker compose down
     echo -e "${GREEN}✓ All services stopped${NC}"
 else
-    echo -e "${GREEN}✓ ML services stopped (infrastructure still running)${NC}"
+    echo -e "${GREEN}✓ ML workers stopped (infrastructure still running)${NC}"
 fi
 
 cd ..

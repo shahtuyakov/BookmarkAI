@@ -11,10 +11,18 @@ import {
   FetcherErrorCode,
   RetryableFetcherError,
 } from '../interfaces/fetcher-error.interface';
+import * as cheerio from 'cheerio';
 
 /**
  * TikTok content fetcher using oEmbed API
  * No authentication required, but limited metadata available
+ * 
+ * NOTE: Video URL extraction is attempted but often fails due to TikTok's anti-bot measures.
+ * For reliable video extraction, consider:
+ * 1. Using yt-dlp as a subprocess (most reliable)
+ * 2. Using a headless browser with Puppeteer/Playwright
+ * 3. Using a specialized TikTok API service
+ * 4. Implementing TikTok's official API (requires approval)
  */
 @Injectable()
 export class TikTokFetcher extends BaseContentFetcher {
@@ -73,6 +81,23 @@ export class TikTokFetcher extends BaseContentFetcher {
         );
       }
 
+      // Try to extract the actual video URL
+      let videoUrl: string | undefined;
+      try {
+        videoUrl = await this.extractVideoUrl(request.url);
+        if (videoUrl) {
+          this.logger.log(`Successfully extracted video URL for ${request.url}`);
+        } else {
+          this.logger.warn(
+            `Could not extract video URL from TikTok. ` +
+            `This is expected due to TikTok's anti-bot measures. ` +
+            `Consider using yt-dlp or a specialized service for video extraction.`
+          );
+        }
+      } catch (extractError) {
+        this.logger.warn(`Failed to extract video URL: ${extractError.message}`);
+      }
+
       // Build standardized response
       const result: FetchResponse = {
         content: {
@@ -81,8 +106,9 @@ export class TikTokFetcher extends BaseContentFetcher {
         },
         media: {
           type: 'video',
+          url: videoUrl, // Now we include the actual video URL!
           thumbnailUrl: data.thumbnail_url,
-          // TikTok oEmbed doesn't provide video URL or duration
+          // TikTok oEmbed doesn't provide duration
         },
         metadata: {
           author: data.author_name,
@@ -90,7 +116,10 @@ export class TikTokFetcher extends BaseContentFetcher {
           // Extract video ID from embed HTML if available
           platformId: this.extractVideoId(data.html),
         },
-        platformData: data,
+        platformData: {
+          ...data,
+          extractedVideoUrl: videoUrl, // Include in platform data for debugging
+        },
         hints: {
           hasNativeCaptions: true, // TikTok videos often have captions
           requiresAuth: false,
@@ -100,6 +129,7 @@ export class TikTokFetcher extends BaseContentFetcher {
       this.logMetrics('fetch_success', { 
         url: request.url,
         hasMedia: !!result.media?.thumbnailUrl,
+        hasVideoUrl: !!result.media?.url,
         hasAuthor: !!result.metadata.author,
       });
 
@@ -165,5 +195,114 @@ export class TikTokFetcher extends BaseContentFetcher {
     // Example: https://www.tiktok.com/embed/v2/1234567890123456789
     const match = html.match(/embed\/v2\/(\d+)/);
     return match?.[1];
+  }
+
+  /**
+   * Extract video URL from TikTok page
+   * This attempts to find the actual video URL by parsing the page
+   */
+  private async extractVideoUrl(tiktokUrl: string): Promise<string | undefined> {
+    try {
+      this.logger.log(`Attempting to extract video URL from: ${tiktokUrl}`);
+      
+      // Fetch the TikTok page
+      const response = await this.fetchWithTimeout(
+        tiktokUrl,
+        {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Cache-Control': 'no-cache',
+        },
+        10000
+      );
+
+      if (!response.data) {
+        this.logger.warn('No data received from TikTok page');
+        return undefined;
+      }
+
+      const html = response.data;
+      const $ = cheerio.load(html);
+      
+      // Try multiple strategies to find video URL
+      
+      // Strategy 1: Look for __UNIVERSAL_DATA_FOR_REHYDRATION__ script tag
+      const scriptTags = $('script').toArray();
+      for (const scriptTag of scriptTags) {
+        const scriptContent = $(scriptTag).html();
+        if (scriptContent?.includes('__UNIVERSAL_DATA_FOR_REHYDRATION__')) {
+          try {
+            // Extract the JSON data
+            const jsonMatch = scriptContent.match(/JSON\.parse\("(.+?)"\)/);
+            if (jsonMatch) {
+              // Decode the escaped JSON
+              const escapedJson = jsonMatch[1];
+              const decodedJson = escapedJson.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+              const data = JSON.parse(decodedJson);
+              
+              // Navigate through the data structure to find video URL
+              // TikTok's structure can vary, so we try multiple paths
+              const video = data?.__DEFAULT_SCOPE__?.['webapp.video-detail']?.itemInfo?.itemStruct;
+              if (video?.video?.downloadAddr) {
+                this.logger.log('Found video URL in __UNIVERSAL_DATA_FOR_REHYDRATION__');
+                return video.video.downloadAddr;
+              }
+              if (video?.video?.playAddr) {
+                this.logger.log('Found video playAddr in __UNIVERSAL_DATA_FOR_REHYDRATION__');
+                return video.video.playAddr;
+              }
+            }
+          } catch (parseError) {
+            this.logger.debug(`Failed to parse UNIVERSAL_DATA: ${parseError.message}`);
+          }
+        }
+      }
+      
+      // Strategy 2: Look for SIGI_STATE
+      for (const scriptTag of scriptTags) {
+        const scriptContent = $(scriptTag).html();
+        if (scriptContent?.includes('window.SIGI_STATE')) {
+          try {
+            const sigiMatch = scriptContent.match(/window\.SIGI_STATE\s*=\s*({.+?});/);
+            if (sigiMatch) {
+              const sigiData = JSON.parse(sigiMatch[1]);
+              // Find video in ItemModule
+              const items = sigiData?.ItemModule;
+              if (items) {
+                const videoData = Object.values(items)[0] as any;
+                if (videoData?.video?.downloadAddr) {
+                  this.logger.log('Found video URL in SIGI_STATE');
+                  return videoData.video.downloadAddr;
+                }
+                if (videoData?.video?.playAddr) {
+                  this.logger.log('Found video playAddr in SIGI_STATE');
+                  return videoData.video.playAddr;
+                }
+              }
+            }
+          } catch (parseError) {
+            this.logger.debug(`Failed to parse SIGI_STATE: ${parseError.message}`);
+          }
+        }
+      }
+      
+      // Strategy 3: Look for video meta tags
+      const videoUrl = $('meta[property="og:video:secure_url"]').attr('content') ||
+                      $('meta[property="og:video:url"]').attr('content') ||
+                      $('meta[property="og:video"]').attr('content');
+      
+      if (videoUrl) {
+        this.logger.log('Found video URL in meta tags');
+        return videoUrl;
+      }
+      
+      this.logger.warn('Could not extract video URL from TikTok page');
+      return undefined;
+      
+    } catch (error) {
+      this.logger.error(`Error extracting TikTok video URL: ${error.message}`);
+      return undefined;
+    }
   }
 }

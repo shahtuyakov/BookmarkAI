@@ -47,6 +47,61 @@ services:
       - bookmarkai-main  # To access postgres and redis
     restart: unless-stopped
 
+  # Whisper Transcription Worker
+  whisper-worker:
+    build:
+      context: ../python
+      dockerfile: whisper-service/Dockerfile
+    container_name: bookmarkai-whisper-worker
+    environment:
+      # Celery configuration
+      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      
+      # Database configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: bookmarkai_dev
+      POSTGRES_USER: bookmarkai
+      POSTGRES_PASSWORD: bookmarkai_password
+      
+      # Redis for singleton locks
+      REDIS_URL: redis://redis:6379/0
+      
+      # Worker configuration
+      WORKER_CONCURRENCY: 4
+      WORKER_PREFETCH_MULTIPLIER: 8
+      WORKER_MAX_TASKS_PER_CHILD: 50
+      
+      # OpenAI configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      
+      # Cost controls
+      WHISPER_DAILY_COST_LIMIT: ${WHISPER_DAILY_COST_LIMIT:-10.00}
+      WHISPER_HOURLY_COST_LIMIT: ${WHISPER_HOURLY_COST_LIMIT:-1.00}
+      
+      # Logging
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+    external_links:
+      - ml-rabbitmq:rabbitmq
+    volumes:
+      - ../python/whisper-service:/app/whisper-service
+      - ../python/shared:/app/shared:ro
+    command: >
+      celery -A whisper_service.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=ml.transcribe
+      --without-gossip
+      --without-heartbeat
+      --prefetch-multiplier=8
+      --max-tasks-per-child=50
+    networks:
+      - bookmarkai-ml
+      - bookmarkai-main  # To access postgres and redis
+    restart: unless-stopped
+
   # Flower for Celery monitoring (optional, for development)
   flower:
     image: mher/flower:2.0

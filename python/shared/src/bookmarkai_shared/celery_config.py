@@ -73,6 +73,13 @@ def get_celery_config() -> Dict[str, Any]:
                 durable=True,
             ),
             Queue(
+                'ml.transcribe_local',
+                ml_exchange,
+                routing_key='ml.transcribe_local',
+                queue_arguments=queue_arguments,
+                durable=True,
+            ),
+            Queue(
                 'ml.summarize',
                 ml_exchange,
                 routing_key='ml.summarize',
@@ -91,7 +98,8 @@ def get_celery_config() -> Dict[str, Any]:
         # Routing
         'task_routes': {
             'llm_service.tasks.summarize_content': {'queue': 'ml.summarize'},
-            'whisper_service.tasks.transcribe_audio': {'queue': 'ml.transcribe'},
+            'whisper.tasks.transcribe_api': {'queue': 'ml.transcribe'},
+            'whisper.tasks.transcribe_local': {'queue': 'ml.transcribe_local'},
             'vector_service.tasks.generate_embeddings': {'queue': 'ml.embed'},
         },
         

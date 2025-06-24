@@ -17,6 +17,12 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
+# Check for required API keys
+if [ -z "$OPENAI_API_KEY" ] || [ "$OPENAI_API_KEY" = "your_openai_api_key_here" ]; then
+    echo -e "${YELLOW}⚠️  Warning: OPENAI_API_KEY not set - Whisper worker will not function${NC}"
+    echo "Set it with: export OPENAI_API_KEY='your-actual-key'"
+fi
+
 # Function to check if a service is running
 check_service() {
     local service=$1
@@ -45,10 +51,7 @@ check_service "Redis" 6379
 check_service "RabbitMQ" 5672
 check_service "RabbitMQ Management" 15672
 
-# Run database migrations
-echo -e "${YELLOW}Running database migrations...${NC}"
 cd ..
-pnpm -w run db:migrate
 
 # Start ML services using Docker Compose
 echo -e "${YELLOW}Starting ML workers with Docker Compose...${NC}"
@@ -61,27 +64,47 @@ if [ ! -f ".env" ]; then
 # LLM Provider API Keys (add your own)
 OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
 ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-your_anthropic_api_key_here}
+
+# Whisper cost controls
+WHISPER_DAILY_COST_LIMIT=${WHISPER_DAILY_COST_LIMIT:-10.00}
+WHISPER_HOURLY_COST_LIMIT=${WHISPER_HOURLY_COST_LIMIT:-1.00}
 EOF
 fi
 
-# Start the LLM worker container
-docker-compose -f docker-compose.ml.yml up -d llm-worker
+# Start the ML worker containers
+echo -e "${YELLOW}Starting ML worker containers...${NC}"
+docker compose -f docker-compose.ml.yml up -d llm-worker whisper-worker
 
-# Wait for worker to start
-echo -e "${YELLOW}Waiting for worker to initialize...${NC}"
+# Wait for workers to start
+echo -e "${YELLOW}Waiting for workers to initialize...${NC}"
 sleep 5
 
-# Check if worker is running
+# Check if workers are running
+workers_ok=true
 if docker ps | grep -q bookmarkai-llm-worker; then
     echo -e "${GREEN}✓ LLM worker is running${NC}"
 else
     echo -e "${RED}✗ LLM worker failed to start${NC}"
     echo "Check logs with: docker logs bookmarkai-llm-worker"
+    workers_ok=false
+fi
+
+if docker ps | grep -q bookmarkai-whisper-worker; then
+    echo -e "${GREEN}✓ Whisper worker is running${NC}"
+else
+    echo -e "${RED}✗ Whisper worker failed to start${NC}"
+    echo "Check logs with: docker logs bookmarkai-whisper-worker"
+    workers_ok=false
 fi
 
 cd ..
 
-echo -e "${GREEN}✨ ML Services started successfully!${NC}"
+if [ "$workers_ok" = true ]; then
+    echo -e "${GREEN}✨ ML Services started successfully!${NC}"
+else
+    echo -e "${YELLOW}⚠️  ML Services started with warnings${NC}"
+fi
+
 echo ""
 echo "Services running:"
 echo "  - PostgreSQL: localhost:5433"
@@ -89,9 +112,11 @@ echo "  - Redis: localhost:6379"
 echo "  - RabbitMQ: localhost:5672"
 echo "  - RabbitMQ Management UI: http://localhost:15672 (user: ml, pass: ml_password)"
 echo "  - LLM Worker: Running in Docker (bookmarkai-llm-worker)"
+echo "  - Whisper Worker: Running in Docker (bookmarkai-whisper-worker)"
 echo ""
 echo "To view worker logs:"
-echo "  docker logs -f bookmarkai-llm-worker"
+echo "  docker logs -f bookmarkai-llm-worker      # LLM summarization logs"
+echo "  docker logs -f bookmarkai-whisper-worker  # Transcription logs"
 echo ""
 echo "To monitor Celery tasks with Flower:"
 echo "  cd docker && docker-compose -f docker-compose.ml.yml --profile monitoring up flower"
