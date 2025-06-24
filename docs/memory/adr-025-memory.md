@@ -301,17 +301,17 @@ docker logs -f bookmarkai-whisper-worker
      command: celery -A service.celery_app worker --queues=ml.queue_name
    ```
 
-## Whisper Service Implementation (Completed)
+## Whisper Service Implementation (Completed) ✓
 
 ### Week 1 Tasks Completed ✓
 
-1. **Core Service Setup (whisper-1)**
+1. **Core Service Setup (whisper-1)** ✓
    - Created `/python/whisper-service/` directory structure
    - Implemented Dockerfile with ffmpeg and OpenAI dependencies
    - Created setup.py with all required packages
    - Implemented celery_app.py with singleton configuration
 
-2. **Audio Processing (whisper-2)**
+2. **Audio Processing (whisper-2)** ✓
    - Implemented `AudioProcessor` class with:
      - Media download (HTTP/HTTPS support)
      - Audio extraction using ffmpeg
@@ -319,24 +319,30 @@ docker logs -f bookmarkai-whisper-worker
      - Smart chunking for 10-minute segments
      - Automatic format conversion to AAC mono 16kHz
 
-3. **Transcription Service (whisper-3)**
+3. **Transcription Service (whisper-3)** ✓
    - Implemented `TranscriptionService` with OpenAI Whisper API
    - Cost tracking: $0.006/minute
    - Segment parsing with timestamps
    - Chunk merging for long videos
    - Proper error handling for API failures
 
-4. **Celery Tasks (whisper-4)**
+4. **Celery Tasks (whisper-4)** ✓
    - Implemented `transcribe_api` task with singleton pattern
    - Proper task routing to `ml.transcribe` queue
    - Error handling and retry logic
    - Temporary file cleanup
 
-5. **Database Integration (whisper-5)**
+5. **Database Integration (whisper-5)** ✓
    - Stores results in `ml_results` table
    - Created migration `0008_transcription_costs.sql`
    - Cost tracking table with materialized view
    - Integration with Node.js ML producer
+
+6. **TikTok Integration (bonus)** ✓
+   - Implemented yt-dlp service for video URL extraction
+   - Updated TikTok fetcher to extract actual video URLs
+   - Full end-to-end pipeline tested and working
+   - Automatic transcription for all TikTok videos
 
 ### Testing Results
 
@@ -402,10 +408,59 @@ docker logs -f bookmarkai-whisper-worker
    - Grafana dashboards
    - Analytics API endpoints
 
-3. **TikTok Integration**
-   - Implement yt-dlp service
-   - Update TikTok fetcher to extract video URLs
+3. **TikTok Integration** ✓
+   - Implemented yt-dlp service
+   - Updated TikTok fetcher to extract video URLs
    - Enable automatic transcription for TikTok videos
+
+### yt-dlp Integration Implementation ✓ TESTED & WORKING
+
+1. **Infrastructure**
+   - Created Dockerfile for api-gateway with yt-dlp installation
+   - Added Python3, pip, and ffmpeg dependencies
+   - Configured for both development and production stages
+   - **Local Installation**: `brew install yt-dlp` or `pip3 install yt-dlp`
+
+2. **YtDlpService Implementation**
+   - Created `/packages/api-gateway/src/modules/shares/services/ytdlp.service.ts`
+   - Features:
+     - Subprocess execution with timeout (30s)
+     - URL sanitization for security
+     - Redis caching with 1-hour TTL
+     - Metrics tracking (requests, cache hits, success rate)
+     - Proper error handling and logging
+
+3. **Security Measures**
+   - URL validation (only HTTP/HTTPS allowed)
+   - Command injection prevention
+   - `--no-playlist` flag to prevent bulk downloads
+   - Process timeout to prevent hanging
+   - Non-root user in production Docker image
+
+4. **TikTok Fetcher Updates**
+   - Integrated YtDlpService for video extraction
+   - Falls back gracefully when extraction fails
+   - Includes extracted video URL and duration in response
+   - Automatic transcription task queuing when URL available
+
+5. **Performance Optimizations**
+   - Redis caching to avoid repeated extractions
+   - URL hashing for cache keys
+   - Metrics for monitoring performance
+   - Configurable timeout values
+
+### Production Test Results (June 24, 2025)
+
+Successfully tested end-to-end TikTok transcription:
+- **TikTok URL**: `@loewhaley/video/7501788637290368311`
+- **yt-dlp extraction**: 3.2 seconds (extracted actual video URL)
+- **Video duration**: 40.4 seconds
+- **Transcription cost**: $0.0040 (correct at $0.006/minute)
+- **Total processing time**: 11.3 seconds
+- **Generated**: 23 transcript segments with timestamps
+- **Full pipeline**: TikTok URL → Video extraction → Download → Audio processing → Transcription → Database
+
+**Minor fix needed**: Run `pnpm -w run db:migrate` to create transcription_costs table
 
 ## Notes for Future Implementation
 

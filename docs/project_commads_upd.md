@@ -34,6 +34,7 @@ pnpm -w run db:migrate
 
 # Start API gateway in development mode
 pnpm -w run dev:api
+docker build -t bookmarkai-api-gateway packages/api-gateway/
 
 # Start extension in development mode (hot reload)
 pnpm -w run dev:extension

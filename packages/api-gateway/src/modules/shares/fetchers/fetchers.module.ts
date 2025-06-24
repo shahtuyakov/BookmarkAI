@@ -8,6 +8,7 @@ import {
   XFetcher,
   GenericFetcher,
 } from './platforms';
+import { YtDlpService } from '../services/ytdlp.service';
 
 /**
  * Module for content fetchers
@@ -18,6 +19,9 @@ import {
   providers: [
     // Registry
     ContentFetcherRegistry,
+    
+    // Services
+    YtDlpService,
     
     // Platform fetchers
     TikTokFetcher,
