@@ -1,0 +1,39 @@
+services:
+  api-gateway:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.api-gateway
+      target: development
+    container_name: bookmarkai-api-gateway
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://bookmarkai:bookmarkai123@postgres:5432/bookmarkai_dev
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: bookmarkai
+      DATABASE_PASSWORD: bookmarkai123
+      DATABASE_NAME: bookmarkai_dev
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://ml:ml_password@rabbitmq:5672/
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Add other environment variables as needed
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    volumes:
+      # Mount source code for hot reload in development
+      - ../packages/api-gateway/src:/app/packages/api-gateway/src
+      - ../packages/sdk/src:/app/packages/sdk/src
+    networks:
+      - bookmarkai-network
+
+networks:
+  bookmarkai-network:
+    external: true
+    name: docker_bookmarkai-network
