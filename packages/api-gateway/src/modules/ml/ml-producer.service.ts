@@ -186,15 +186,40 @@ export class MLProducerService {
 
     const routingKey = `ml.${task.taskType.split('_')[0]}`;
     
+    // Map task types to Celery task names
+    const taskNameMap = {
+      'summarize_llm': 'summarize_content',
+      'transcribe_whisper': 'transcribe_audio',
+      'embed_vectors': 'generate_embeddings'
+    };
+    
+    const celeryTaskName = taskNameMap[task.taskType] || task.taskType;
+    
     // Celery message format
     const celeryMessage = {
       id: task.metadata.correlationId,
-      task: `llm_service.tasks.${task.taskType}`,
-      args: [task.shareId, task.payload],
-      kwargs: {},
+      task: `llm_service.tasks.${celeryTaskName}`,
+      args: [],
+      kwargs: {
+        share_id: task.shareId,
+        content: task.payload.content,
+        options: task.payload.options
+      },
       retries: task.metadata.retryCount,
       eta: null,
       expires: null,
+      headers: {
+        lang: 'js',
+        task: `llm_service.tasks.${celeryTaskName}`,
+        id: task.metadata.correlationId,
+        retries: task.metadata.retryCount,
+        root_id: task.metadata.correlationId,
+        parent_id: null,
+        group: null
+      },
+      priority: 0,
+      reply_to: null,
+      correlation_id: task.metadata.correlationId
     };
 
     const messageBuffer = Buffer.from(JSON.stringify(celeryMessage));
