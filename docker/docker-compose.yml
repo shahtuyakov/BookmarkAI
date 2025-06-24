@@ -1,4 +1,25 @@
 services:
+  # RabbitMQ for Celery message broker
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ml-rabbitmq
+    ports:
+      - '5672:5672'    # AMQP port
+      - '15672:15672'  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ml
+      RABBITMQ_DEFAULT_PASS: ml_password
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
   # PostgreSQL with pgvector extension
   postgres:
     image: ankane/pgvector:latest
@@ -157,3 +178,4 @@ volumes:
   grafana-data:
   prometheus-data:
   vault-data:
+  rabbitmq-data:

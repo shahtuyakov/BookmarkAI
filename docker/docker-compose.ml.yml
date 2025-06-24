@@ -1,0 +1,72 @@
+services:
+  # LLM Summarization Worker
+  llm-worker:
+    build:
+      context: ../python
+      dockerfile: llm-service/Dockerfile
+    container_name: bookmarkai-llm-worker
+    environment:
+      # Celery configuration
+      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      
+      # Database configuration
+      DATABASE_URL: postgresql://bookmarkai:bookmarkai_password@postgres:5432/bookmarkai_dev
+      
+      # Redis for singleton locks
+      REDIS_URL: redis://redis:6379/0
+      
+      # Worker configuration
+      WORKER_CONCURRENCY: 4
+      WORKER_PREFETCH_MULTIPLIER: 8
+      WORKER_MAX_TASKS_PER_CHILD: 50
+      
+      # LLM configuration (will be populated from environment)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      
+      # Logging
+      LOG_LEVEL: INFO
+    # RabbitMQ is now in main docker-compose.yml
+    external_links:
+      - ml-rabbitmq:rabbitmq
+    volumes:
+      - ../python/llm-service:/app
+      - ../python/shared:/app/shared:ro
+    command: >
+      celery -A llm_service.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=ml.summarize
+      --without-gossip
+      --without-heartbeat
+      --prefetch-multiplier=8
+      --max-tasks-per-child=50
+    networks:
+      - bookmarkai-ml
+      - bookmarkai-main  # To access postgres and redis
+    restart: unless-stopped
+
+  # Flower for Celery monitoring (optional, for development)
+  flower:
+    image: mher/flower:2.0
+    container_name: bookmarkai-flower
+    environment:
+      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
+      FLOWER_PORT: 5555
+      FLOWER_BASIC_AUTH: admin:bookmarkai123  # Change in production
+    ports:
+      - '5555:5555'
+    external_links:
+      - ml-rabbitmq:rabbitmq
+    networks:
+      - bookmarkai-ml
+    profiles:
+      - monitoring
+
+networks:
+  bookmarkai-ml:
+    driver: bridge
+  bookmarkai-main:
+    external: true
+    name: docker_default  # This connects to the main docker-compose network

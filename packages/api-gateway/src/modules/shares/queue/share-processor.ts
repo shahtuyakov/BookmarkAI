@@ -10,6 +10,7 @@ import { ShareStatus } from '../constants/share-status.enum';
 import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
 import { FetcherError } from '../fetchers/interfaces/fetcher-error.interface';
 import { Platform } from '../constants/platform.enum';
+import { MLProducerService } from '../../ml/ml-producer.service';
 
 /**
  * Processor for share background tasks
@@ -24,6 +25,7 @@ export class ShareProcessor {
     private readonly db: DrizzleService,
     private readonly configService: ConfigService,
     private readonly fetcherRegistry: ContentFetcherRegistry,
+    private readonly mlProducer: MLProducerService,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
@@ -74,9 +76,46 @@ export class ShareProcessor {
         // Store the fetched metadata (Task 2.8 will implement this)
         await this.storeMetadata(job.data.shareId, fetchResult);
         
+        // Queue ML tasks if content text is available
+        if (fetchResult.content?.text) {
+          try {
+            // Queue summarization task
+            await this.mlProducer.publishSummarizationTask(
+              job.data.shareId,
+              {
+                text: fetchResult.content.text,
+                title: share.title || fetchResult.content.text?.substring(0, 100),
+                url: share.url,
+                contentType: share.platform,
+              },
+              {
+                style: 'brief',
+                maxLength: 500,
+              }
+            );
+            this.logger.log(`Queued summarization task for share ${job.data.shareId}`);
+          } catch (mlError) {
+            // Log but don't fail the whole process if ML queueing fails
+            this.logger.error(`Failed to queue ML task for share ${job.data.shareId}: ${mlError.message}`);
+          }
+        }
+        
         // Queue media download if needed (Task 2.7 will implement this)
         if (fetchResult.media?.url) {
           await this.queueMediaDownload(job.data.shareId, fetchResult.media);
+          
+          // If it's a video, also queue transcription
+          if (fetchResult.media.type === 'video') {
+            try {
+              await this.mlProducer.publishTranscriptionTask(
+                job.data.shareId,
+                fetchResult.media.url
+              );
+              this.logger.log(`Queued transcription task for share ${job.data.shareId}`);
+            } catch (mlError) {
+              this.logger.error(`Failed to queue transcription task: ${mlError.message}`);
+            }
+          }
         }
         
         // Update status to "done"
