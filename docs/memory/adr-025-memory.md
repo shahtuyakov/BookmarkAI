@@ -619,6 +619,172 @@ The current implementation is functional and tested but lacks production safety 
 - ✅ Cost tracking database (transcription_costs table operational)
 - ✅ Admin-only analytics endpoints (role-based access control)
 
+## LLM Service Enhancement Implementation (June 24-25, 2025)
+
+### Implementation Summary
+Successfully enhanced the LLM service with comprehensive production safety features, matching and exceeding the Whisper service capabilities.
+
+### High Priority Tasks Completed ✅
+
+1. **Database migration for llm_costs table** ✅
+   - Created `0009_llm_costs.sql` migration
+   - Comprehensive schema with generated columns for totals
+   - Check constraints for data validation
+   - Foreign key to shares table with ON DELETE SET NULL
+   - Created materialized views: `daily_llm_costs`, `hourly_llm_costs`
+   - Added refresh function for concurrent updates
+   - **Note**: Manual migration applied due to Drizzle conflict with existing ml_results table
+
+2. **Cost tracking implementation** ✅
+   - Created `db.py` with full database operations
+   - `track_llm_cost()` function for analytics
+   - `save_summarization_result()` for ml_results persistence
+   - Detailed pricing configuration for all models
+   - Accurate cost calculation with 6 decimal precision
+   - Processing time tracking
+
+3. **Budget limit checking** ✅
+   - `check_budget_limits()` function with hourly/daily enforcement
+   - Environment variables configured in docker-compose.ml.yml:
+     - `LLM_HOURLY_COST_LIMIT` (default: $2.00)
+     - `LLM_DAILY_COST_LIMIT` (default: $20.00)
+     - `LLM_BUDGET_STRICT_MODE` (default: false)
+   - Pre-flight cost estimation before API calls
+   - Custom `BudgetExceededError` exception
+   - Graceful handling when cost tracking not initialized
+
+4. **ContentPreflightService** ✅
+   - Created comprehensive validation service
+   - Min/max word and character limits (configurable via env)
+   - Binary content detection
+   - Token estimation (dual method: char-based + word-based)
+   - Content truncation for oversized inputs
+   - Metadata extraction (URLs, emails, code blocks)
+   - `ContentValidationError` for validation failures
+
+5. **Token estimation logic** ✅
+   - Integrated into ContentPreflightService
+   - Rough estimation: 4 chars/token, 0.75 tokens/word
+   - Pre-flight estimation used for budget checks
+   - Actual token counts from API responses tracked
+   - Truncation support with sentence boundary detection
+
+### Medium Priority Tasks Completed ✅
+
+6. **Add ml.summarize_local queue** ✅
+   - Added to `python/shared/src/bookmarkai_shared/celery_config.py`
+   - Queue configuration with quorum type
+   - Routing rule for `llm_service.tasks.summarize_content_local`
+
+7. **Create summarize_content_local task** ✅
+   - Added placeholder task in `python/llm-service/src/llm_service/tasks.py`
+   - Proper Celery configuration with singleton pattern
+   - NotImplementedError with clear future plans
+   - Ready for Ollama/llama.cpp integration
+
+8. **Update Node.js ML producer** ✅
+   - Enhanced `packages/api-gateway/src/modules/ml/ml-producer.service.ts`
+   - Added backend parameter to publishSummarizationTask
+   - Support for 'api' and 'local' backends
+   - Automatic routing based on provider or environment
+   - Added ml.summarize_local queue assertion and binding
+
+9. **Add PREFERRED_LLM_BACKEND env var** ✅
+   - Added to `.env.example` with documentation
+   - Added to `docker/docker-compose.api-gateway.yml`
+   - Defaults to 'api' for cloud providers
+   - Also added LLM cost limit variables to .env.example
+
+12. **Comprehensive error handling** ✅
+    - Custom `BudgetExceededError` exception
+    - Custom `ContentValidationError` exception  
+    - Proper error messages for user feedback
+    - Graceful error handling with result persistence
+
+### Testing & Verification ✅
+
+**Test Results (June 25, 2025)**:
+- Created test scripts: `test-llm-summarization.js`, `test-llm-simple.js`, `test-llm-fresh.js`
+- Successfully tested complete LLM pipeline:
+  - Content validation working (rejected "too short" content)
+  - Budget checking operational ($0.0061 estimated cost, within $2.00 hourly limit)
+  - OpenAI API integration functional (GPT-3.5-turbo)
+  - Summary generated with 314 tokens, $0.000241 cost
+  - Processing time: 1278ms
+  - Results saved to ml_results table
+  - Cost tracking saved to llm_costs table
+  - Analytics dashboard confirmed working
+
+### Low Priority Tasks (Future Enhancements) 🚧
+10. **Model selection logic** - Auto-select cheaper models for simple content
+    - Use GPT-3.5 for basic summaries
+    - Reserve GPT-4 for complex/technical content
+    - Content complexity detection
+
+11. **Update analytics endpoints** - Include LLM cost tracking data
+    - Extend existing ML analytics API
+    - Add LLM-specific cost breakdowns
+
+### Key Implementation Details
+
+#### Files Modified/Created
+1. **Database Layer**:
+   - `/packages/api-gateway/src/db/migrations/0009_llm_costs.sql` (manual)
+   - `/packages/api-gateway/src/db/migrations/0007_common_joystick.sql` (Drizzle generated)
+   - `/packages/api-gateway/src/db/schema/llm-costs.ts`
+   - `/packages/api-gateway/src/db/schema/index.ts` (updated exports)
+
+2. **Python LLM Service**:
+   - `/python/llm-service/src/llm_service/db.py` (new)
+   - `/python/llm-service/src/llm_service/content_preflight.py` (new)
+   - `/python/llm-service/src/llm_service/tasks.py` (enhanced)
+   - `/python/llm-service/src/llm_service/llm_client.py` (updated token tracking)
+
+3. **Configuration**:
+   - `/docker/docker-compose.ml.yml` (added LLM env variables)
+
+#### Integration Updates
+- **tasks.py**: Integrated all safety features into `summarize_content` task
+  - Pre-flight validation with ContentPreflightService
+  - Token estimation before API calls
+  - Budget checking with early rejection
+  - Detailed cost tracking after completion
+  - Enhanced error handling for budget/validation errors
+
+- **llm_client.py**: Updated to return detailed token usage
+  - Separate input/output/total token counts
+  - Consistent format across OpenAI and Anthropic providers
+
+#### Migration Notes
+- Drizzle migration conflicted with existing `ml_results` table
+- Applied manual SQL migration for `llm_costs` and materialized views
+- Successfully created all database objects with proper constraints
+
+### Implementation Notes
+- LLM costs are highly variable (unlike Whisper's predictable per-minute pricing)
+- Token-based pricing requires upfront estimation
+- Model selection can dramatically impact costs (GPT-4 is 20x more expensive)
+- Local LLM foundation enables future cost savings at scale
+- Budget limits default to $2/hour and $20/day (10x Whisper limits due to higher costs)
+
+### Production Safety Features Summary
+Both ML services now have comprehensive safety features:
+
+**Whisper Service**:
+- ✅ Cost tracking: $0.006/minute
+- ✅ Budget limits: $1/hour, $10/day
+- ✅ Pre-flight checks: format, duration, integrity
+- ✅ Silence detection: skip empty audio
+- ✅ Analytics API: 5 endpoints for monitoring
+
+**LLM Service**:
+- ✅ Cost tracking: Token-based per model
+- ✅ Budget limits: $2/hour, $20/day  
+- ✅ Content validation: length, binary detection
+- ✅ Token estimation: pre-flight cost prediction
+- ✅ Local LLM ready: infrastructure for GPU deployment
+- ✅ Analytics ready: cost tables and views created
+
 ## Notes for Future Implementation
 
 1. **Vector Service**

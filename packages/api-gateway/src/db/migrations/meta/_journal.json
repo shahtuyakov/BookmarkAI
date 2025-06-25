@@ -50,6 +50,13 @@
       "when": 1750535686911,
       "tag": "0006_regular_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1750807110723,
+      "tag": "0007_common_joystick",
+      "breakpoints": true
     }
   ]
 }

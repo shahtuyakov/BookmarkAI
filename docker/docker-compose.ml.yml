@@ -25,6 +25,18 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       
+      # Cost controls
+      LLM_DAILY_COST_LIMIT: ${LLM_DAILY_COST_LIMIT:-20.00}
+      LLM_HOURLY_COST_LIMIT: ${LLM_HOURLY_COST_LIMIT:-2.00}
+      LLM_BUDGET_STRICT_MODE: ${LLM_BUDGET_STRICT_MODE:-false}
+      
+      # Database configuration for cost tracking
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: bookmarkai_dev
+      POSTGRES_USER: bookmarkai
+      POSTGRES_PASSWORD: bookmarkai_password
+      
       # Logging
       LOG_LEVEL: INFO
     # RabbitMQ is now in main docker-compose.yml

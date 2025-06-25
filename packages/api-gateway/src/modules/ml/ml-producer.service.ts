@@ -70,12 +70,14 @@ export class MLProducerService {
       };
 
       await this.channel.assertQueue('ml.summarize', queueOptions);
+      await this.channel.assertQueue('ml.summarize_local', queueOptions);
       await this.channel.assertQueue('ml.transcribe', queueOptions);
       await this.channel.assertQueue('ml.transcribe_local', queueOptions);
       await this.channel.assertQueue('ml.embed', queueOptions);
 
       // Bind queues to exchange
       await this.channel.bindQueue('ml.summarize', this.exchangeName, 'ml.summarize');
+      await this.channel.bindQueue('ml.summarize_local', this.exchangeName, 'ml.summarize_local');
       await this.channel.bindQueue('ml.transcribe', this.exchangeName, 'ml.transcribe');
       await this.channel.bindQueue('ml.transcribe_local', this.exchangeName, 'ml.transcribe_local');
       await this.channel.bindQueue('ml.embed', this.exchangeName, 'ml.embed');
@@ -110,19 +112,28 @@ export class MLProducerService {
       contentType?: string;
     },
     options?: {
-      provider?: 'openai' | 'anthropic';
+      provider?: 'openai' | 'anthropic' | 'local';
       model?: string;
       maxLength?: number;
       style?: 'brief' | 'detailed' | 'bullets';
+      backend?: 'api' | 'local';
     }
   ): Promise<void> {
+    // Determine backend based on provider or environment preference
+    const backend = options?.backend || 
+      (options?.provider === 'local' ? 'local' : 'api') ||
+      (this.configService.get<string>('PREFERRED_LLM_BACKEND', 'api') as 'api' | 'local');
+    
     const task: MLTaskPayload = {
       version: '1.0',
       taskType: 'summarize_llm',
       shareId,
       payload: {
         content,
-        options,
+        options: {
+          ...options,
+          backend,
+        },
       },
       metadata: {
         correlationId: uuidv4(),
@@ -208,6 +219,10 @@ export class MLProducerService {
         task.payload.options?.backend === 'local') {
       routingKey = 'ml.transcribe_local';
     }
+    if (task.taskType === 'summarize_llm' && 
+        task.payload.options?.backend === 'local') {
+      routingKey = 'ml.summarize_local';
+    }
     
     // Map task types to Celery task names
     const taskNameMap = {
@@ -221,6 +236,11 @@ export class MLProducerService {
     if (task.taskType === 'transcribe_whisper' && 
         task.payload.options?.backend === 'local') {
       celeryTaskName = 'whisper.tasks.transcribe_local';
+    }
+    // For summarization, check if we should use local queue
+    if (task.taskType === 'summarize_llm' && 
+        task.payload.options?.backend === 'local') {
+      celeryTaskName = 'llm_service.tasks.summarize_content_local';
     }
     
     // Celery message format

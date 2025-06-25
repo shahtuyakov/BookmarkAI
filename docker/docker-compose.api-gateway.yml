@@ -21,6 +21,7 @@ services:
       RABBITMQ_URL: amqp://ml:ml_password@rabbitmq:5672/
       JWT_SECRET: ${JWT_SECRET:-your-jwt-secret}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PREFERRED_LLM_BACKEND: ${PREFERRED_LLM_BACKEND:-api}
       # Add other environment variables as needed
     depends_on:
       - postgres

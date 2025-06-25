@@ -76,11 +76,18 @@ class OpenAIClient(BaseLLMClient):
                     if line.startswith(('•', '-', '*')):
                         key_points.append(line.lstrip('•-* '))
             
+            # Extract token usage details
+            tokens_used = {
+                'input': response.usage.prompt_tokens if response.usage else 0,
+                'output': response.usage.completion_tokens if response.usage else 0,
+                'total': response.usage.total_tokens if response.usage else 0
+            }
+            
             return {
                 'summary': summary,
                 'key_points': key_points,
                 'model': model,
-                'tokens_used': response.usage.total_tokens if response.usage else None
+                'tokens_used': tokens_used
             }
             
         except Exception as e:
@@ -133,11 +140,18 @@ class AnthropicClient(BaseLLMClient):
                     if line.startswith(('•', '-', '*')):
                         key_points.append(line.lstrip('•-* '))
             
+            # Extract token usage details
+            tokens_used = {
+                'input': response.usage.input_tokens if hasattr(response, 'usage') else 0,
+                'output': response.usage.output_tokens if hasattr(response, 'usage') else 0,
+                'total': (response.usage.input_tokens + response.usage.output_tokens) if hasattr(response, 'usage') else 0
+            }
+            
             return {
                 'summary': summary,
                 'key_points': key_points,
                 'model': model,
-                'tokens_used': response.usage.input_tokens + response.usage.output_tokens if hasattr(response, 'usage') else None
+                'tokens_used': tokens_used
             }
             
         except Exception as e:
