@@ -17,6 +17,13 @@ RUN pip install -e /app/shared
 COPY whisper-service /app/whisper-service
 RUN pip install -e /app/whisper-service
 
+# Create user and prometheus directory
+RUN useradd -m -u 1000 celeryuser && \
+    mkdir -p /tmp/prometheus_multiproc_whisper && \
+    chown -R celeryuser:celeryuser /app /tmp/prometheus_multiproc_whisper
+
+USER celeryuser
+
 WORKDIR /app/whisper-service
 
 # Default to API worker

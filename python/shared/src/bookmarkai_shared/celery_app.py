@@ -59,6 +59,14 @@ def create_celery_app(name: str = 'bookmarkai.ml') -> Celery:
     # Set default task class
     app.Task = MLTask
     
+    # Set up Prometheus metrics for Celery
+    try:
+        from .metrics import setup_celery_metrics
+        setup_celery_metrics(app)
+        logger.info("Prometheus metrics integration enabled for Celery")
+    except Exception as e:
+        logger.warning(f"Failed to set up Prometheus metrics: {e}")
+    
     return app
 
 
@@ -87,6 +95,29 @@ def init_worker_process(sender=None, **kwargs):
         logger.info("Cleared stale singleton locks")
     except Exception as e:
         logger.warning(f"Failed to clear singleton locks: {e}")
+    
+    # Initialize Prometheus metrics
+    try:
+        from .metrics import MetricsServer, set_worker_info
+        import platform
+        
+        # Set worker information
+        worker_info = {
+            'hostname': platform.node(),
+            'worker_type': os.environ.get('WORKER_TYPE', 'unknown'),
+            'python_version': platform.python_version(),
+            'service': os.environ.get('SERVICE_NAME', 'unknown'),
+        }
+        set_worker_info(worker_info)
+        
+        # Start metrics server on first worker only
+        if os.environ.get('PROMETHEUS_METRICS_PORT'):
+            metrics_port = int(os.environ.get('PROMETHEUS_METRICS_PORT', '9090'))
+            metrics_server = MetricsServer(port=metrics_port)
+            metrics_server.start()
+            logger.info(f"Prometheus metrics server started on port {metrics_port}")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Prometheus metrics: {e}")
 
 
 @worker_process_shutdown.connect

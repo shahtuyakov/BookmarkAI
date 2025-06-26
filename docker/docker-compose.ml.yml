@@ -5,6 +5,8 @@ services:
       context: ../python
       dockerfile: llm-service/Dockerfile
     container_name: bookmarkai-llm-worker
+    ports:
+      - '9091:9091'  # Prometheus metrics endpoint
     environment:
       # Celery configuration
       CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
@@ -29,6 +31,12 @@ services:
       LLM_DAILY_COST_LIMIT: ${LLM_DAILY_COST_LIMIT:-20.00}
       LLM_HOURLY_COST_LIMIT: ${LLM_HOURLY_COST_LIMIT:-2.00}
       LLM_BUDGET_STRICT_MODE: ${LLM_BUDGET_STRICT_MODE:-false}
+      
+      # Prometheus metrics
+      WORKER_TYPE: llm
+      SERVICE_NAME: llm-service
+      PROMETHEUS_METRICS_PORT: 9091
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_llm
       
       # Database configuration for cost tracking
       POSTGRES_HOST: postgres
@@ -65,6 +73,8 @@ services:
       context: ../python
       dockerfile: whisper-service/Dockerfile
     container_name: bookmarkai-whisper-worker
+    ports:
+      - '9092:9092'  # Prometheus metrics endpoint
     environment:
       # Celery configuration
       CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
@@ -94,6 +104,12 @@ services:
       
       # Silence detection
       WHISPER_SILENCE_THRESHOLD_DB: ${WHISPER_SILENCE_THRESHOLD_DB:--40.0}
+      
+      # Prometheus metrics
+      WORKER_TYPE: whisper
+      SERVICE_NAME: whisper-service
+      PROMETHEUS_METRICS_PORT: 9092
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_whisper
       
       # Logging
       LOG_LEVEL: INFO

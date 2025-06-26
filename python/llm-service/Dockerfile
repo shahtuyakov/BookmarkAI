@@ -20,8 +20,10 @@ COPY llm-service/setup.py .
 COPY llm-service/src/ ./src/
 RUN pip install -e .
 
-# Create non-root user
-RUN useradd -m -u 1000 celeryuser && chown -R celeryuser:celeryuser /app
+# Create non-root user and prometheus multiprocess directory
+RUN useradd -m -u 1000 celeryuser && \
+    mkdir -p /tmp/prometheus_multiproc_llm && \
+    chown -R celeryuser:celeryuser /app /tmp/prometheus_multiproc_llm
 USER celeryuser
 
 # Set environment variables

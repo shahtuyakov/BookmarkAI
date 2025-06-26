@@ -21,6 +21,31 @@ from .content_preflight import ContentPreflightService, ContentValidationError
 
 logger = logging.getLogger(__name__)
 
+# Import metrics functions
+try:
+    from bookmarkai_shared.metrics import (
+        task_metrics,
+        track_ml_cost,
+        track_tokens,
+        update_budget_remaining,
+        track_budget_exceeded,
+        track_model_latency
+    )
+    METRICS_ENABLED = True
+except ImportError:
+    logger.warning("Prometheus metrics not available")
+    METRICS_ENABLED = False
+    # Create no-op decorators and functions
+    def task_metrics(worker_type):
+        def decorator(func):
+            return func
+        return decorator
+    def track_ml_cost(*args, **kwargs): pass
+    def track_tokens(*args, **kwargs): pass
+    def update_budget_remaining(*args, **kwargs): pass
+    def track_budget_exceeded(*args, **kwargs): pass
+    def track_model_latency(*args, **kwargs): pass
+
 # Model pricing configuration (dollars per 1K tokens)
 LLM_PRICING = {
     'openai': {
@@ -68,6 +93,7 @@ def calculate_cost(provider: str, model: str, tokens: Dict[str, int]) -> Dict[st
     acks_late=True,
     reject_on_worker_lost=True,
 )
+@task_metrics(worker_type='llm')
 def summarize_content(
     self: Task,
     share_id: str,
@@ -179,11 +205,19 @@ def summarize_content(
         
         # Generate summary
         logger.info(f"Generating summary for share {share_id}")
+        
+        # Track model latency
+        model_start = time.time()
         summary_result = llm_client.generate_summary(
             prompt=prompt,
             model=model,
             max_tokens=max_tokens
         )
+        model_latency = time.time() - model_start
+        
+        # Track model latency metric
+        if METRICS_ENABLED:
+            track_model_latency(model_latency, summary_result['model'], 'summarization')
         
         # Calculate processing time
         processing_ms = int((time.time() - start_time) * 1000)
@@ -192,7 +226,7 @@ def summarize_content(
         actual_tokens = summary_result.get('tokens_used', estimated_tokens)
         actual_cost = calculate_cost(provider.value, summary_result['model'], actual_tokens)
         
-        # Track cost
+        # Track cost in database
         track_llm_cost(
             share_id=share_id,
             model_name=summary_result['model'],
@@ -204,6 +238,29 @@ def summarize_content(
             backend='api',
             processing_time_ms=processing_ms
         )
+        
+        # Track metrics in Prometheus
+        if METRICS_ENABLED:
+            # Track cost metric
+            track_ml_cost(actual_cost['total_cost'], 'summarization', summary_result['model'], 'llm')
+            
+            # Track token metrics
+            track_tokens(actual_tokens['input'], 'summarization', summary_result['model'], 'input')
+            track_tokens(actual_tokens['output'], 'summarization', summary_result['model'], 'output')
+            track_tokens(actual_tokens['total'], 'summarization', summary_result['model'], 'total')
+            
+            # Update budget remaining (get from budget check result)
+            if 'budget_check' in locals():
+                update_budget_remaining(
+                    budget_check['hourly_limit'] - budget_check['current_hourly_cost'],
+                    'hourly',
+                    'llm'
+                )
+                update_budget_remaining(
+                    budget_check['daily_limit'] - budget_check['current_daily_cost'],
+                    'daily',
+                    'llm'
+                )
         
         # Save to database
         logger.info(f"Saving summary result for share {share_id}")
@@ -239,8 +296,15 @@ def summarize_content(
             'cost_usd': actual_cost['total_cost']
         }
         
-    except (BudgetExceededError, ContentValidationError):
-        # Re-raise budget and validation errors without saving (they're expected)
+    except BudgetExceededError as e:
+        # Track budget exceeded in metrics
+        if METRICS_ENABLED:
+            track_budget_exceeded('hourly' if 'hourly' in str(e) else 'daily', 'llm')
+        # Re-raise budget errors without saving (they're expected)
+        raise
+        
+    except ContentValidationError:
+        # Re-raise validation errors without saving (they're expected)
         raise
         
     except Exception as e:

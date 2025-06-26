@@ -17,6 +17,7 @@ setup(
         "opentelemetry-api>=1.20.0",
         "opentelemetry-sdk>=1.20.0",
         "opentelemetry-instrumentation-celery>=0.41b0",
+        "prometheus-client>=0.19.0",
     ],
     python_requires=">=3.9",
 )

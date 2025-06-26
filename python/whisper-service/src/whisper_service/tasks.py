@@ -16,6 +16,31 @@ from .media_preflight import MediaPreflightService
 
 logger = logging.getLogger(__name__)
 
+# Import metrics functions
+try:
+    from bookmarkai_shared.metrics import (
+        task_metrics,
+        track_ml_cost,
+        track_audio_duration,
+        update_budget_remaining,
+        track_budget_exceeded,
+        track_model_latency
+    )
+    METRICS_ENABLED = True
+except ImportError:
+    logger.warning("Prometheus metrics not available")
+    METRICS_ENABLED = False
+    # Create no-op decorators and functions
+    def task_metrics(worker_type):
+        def decorator(func):
+            return func
+        return decorator
+    def track_ml_cost(*args, **kwargs): pass
+    def track_audio_duration(*args, **kwargs): pass
+    def update_budget_remaining(*args, **kwargs): pass
+    def track_budget_exceeded(*args, **kwargs): pass
+    def track_model_latency(*args, **kwargs): pass
+
 
 class TranscriptionError(Exception):
     """Custom exception for transcription failures."""
@@ -37,6 +62,7 @@ class BudgetExceededError(Exception):
     autoretry_for=(Exception,),
     retry_kwargs={'max_retries': 3, 'countdown': 60}
 )
+@task_metrics(worker_type='whisper')
 def transcribe_api(
     self: Task,
     share_id: str,
@@ -252,12 +278,20 @@ def transcribe_api(
         else:
             # Single transcription for short audio
             logger.info("Transcribing complete audio file")
+            
+            # Track model latency
+            model_start = time.time()
             final_result = transcription_service.transcribe_api(
                 audio_path,
                 duration,
                 language=options.get('language') if options else None,
                 prompt=options.get('prompt') if options else None
             )
+            model_latency = time.time() - model_start
+            
+            # Track model latency metric
+            if METRICS_ENABLED:
+                track_model_latency(model_latency, 'whisper-api', 'transcription')
         
         # Phase 5: Save results to database
         logger.info("Saving transcription results to database")
@@ -270,6 +304,27 @@ def transcribe_api(
             final_result.billing_usd,
             final_result.backend
         )
+        
+        # Track metrics in Prometheus
+        if METRICS_ENABLED:
+            # Track cost metric
+            track_ml_cost(final_result.billing_usd, 'transcription', 'whisper-api', 'whisper')
+            
+            # Track audio duration
+            track_audio_duration(final_result.duration_seconds, 'transcription', 'whisper-api')
+            
+            # Update budget remaining (get from budget check result)
+            if 'budget_check' in locals():
+                update_budget_remaining(
+                    budget_check['hourly_limit'] - budget_check['current_hourly_cost'],
+                    'hourly',
+                    'whisper'
+                )
+                update_budget_remaining(
+                    budget_check['daily_limit'] - budget_check['current_daily_cost'],
+                    'daily',
+                    'whisper'
+                )
         
         # Calculate processing time
         processing_time = time.time() - start_time
@@ -298,6 +353,13 @@ def transcribe_api(
         logger.error(f"Task soft time limit exceeded for share_id: {share_id}")
         raise
         
+    except BudgetExceededError as e:
+        # Track budget exceeded in metrics
+        if METRICS_ENABLED:
+            track_budget_exceeded('hourly' if 'hourly' in str(e) else 'daily', 'whisper')
+        # Re-raise budget errors
+        raise
+        
     except Exception as e:
         logger.error(
             f"Transcription failed for share_id {share_id}: {str(e)}",
@@ -324,6 +386,7 @@ def transcribe_api(
     acks_late=True,
     reject_on_worker_lost=True,
 )
+@task_metrics(worker_type='whisper')
 def transcribe_local(
     self: Task,
     share_id: str,
