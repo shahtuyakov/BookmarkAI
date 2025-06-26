@@ -846,6 +846,98 @@ Created comprehensive Prometheus metrics instrumentation for Python ML workers:
 
 **Phase 1.1 COMPLETED**: Prometheus metrics fully implemented and verified working for Python ML workers.
 
+## Phase 2.1: Vector Embedding Service Planning (June 27, 2025)
+
+### Business Purpose
+Enable semantic search and content discovery through vector embeddings:
+- Semantic search: "Find bookmarks about machine learning" (meaning-based, not keyword)
+- Smart grouping: Automatically cluster related content
+- Recommendations: "More like this" functionality
+- Enhanced digests: Group by topic similarity instead of chronological
+
+### Implementation Plan
+
+#### 1. Model Selection Strategy
+- **Dynamic model selection based on content length**:
+  - < 1000 tokens: `text-embedding-3-small` ($0.00002/1K tokens)
+  - > 5000 tokens: `text-embedding-3-large` ($0.00013/1K tokens)
+  - Default: `text-embedding-3-small`
+- Flexibility to add more models in future
+
+#### 2. Content-Aware Chunking Strategy
+
+**Short Content (No Chunking)**:
+- TikTok captions, Tweets, short Reddit comments
+- Direct embedding of entire content
+
+**Transcript Chunking**:
+- Use existing Whisper segments as natural boundaries
+- 30-60 second chunks (3-8 sentences)
+- 10-15% overlap between chunks
+- Preserve timestamps for video moment search
+- Enables "find where someone said X"
+
+**Long-Form Content Chunking**:
+- Paragraph-based boundaries (2-3 paragraphs per chunk)
+- 400-600 tokens per chunk
+- Respect markdown headers
+- Max 20-30 chunks per document
+
+#### 3. Composite Embedding Approach
+
+**Summary Embeddings**:
+- Combine: Title + Description + Tags + First 30s of transcript
+- One per share for quick browsing
+- Used for feed browsing and high-level search
+
+**Content Embeddings**:
+- Individual chunks with context
+- Multiple per share for deep search
+- Includes timestamps for video content
+
+#### 4. Processing Pipeline
+
+**Immediate Processing**:
+- Short content (tweets, TikToks)
+- Users expect instant searchability
+
+**Transcript Chain**:
+- Triggered after transcription completes
+- Chain: transcribe → segment → chunk → embed
+- Single worker handles entire flow
+
+**Batch Optimization**:
+- Accumulate embeddings for 5-10 minutes
+- Batch up to 100 items per API call
+- Run during off-peak hours
+- Significant cost savings
+
+#### 5. Database Schema
+```sql
+-- Enhanced embeddings table
+embedding_type ENUM('summary', 'content', 'composite')
+chunk_metadata JSONB  -- position, timestamps, overlap info
+model_version TEXT    -- for future re-embedding
+token_count INTEGER   -- for cost tracking
+content_hash TEXT     -- for deduplication
+```
+
+#### 6. Implementation Phases
+
+**Phase 1**: Service structure with model selection
+**Phase 2**: Content type detection and routing
+**Phase 3**: Chunking strategies implementation
+**Phase 4**: Batch processing and cost optimization
+**Phase 5**: Composite embedding system
+**Phase 6**: Search integration preparation
+
+### Key Design Decisions
+- Prioritize short content first (immediate value)
+- Leverage existing Whisper segments for transcripts
+- Two-phase search: summary first, then deep content
+- Batch processing for cost efficiency
+- Content-aware model selection
+
 ### Production Safety Features Summary
 Both ML services now have comprehensive safety features:
 
