@@ -21,6 +21,7 @@ cd docker
 # Check which workers are running
 llm_running=false
 whisper_running=false
+vector_running=false
 
 if docker ps | grep -q bookmarkai-llm-worker; then
     llm_running=true
@@ -30,11 +31,16 @@ if docker ps | grep -q bookmarkai-whisper-worker; then
     whisper_running=true
 fi
 
+if docker ps | grep -q bookmarkai-vector-worker; then
+    vector_running=true
+fi
+
 # Report what's being stopped
-if [ "$llm_running" = true ] || [ "$whisper_running" = true ]; then
+if [ "$llm_running" = true ] || [ "$whisper_running" = true ] || [ "$vector_running" = true ]; then
     echo "Stopping:"
     [ "$llm_running" = true ] && echo "  - LLM Worker"
     [ "$whisper_running" = true ] && echo "  - Whisper Worker"
+    [ "$vector_running" = true ] && echo "  - Vector Worker"
 fi
 
 # Stop ML services

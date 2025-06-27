@@ -133,6 +133,78 @@ services:
       - bookmarkai-main  # To access postgres and redis
     restart: unless-stopped
 
+  # Vector Embedding Worker
+  vector-worker:
+    build:
+      context: ../python
+      dockerfile: vector-service/Dockerfile
+    container_name: bookmarkai-vector-worker
+    ports:
+      - '9093:9093'  # Prometheus metrics endpoint
+    environment:
+      # Celery configuration
+      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      
+      # Database configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: bookmarkai_dev
+      POSTGRES_USER: bookmarkai
+      POSTGRES_PASSWORD: bookmarkai_password
+      
+      # Redis for singleton locks
+      REDIS_URL: redis://redis:6379/0
+      
+      # Worker configuration
+      WORKER_CONCURRENCY: 4
+      WORKER_PREFETCH_MULTIPLIER: 8
+      WORKER_MAX_TASKS_PER_CHILD: 50
+      
+      # OpenAI configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      
+      # Model selection thresholds
+      VECTOR_SMALL_THRESHOLD: ${VECTOR_SMALL_THRESHOLD:-1000}
+      VECTOR_LARGE_THRESHOLD: ${VECTOR_LARGE_THRESHOLD:-5000}
+      VECTOR_DEFAULT_MODEL: ${VECTOR_DEFAULT_MODEL:-text-embedding-3-small}
+      
+      # Batch processing
+      VECTOR_BATCH_SIZE: ${VECTOR_BATCH_SIZE:-100}
+      
+      # Cost controls
+      VECTOR_DAILY_COST_LIMIT: ${VECTOR_DAILY_COST_LIMIT:-10.00}
+      VECTOR_HOURLY_COST_LIMIT: ${VECTOR_HOURLY_COST_LIMIT:-1.00}
+      VECTOR_BUDGET_STRICT_MODE: ${VECTOR_BUDGET_STRICT_MODE:-false}
+      
+      # Prometheus metrics
+      WORKER_TYPE: vector
+      SERVICE_NAME: vector-service
+      PROMETHEUS_METRICS_PORT: 9093
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_vector
+      
+      # Logging
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+    external_links:
+      - ml-rabbitmq:rabbitmq
+    volumes:
+      - ../python/vector-service:/app
+      - ../python/shared:/app/shared:ro
+    command: >
+      celery -A vector_service.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=ml.embed
+      --without-gossip
+      --without-heartbeat
+      --prefetch-multiplier=8
+      --max-tasks-per-child=50
+    networks:
+      - bookmarkai-ml
+      - bookmarkai-main  # To access postgres and redis
+    restart: unless-stopped
+
   # Flower for Celery monitoring (optional, for development)
   flower:
     image: mher/flower:2.0

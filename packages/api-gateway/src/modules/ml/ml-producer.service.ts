@@ -187,16 +187,38 @@ export class MLProducerService {
 
   async publishEmbeddingTask(
     shareId: string,
-    text: string,
-    dimensions?: number
+    content: {
+      text: string;
+      type?: 'caption' | 'transcript' | 'article' | 'comment' | 'tweet';
+      metadata?: Record<string, any>;
+    },
+    options?: {
+      embeddingType?: 'content' | 'summary' | 'composite';
+      forceModel?: 'text-embedding-3-small' | 'text-embedding-3-large';
+      chunkStrategy?: 'none' | 'transcript' | 'paragraph' | 'sentence' | 'fixed';
+      backend?: 'api' | 'local';
+    }
   ): Promise<void> {
+    // Determine backend (default to API for now)
+    const backend = options?.backend || 
+      (this.configService.get<string>('PREFERRED_EMBEDDING_BACKEND', 'api') as 'api' | 'local');
+
     const task: MLTaskPayload = {
       version: '1.0',
       taskType: 'embed_vectors',
       shareId,
       payload: {
-        text,
-        dimensions,
+        content: {
+          text: content.text,
+          type: content.type || 'caption',
+          metadata: content.metadata || {},
+        },
+        options: {
+          embedding_type: options?.embeddingType || 'content',
+          force_model: options?.forceModel,
+          chunk_strategy: options?.chunkStrategy,
+          backend,
+        },
       },
       metadata: {
         correlationId: uuidv4(),
@@ -208,7 +230,56 @@ export class MLProducerService {
     await this.publishTask(task);
   }
 
-  private async publishTask(task: MLTaskPayload): Promise<void> {
+  async publishBatchEmbeddingTask(
+    tasks: Array<{
+      shareId: string;
+      content: {
+        text: string;
+        type?: 'caption' | 'transcript' | 'article' | 'comment' | 'tweet';
+        metadata?: Record<string, any>;
+      };
+      options?: {
+        embeddingType?: 'content' | 'summary' | 'composite';
+        forceModel?: 'text-embedding-3-small' | 'text-embedding-3-large';
+        chunkStrategy?: 'none' | 'transcript' | 'paragraph' | 'sentence' | 'fixed';
+      };
+    }>
+  ): Promise<void> {
+    // Convert to format expected by the batch task
+    const batchPayload = tasks.map(t => ({
+      share_id: t.shareId,
+      content: {
+        text: t.content.text,
+        type: t.content.type || 'caption',
+        metadata: t.content.metadata || {},
+      },
+      options: {
+        embedding_type: t.options?.embeddingType || 'content',
+        force_model: t.options?.forceModel,
+        chunk_strategy: t.options?.chunkStrategy,
+      },
+    }));
+
+    const task: MLTaskPayload = {
+      version: '1.0',
+      taskType: 'embed_vectors',
+      shareId: 'batch-' + uuidv4(), // Special ID for batch tasks
+      payload: {
+        tasks: batchPayload,
+        isBatch: true,
+      },
+      metadata: {
+        correlationId: uuidv4(),
+        timestamp: Date.now(),
+        retryCount: 0,
+      },
+    };
+
+    // Override the task name for batch processing
+    await this.publishTask(task, 'vector_service.tasks.generate_embeddings_batch');
+  }
+
+  private async publishTask(task: MLTaskPayload, overrideTaskName?: string): Promise<void> {
     if (!this.channel) {
       throw new Error('RabbitMQ channel not initialized');
     }
@@ -231,8 +302,8 @@ export class MLProducerService {
       'embed_vectors': 'vector_service.tasks.generate_embeddings'
     };
     
-    // For transcription, check if we should use local queue
-    let celeryTaskName = taskNameMap[task.taskType] || task.taskType;
+    // Use override task name if provided (for batch tasks)
+    let celeryTaskName = overrideTaskName || taskNameMap[task.taskType] || task.taskType;
     if (task.taskType === 'transcribe_whisper' && 
         task.payload.options?.backend === 'local') {
       celeryTaskName = 'whisper.tasks.transcribe_local';
@@ -248,7 +319,9 @@ export class MLProducerService {
       id: task.metadata.correlationId,
       task: celeryTaskName,
       args: [],
-      kwargs: {
+      kwargs: task.payload.isBatch ? {
+        tasks: task.payload.tasks  // For batch tasks
+      } : {
         share_id: task.shareId,
         content: task.payload.content,
         options: task.payload.options

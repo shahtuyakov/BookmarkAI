@@ -68,12 +68,16 @@ ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-your_anthropic_api_key_here}
 # Whisper cost controls
 WHISPER_DAILY_COST_LIMIT=${WHISPER_DAILY_COST_LIMIT:-10.00}
 WHISPER_HOURLY_COST_LIMIT=${WHISPER_HOURLY_COST_LIMIT:-1.00}
+
+# Vector cost controls
+VECTOR_DAILY_COST_LIMIT=${VECTOR_DAILY_COST_LIMIT:-10.00}
+VECTOR_HOURLY_COST_LIMIT=${VECTOR_HOURLY_COST_LIMIT:-1.00}
 EOF
 fi
 
 # Start the ML worker containers
 echo -e "${YELLOW}Starting ML worker containers...${NC}"
-docker compose -f docker-compose.ml.yml up -d llm-worker whisper-worker
+docker compose -f docker-compose.ml.yml up -d llm-worker whisper-worker vector-worker
 
 # Wait for workers to start
 echo -e "${YELLOW}Waiting for workers to initialize...${NC}"
@@ -97,6 +101,14 @@ else
     workers_ok=false
 fi
 
+if docker ps | grep -q bookmarkai-vector-worker; then
+    echo -e "${GREEN}✓ Vector worker is running${NC}"
+else
+    echo -e "${RED}✗ Vector worker failed to start${NC}"
+    echo "Check logs with: docker logs bookmarkai-vector-worker"
+    workers_ok=false
+fi
+
 cd ..
 
 if [ "$workers_ok" = true ]; then
@@ -113,10 +125,12 @@ echo "  - RabbitMQ: localhost:5672"
 echo "  - RabbitMQ Management UI: http://localhost:15672 (user: ml, pass: ml_password)"
 echo "  - LLM Worker: Running in Docker (bookmarkai-llm-worker)"
 echo "  - Whisper Worker: Running in Docker (bookmarkai-whisper-worker)"
+echo "  - Vector Worker: Running in Docker (bookmarkai-vector-worker)"
 echo ""
 echo "To view worker logs:"
 echo "  docker logs -f bookmarkai-llm-worker      # LLM summarization logs"
 echo "  docker logs -f bookmarkai-whisper-worker  # Transcription logs"
+echo "  docker logs -f bookmarkai-vector-worker   # Vector embedding logs"
 echo ""
 echo "To monitor Celery tasks with Flower:"
 echo "  cd docker && docker-compose -f docker-compose.ml.yml --profile monitoring up flower"

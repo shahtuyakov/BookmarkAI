@@ -96,6 +96,7 @@ docker ps
 # View ML worker logs
 docker logs -f bookmarkai-llm-worker
 docker logs -f bookmarkai-whisper-worker
+docker logs -f bookmarkai-vector-worker
 
 # Access RabbitMQ Management UI
 # URL: http://localhost:15672
@@ -124,6 +125,14 @@ source .venv/bin/activate
 pip install -e ../shared
 pip install -e .
 celery -A whisper_service.celery_app worker --loglevel=info --queues=ml.transcribe
+
+# Run Vector worker locally for development
+cd python/vector-service
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ../shared
+pip install -e .
+celery -A vector_service.celery_app worker --loglevel=info --queues=ml.embed
 
 ### Database Management
 
@@ -159,6 +168,26 @@ SELECT * FROM transcription_costs;
 # View cost analytics
 SELECT * FROM transcription_cost_analytics;
 
+# Check vector embeddings and costs
+\d vector_costs
+SELECT * FROM vector_costs ORDER BY created_at DESC LIMIT 5;
+
+# View vector budget status
+SELECT * FROM vector_budget_status;
+
+# View hourly vector costs
+SELECT * FROM hourly_vector_costs ORDER BY hour DESC LIMIT 10;
+
+# Check embeddings with pgvector
+\d embeddings
+SELECT COUNT(*) FROM embeddings;
+
+# Find similar embeddings (example)
+SELECT share_id, 1 - (embedding <=> '[0.1, 0.2, ...]'::vector) AS similarity 
+FROM embeddings 
+ORDER BY embedding <=> '[0.1, 0.2, ...]'::vector 
+LIMIT 10;
+
 # Test Redis connectivity
 docker exec -it docker-redis-1 redis-cli ping
 
@@ -187,6 +216,30 @@ docker exec bookmarkai-whisper-worker env | grep OPENAI
 
 # Test video URL extraction (TikTok)
 yt-dlp --dump-json --no-download "https://www.tiktok.com/@user/video/123"
+
+### Vector Embedding Service
+
+# Test vector embedding task
+cd packages/api-gateway
+node test-embedding-task.js
+
+# Run full vector integration test
+./scripts/test-vector-integration.sh
+
+# Test vector migration
+./scripts/test-vector-migration.sh
+
+# Monitor vector worker metrics
+curl http://localhost:9093/metrics | grep ml_embeddings
+
+# Check vector service health
+docker exec bookmarkai-vector-worker python -c "from vector_service.tasks import health_check; print(health_check())"
+
+# Rebuild vector Docker image after changes
+docker compose -f docker/docker-compose.ml.yml build vector-worker
+
+# View vector worker environment
+docker exec bookmarkai-vector-worker env | grep VECTOR
 
 ### Infrastructure (AWS CDK)
 
@@ -258,7 +311,7 @@ npx husky uninstall
 ### Python ML Services:
 - `python/llm-service` - LLM summarization worker ✓
 - `python/whisper-service` - Audio/video transcription ✓ (OpenAI Whisper API)
-- `python/vector-service` - Text embeddings (planned)
+- `python/vector-service` - Text embeddings ✓ (OpenAI text-embedding-3)
 - `python/caption-service` - Image captioning (planned)
 - `python/shared` - Shared Celery configuration ✓
 

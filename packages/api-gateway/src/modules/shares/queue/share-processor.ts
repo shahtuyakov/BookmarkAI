@@ -94,6 +94,26 @@ export class ShareProcessor {
               }
             );
             this.logger.log(`Queued summarization task for share ${job.data.shareId}`);
+            
+            // Queue embedding task
+            await this.mlProducer.publishEmbeddingTask(
+              job.data.shareId,
+              {
+                text: fetchResult.content.text,
+                type: this.mapPlatformToContentType(share.platform as Platform),
+                metadata: {
+                  title: share.title || fetchResult.content.text?.substring(0, 100),
+                  url: share.url,
+                  author: fetchResult.metadata?.author,
+                  platform: share.platform,
+                }
+              },
+              {
+                embeddingType: 'content',
+                // Let the service decide the chunk strategy based on content type
+              }
+            );
+            this.logger.log(`Queued embedding task for share ${job.data.shareId}`);
           } catch (mlError) {
             // Log but don't fail the whole process if ML queueing fails
             this.logger.error(`Failed to queue ML task for share ${job.data.shareId}: ${mlError.message}`);
@@ -217,6 +237,24 @@ export class ShareProcessor {
    */
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Map platform to content type for embeddings
+   */
+  private mapPlatformToContentType(platform: Platform): 'caption' | 'transcript' | 'article' | 'comment' | 'tweet' {
+    switch (platform) {
+      case Platform.TIKTOK:
+        return 'caption';
+      case Platform.TWITTER:
+        return 'tweet';
+      case Platform.REDDIT:
+        return 'comment';
+      case Platform.YOUTUBE:
+        return 'transcript';
+      default:
+        return 'article';
+    }
   }
 
   /**
