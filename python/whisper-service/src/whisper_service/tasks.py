@@ -152,7 +152,10 @@ def transcribe_api(
         # Phase 1: Download media
         logger.info(f"Downloading media from: {media_url}")
         video_path = audio_processor.download_media(media_url)
-        temp_files.append(video_path)
+        
+        # Only add to temp_files if it's a downloaded file, not a local file
+        if not os.path.isfile(media_url):
+            temp_files.append(video_path)
         
         # Validate downloaded file
         local_validation = preflight_service.validate_local_file(video_path)

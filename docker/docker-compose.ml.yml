@@ -119,6 +119,7 @@ services:
     volumes:
       - ../python/whisper-service:/app/whisper-service
       - ../python/shared:/app/shared:ro
+      - /tmp/bookmarkai-videos:/tmp/bookmarkai-videos  # Shared video storage with local API gateway
     command: >
       celery -A whisper_service.celery_app worker
       --loglevel=info
@@ -191,6 +192,7 @@ services:
     volumes:
       - ../python/vector-service:/app
       - ../python/shared:/app/shared:ro
+      - /tmp/bookmarkai-videos:/tmp/bookmarkai-videos  # Bind mount to local filesystem (for future use)
     command: >
       celery -A vector_service.celery_app worker
       --loglevel=info
@@ -221,6 +223,8 @@ services:
       - bookmarkai-ml
     profiles:
       - monitoring
+
+# No named volumes needed - using bind mounts to local filesystem
 
 networks:
   bookmarkai-ml:

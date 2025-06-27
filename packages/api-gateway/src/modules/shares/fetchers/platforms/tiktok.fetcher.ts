@@ -84,24 +84,35 @@ export class TikTokFetcher extends BaseContentFetcher {
         );
       }
 
-      // Try to extract the actual video URL using yt-dlp
+      // Download the video immediately using yt-dlp
       let videoUrl: string | undefined;
+      let localVideoPath: string | undefined;
       let duration: number | undefined;
+      let fileSize: number | undefined;
       
       try {
-        const ytDlpResult = await this.ytDlpService.extractVideoInfo(request.url);
+        this.logger.log(`Downloading TikTok video for immediate processing: ${request.url}`);
+        const ytDlpResult = await this.ytDlpService.extractVideoInfo(request.url, true); // Download video
+        
         if (ytDlpResult) {
-          videoUrl = ytDlpResult.url;
+          videoUrl = ytDlpResult.url;          // Original URL for reference
+          localVideoPath = ytDlpResult.localPath; // Local file path for processing
           duration = ytDlpResult.duration;
-          this.logger.log(`Successfully extracted video URL using yt-dlp for ${request.url}`);
+          fileSize = ytDlpResult.fileSize;
+          
+          if (localVideoPath) {
+            this.logger.log(`Successfully downloaded TikTok video to: ${localVideoPath}`);
+          } else {
+            this.logger.warn(`Video download completed but no local file found`);
+          }
         } else {
           this.logger.warn(
-            `yt-dlp could not extract video URL from TikTok. ` +
+            `yt-dlp could not download TikTok video. ` +
             `This may be due to TikTok's anti-bot measures or regional restrictions.`
           );
         }
       } catch (extractError) {
-        this.logger.warn(`Failed to extract video URL with yt-dlp: ${extractError.message}`);
+        this.logger.warn(`Failed to download TikTok video with yt-dlp: ${extractError.message}`);
       }
 
       // Build standardized response
@@ -112,9 +123,12 @@ export class TikTokFetcher extends BaseContentFetcher {
         },
         media: {
           type: 'video',
-          url: videoUrl, // Now we include the actual video URL!
+          url: localVideoPath || videoUrl, // Prioritize local file path for processing
+          originalUrl: videoUrl,            // Keep original URL for reference
           thumbnailUrl: data.thumbnail_url,
-          duration: duration, // Duration from yt-dlp
+          duration: duration,               // Duration from yt-dlp
+          fileSize: fileSize,              // File size in bytes
+          isLocalFile: !!localVideoPath,   // Flag to indicate local file vs URL
         },
         metadata: {
           author: data.author_name,
@@ -124,7 +138,9 @@ export class TikTokFetcher extends BaseContentFetcher {
         },
         platformData: {
           ...data,
-          extractedVideoUrl: videoUrl, // Include in platform data for debugging
+          extractedVideoUrl: videoUrl,     // Original extracted URL
+          localVideoPath: localVideoPath, // Downloaded file path
+          downloadSuccess: !!localVideoPath, // Download status for debugging
         },
         hints: {
           hasNativeCaptions: true, // TikTok videos often have captions

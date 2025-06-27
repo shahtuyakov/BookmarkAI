@@ -2,9 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { spawn } from 'child_process';
 import { ConfigService } from '../../../config/services/config.service';
 import { Redis } from 'ioredis';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
 
 export interface YtDlpResult {
-  url: string;
+  url: string;           // Original URL for reference
+  localPath?: string;    // Path to downloaded file
   duration?: number;
   title?: string;
   description?: string;
@@ -12,6 +16,7 @@ export interface YtDlpResult {
   uploader?: string;
   uploadDate?: string;
   viewCount?: number;
+  fileSize?: number;     // Size of downloaded file in bytes
   formats?: Array<{
     format_id: string;
     ext: string;
@@ -28,8 +33,9 @@ export class YtDlpService {
   private readonly logger = new Logger(YtDlpService.name);
   private readonly cachePrefix = 'ytdlp:';
   private readonly cacheTTL = 3600; // 1 hour
-  private readonly timeout = 30000; // 30 seconds
+  private readonly timeout = 60000; // 60 seconds (increased for downloads)
   private redisClient: Redis;
+  private readonly downloadDir: string;
   
   // Metrics
   private metrics = {
@@ -44,6 +50,10 @@ export class YtDlpService {
   constructor(
     private readonly configService: ConfigService,
   ) {
+    // Set up download directory
+    this.downloadDir = this.configService.get('YTDLP_DOWNLOAD_DIR', '/tmp/bookmarkai-videos');
+    this.ensureDownloadDir();
+    
     // Create Redis client for caching
     this.redisClient = new Redis({
       host: this.configService.get('REDIS_HOST', 'localhost'),
@@ -57,9 +67,9 @@ export class YtDlpService {
   }
 
   /**
-   * Extract video information using yt-dlp
+   * Download video and extract information using yt-dlp
    */
-  async extractVideoInfo(url: string): Promise<YtDlpResult | null> {
+  async extractVideoInfo(url: string, downloadVideo: boolean = true): Promise<YtDlpResult | null> {
     this.metrics.totalRequests++;
     
     // Sanitize URL
@@ -81,17 +91,24 @@ export class YtDlpService {
     this.metrics.cacheMisses++;
 
     try {
-      this.logger.log(`Extracting video info for: ${sanitizedUrl}`);
+      this.logger.log(`${downloadVideo ? 'Downloading video and extracting info' : 'Extracting video info'} for: ${sanitizedUrl}`);
       const startTime = Date.now();
-      const result = await this.runYtDlp(sanitizedUrl);
+      const result = await this.runYtDlp(sanitizedUrl, downloadVideo);
       const extractionTime = Date.now() - startTime;
       
       if (result) {
         this.metrics.successfulExtractions++;
-        this.logger.log(`Extraction completed in ${extractionTime}ms`);
+        this.logger.log(`${downloadVideo ? 'Download and extraction' : 'Extraction'} completed in ${extractionTime}ms`);
+        if (result.localPath) {
+          this.logger.log(`Video downloaded to: ${result.localPath}`);
+        }
         
-        // Cache the result
-        await this.saveToCache(sanitizedUrl, result);
+        // Cache the result (but don't cache local paths across restarts)
+        const cacheResult = { ...result };
+        if (downloadVideo) {
+          delete cacheResult.localPath;
+        }
+        await this.saveToCache(sanitizedUrl, cacheResult);
       } else {
         this.metrics.failedExtractions++;
       }
@@ -112,18 +129,35 @@ export class YtDlpService {
   /**
    * Run yt-dlp subprocess
    */
-  private async runYtDlp(url: string): Promise<YtDlpResult | null> {
+  private async runYtDlp(url: string, downloadVideo: boolean = true): Promise<YtDlpResult | null> {
     return new Promise((resolve, reject) => {
-      const args = [
-        '--dump-json',           // Output JSON without downloading
-        '--no-playlist',         // Don't download playlists
-        '--no-warnings',         // Suppress warnings
-        '--quiet',               // Suppress progress
-        '--no-check-certificate', // Skip SSL verification (for some sites)
+      const videoId = this.generateVideoId(url);
+      const outputTemplate = path.join(this.downloadDir, `${videoId}.%(ext)s`);
+      
+      const args = downloadVideo ? [
+        '--format', 'best[height<=720]/best',  // Limit quality to 720p for efficiency
+        '--output', outputTemplate,             // Save to specific location
+        '--write-info-json',                   // Also write metadata JSON
+        '--no-playlist',                       // Don't download playlists
+        '--no-warnings',                       // Suppress warnings
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        '--no-check-certificate',              // Skip SSL verification
+        url
+      ] : [
+        '--dump-json',                         // Output JSON without downloading
+        '--no-playlist',                       // Don't download playlists
+        '--no-warnings',                       // Suppress warnings
+        '--quiet',                             // Suppress progress
+        '--no-check-certificate',              // Skip SSL verification
         '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         url
       ];
 
+      // Debug: Log the exact command being executed
+      this.logger.log(`Executing yt-dlp with args: ${JSON.stringify(args)}`);
+      this.logger.log(`Output template: ${outputTemplate}`);
+      this.logger.log(`Video ID: ${videoId}`);
+      
       const ytdlp = spawn('yt-dlp', args);
       let stdout = '';
       let stderr = '';
@@ -159,6 +193,11 @@ export class YtDlpService {
           return; // Already rejected due to timeout
         }
 
+        // Enhanced debugging
+        this.logger.log(`yt-dlp process exited with code: ${code}`);
+        this.logger.log(`yt-dlp stderr: ${stderr}`);
+        this.logger.log(`yt-dlp stdout: ${stdout.substring(0, 200)}...`);
+
         if (code !== 0) {
           this.logger.error(`yt-dlp exited with code ${code}: ${stderr}`);
           resolve(null);
@@ -166,9 +205,45 @@ export class YtDlpService {
         }
 
         try {
-          const data = JSON.parse(stdout);
-          const result = this.parseYtDlpOutput(data);
-          resolve(result);
+          if (downloadVideo) {
+            // When downloading, parse the info JSON file
+            const infoJsonPath = path.join(this.downloadDir, `${videoId}.info.json`);
+            
+            // Debug: List all files in download directory
+            try {
+              const files = fs.readdirSync(this.downloadDir);
+              this.logger.log(`Files in download dir: ${files.join(', ')}`);
+              this.logger.log(`Looking for info file: ${infoJsonPath}`);
+            } catch (err) {
+              this.logger.error(`Error reading download directory: ${err.message}`);
+            }
+            
+            if (fs.existsSync(infoJsonPath)) {
+              const infoData = JSON.parse(fs.readFileSync(infoJsonPath, 'utf8'));
+              const result = this.parseYtDlpOutput(infoData, videoId);
+              
+              // Clean up info JSON file
+              fs.unlinkSync(infoJsonPath);
+              
+              // Debug: Verify video file still exists after processing
+              if (result.localPath && fs.existsSync(result.localPath)) {
+                const stats = fs.statSync(result.localPath);
+                this.logger.log(`Video file confirmed after processing: ${result.localPath} (${stats.size} bytes)`);
+              } else {
+                this.logger.error(`Video file missing after processing: ${result.localPath}`);
+              }
+              
+              resolve(result);
+            } else {
+              this.logger.error(`Info JSON file not found after download: ${infoJsonPath}`);
+              resolve(null);
+            }
+          } else {
+            // When not downloading, parse stdout JSON
+            const data = JSON.parse(stdout);
+            const result = this.parseYtDlpOutput(data);
+            resolve(result);
+          }
         } catch (error) {
           this.logger.error(`Failed to parse yt-dlp output: ${error.message}`);
           resolve(null);
@@ -180,7 +255,7 @@ export class YtDlpService {
   /**
    * Parse yt-dlp JSON output
    */
-  private parseYtDlpOutput(data: any): YtDlpResult {
+  private parseYtDlpOutput(data: any, videoId?: string): YtDlpResult {
     // Find the best video format
     let videoUrl = data.url || data.webpage_url;
     
@@ -200,7 +275,7 @@ export class YtDlpService {
       }
     }
 
-    return {
+    const result: YtDlpResult = {
       url: videoUrl,
       duration: data.duration,
       title: data.title,
@@ -219,6 +294,22 @@ export class YtDlpService {
         url: f.url,
       })),
     };
+    
+    // If we downloaded the video, find the local file
+    if (videoId) {
+      const localPath = this.findDownloadedFile(videoId);
+      if (localPath) {
+        result.localPath = localPath;
+        try {
+          const stats = fs.statSync(localPath);
+          result.fileSize = stats.size;
+        } catch (error) {
+          this.logger.warn(`Could not get file size for ${localPath}: ${error.message}`);
+        }
+      }
+    }
+    
+    return result;
   }
 
   /**
@@ -324,6 +415,79 @@ export class YtDlpService {
     };
   }
 
+  /**
+   * Ensure download directory exists
+   */
+  private ensureDownloadDir(): void {
+    try {
+      if (!fs.existsSync(this.downloadDir)) {
+        fs.mkdirSync(this.downloadDir, { recursive: true });
+        this.logger.log(`Created download directory: ${this.downloadDir}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to create download directory: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * Generate a unique video ID for file naming
+   */
+  private generateVideoId(url: string): string {
+    const hash = crypto.createHash('sha256').update(url).digest('hex');
+    return hash.substring(0, 16) + '_' + Date.now();
+  }
+  
+  /**
+   * Find the downloaded file with the given video ID
+   */
+  private findDownloadedFile(videoId: string): string | null {
+    try {
+      const files = fs.readdirSync(this.downloadDir);
+      const videoFile = files.find(file => 
+        file.startsWith(videoId) && 
+        !file.endsWith('.info.json') &&
+        (file.endsWith('.mp4') || file.endsWith('.webm') || file.endsWith('.mkv'))
+      );
+      
+      if (videoFile) {
+        return path.join(this.downloadDir, videoFile);
+      }
+    } catch (error) {
+      this.logger.error(`Error finding downloaded file: ${error.message}`);
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Clean up old downloaded files (older than 24 hours)
+   */
+  async cleanupOldFiles(): Promise<void> {
+    try {
+      const files = fs.readdirSync(this.downloadDir);
+      const now = Date.now();
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      
+      let deletedCount = 0;
+      for (const file of files) {
+        const filePath = path.join(this.downloadDir, file);
+        const stats = fs.statSync(filePath);
+        
+        if (now - stats.mtime.getTime() > maxAge) {
+          fs.unlinkSync(filePath);
+          deletedCount++;
+        }
+      }
+      
+      if (deletedCount > 0) {
+        this.logger.log(`Cleaned up ${deletedCount} old video files`);
+      }
+    } catch (error) {
+      this.logger.error(`Error during cleanup: ${error.message}`);
+    }
+  }
+  
   /**
    * Clean up resources
    */

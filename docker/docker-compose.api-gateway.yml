@@ -31,8 +31,14 @@ services:
       # Mount source code for hot reload in development
       - ../packages/api-gateway/src:/app/packages/api-gateway/src
       - ../packages/sdk/src:/app/packages/sdk/src
+      # Shared video storage
+      - bookmarkai-videos:/tmp/bookmarkai-videos
     networks:
       - bookmarkai-network
+
+volumes:
+  bookmarkai-videos:
+    driver: local
 
 networks:
   bookmarkai-network:

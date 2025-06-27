@@ -23,19 +23,35 @@ class AudioProcessor:
         self.temp_files: List[str] = []
     
     def download_media(self, media_url: str) -> str:
-        """Download media file to temporary location.
+        """Download media file or handle local file path.
         
         Args:
-            media_url: URL of the media file (HTTP/HTTPS or S3)
+            media_url: URL of the media file (HTTP/HTTPS or S3) or local file path
             
         Returns:
-            Path to downloaded file
+            Path to downloaded file or original local file
             
         Raises:
             ValueError: If URL scheme is not supported
             requests.HTTPError: If download fails
+            FileNotFoundError: If local file doesn't exist
         """
+        # Check if it's a local file path
+        if os.path.isfile(media_url):
+            logger.info(f"Using local file: {media_url}")
+            # Verify the file exists and is readable
+            if not os.access(media_url, os.R_OK):
+                raise ValueError(f"Local file is not readable: {media_url}")
+            return media_url
+        
+        # Check if it's an absolute path that doesn't exist
+        if os.path.isabs(media_url):
+            raise FileNotFoundError(f"Local file not found: {media_url}")
+        
+        # Parse as URL
         parsed_url = urlparse(media_url)
+        if not parsed_url.scheme:
+            raise ValueError(f"Invalid URL or file path: {media_url}")
         
         # Create temp file with appropriate extension
         suffix = self._get_file_extension(media_url)

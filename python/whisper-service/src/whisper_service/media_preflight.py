@@ -71,7 +71,39 @@ class MediaPreflightService:
             'metadata': {}
         }
         
-        # Basic URL validation
+        # Check if it's a local file path first
+        if os.path.isfile(url):
+            # Validate local file
+            try:
+                if not os.access(url, os.R_OK):
+                    result['valid'] = False
+                    result['reason'] = f"Local file is not readable: {url}"
+                    return result
+                
+                # Get file metadata
+                file_stats = os.stat(url)
+                size_mb = file_stats.st_size / (1024 * 1024)
+                result['metadata']['size_mb'] = round(size_mb, 2)
+                result['metadata']['is_local_file'] = True
+                
+                # Try to get media duration using ffprobe
+                try:
+                    probe_result = self._probe_media(url)
+                    if probe_result and 'duration_seconds' in probe_result:
+                        result['metadata']['duration_seconds'] = probe_result['duration_seconds']
+                        result['metadata'].update(probe_result)
+                except Exception as e:
+                    result['warnings'].append(f"Could not probe media file: {str(e)}")
+                
+                # Local file validation complete - return early
+                return result
+                
+            except Exception as e:
+                result['valid'] = False
+                result['reason'] = f"Error accessing local file: {str(e)}"
+                return result
+        
+        # Basic URL validation for remote URLs only
         try:
             parsed = urlparse(url)
             if not parsed.scheme in ['http', 'https']:
@@ -214,9 +246,9 @@ class MediaPreflightService:
             if 'format_name' in format_info:
                 metadata['format_name'] = format_info['format_name']
             
-            # Audio stream information
+            # Audio stream information - since we use -select_streams a:0, all returned streams are audio
             streams = probe_data.get('streams', [])
-            audio_streams = [s for s in streams if s.get('codec_type') == 'audio']
+            audio_streams = streams  # All streams are audio since we filtered with -select_streams a:0
             metadata['audio_streams'] = len(audio_streams)
             
             if audio_streams:

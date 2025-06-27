@@ -357,6 +357,129 @@ Complete vector embedding service following ADR-025 patterns:
 - ✅ Batch processing operational
 - ✅ UUID issue resolved - now using valid UUIDs
 - ✅ Database persistence working (test failures are expected for non-existent share_ids)
+- ✅ Full production integration working with TikTok videos (June 27, 2025)
+
+## Production TikTok Video Processing Integration (June 27, 2025)
+
+### Issues Encountered & Resolved
+
+#### 1. TikTok Video Transcription Chain ✅
+**Problem**: TikTok videos were being processed but Whisper worker was failing to transcribe them.
+
+**Root Cause Analysis**:
+- API Gateway downloads videos to `/tmp/bookmarkai-videos/` locally
+- Whisper worker runs in Docker container with separate filesystem
+- Docker volume `bookmarkai-videos` was isolated from local filesystem
+- Whisper worker couldn't access downloaded video files
+
+**Investigation Process**:
+1. Confirmed video download working: API Gateway successfully downloaded TikTok videos via yt-dlp
+2. Identified Whisper worker error: "Unsupported URL scheme" on local file paths
+3. Found Docker volume isolation: Worker could see `/tmp/bookmarkai-videos/` but it was empty
+4. Local filesystem had videos, Docker volume was separate
+
+**Solution Implemented**:
+1. **Fixed MediaPreflightService** (`python/whisper-service/src/whisper_service/media_preflight.py`):
+   - Enhanced `validate_url()` method to handle local file paths properly
+   - Added early return for local file validation to skip URL parsing
+   - Fixed method name reference (`_probe_media` vs `probe_media_file`)
+
+2. **Fixed Docker Volume Configuration** (`docker/docker-compose.ml.yml`):
+   - Changed from Docker named volume to bind mount: `/tmp/bookmarkai-videos:/tmp/bookmarkai-videos`
+   - Updated both whisper-worker and vector-worker configurations
+   - Removed named volume definition (no longer needed)
+
+3. **Video Download Implementation** (already working):
+   - YtDlpService downloads videos immediately instead of storing URLs
+   - TikTok fetcher uses local file paths in media objects
+   - Audio processor handles local file paths correctly
+
+### Technical Implementation Details
+
+#### File Path Changes Made:
+1. **MediaPreflightService Fix**:
+```python
+# Check if it's a local file path first
+if os.path.isfile(url):
+    # Validate local file and return early
+    # Skip URL validation for local files
+```
+
+2. **Docker Bind Mount Configuration**:
+```yaml
+# Before: Named volume (isolated)
+volumes:
+  - bookmarkai-videos:/tmp/bookmarkai-videos
+
+# After: Bind mount (shared with host)
+volumes:
+  - /tmp/bookmarkai-videos:/tmp/bookmarkai-videos
+```
+
+#### Verification Results:
+- ✅ API Gateway downloads TikTok videos to `/tmp/bookmarkai-videos/`
+- ✅ Whisper worker can now access the same directory via bind mount
+- ✅ Local file validation works correctly in MediaPreflightService
+- ✅ End-to-end TikTok transcription pipeline functional
+
+### Vector Worker Success ✅
+**Confirmed Working**:
+- Successfully processed embedding task for TikTok content
+- Generated embeddings using OpenAI text-embedding-3-small
+- Calculated cost correctly: $0.000000 for 9 tokens
+- Saved embeddings to database successfully
+- Processing time: ~5 seconds total
+
+### LLM Worker Expected Behavior ✅
+**Content Validation Working**:
+- Correctly rejected TikTok caption as too short (29 characters, 6 words)
+- Content validation thresholds working as designed (minimum 50 chars, 10 words)
+- This is expected behavior for short social media captions
+
+### Current Architecture Status
+
+#### Video Processing Pipeline (Production Ready):
+1. **TikTok URL** → **yt-dlp extraction** → **Local video download**
+2. **Local video file** → **Whisper worker** (via bind mount) → **Audio transcription**
+3. **Extracted content** → **Vector worker** → **Embeddings generation**
+4. **Caption text** → **LLM worker** → **Content validation** (may reject if too short)
+
+#### Storage Strategy Notes:
+- **Testing Phase**: Using local filesystem storage (`/tmp/bookmarkai-videos/`)
+- **Future Production**: Will migrate to database-based storage for persistence and scalability
+- **Current Approach**: Bind mounts enable Docker workers to access locally downloaded files
+- **Cleanup Strategy**: Manual cleanup for now, automated cleanup planned for database migration
+
+### Production Integration Results (June 27, 2025)
+
+#### Successful End-to-End TikTok Processing:
+1. **Video Download**: YtDlpService successfully downloads TikTok videos to local filesystem
+2. **Whisper Transcription**: Successfully transcribed 52.5s TikTok video for $0.0053
+3. **Vector Embeddings**: Successfully generated embeddings for TikTok captions
+4. **LLM Summarization**: Correctly rejects short TikTok content (expected behavior)
+
+#### Key Fixes Implemented:
+1. **Fixed Whisper File Cleanup Bug**:
+   - Whisper worker was deleting original video files after processing
+   - Fixed by not adding local files to temp_files cleanup list
+   - Files now persist correctly for future processing
+
+2. **Fixed Audio Detection Bug**:
+   - ffprobe with `-select_streams a:0` doesn't include `codec_type` field
+   - Fixed media_preflight.py to not filter by codec_type
+   - Audio streams now correctly detected in TikTok videos
+
+3. **Docker Volume Configuration**:
+   - Using bind mount `/tmp/bookmarkai-videos:/tmp/bookmarkai-videos`
+   - Enables local API gateway and Docker workers to share files
+   - Working correctly for development environment
+
+### Next Steps Recommendations:
+1. **Production File Storage**: Migrate from local filesystem to S3 or database storage
+2. **Cleanup Strategy**: Implement automated cleanup of temporary video files (24hr retention)
+3. **Error Monitoring**: Add alerts for transcription failures and retries
+4. **Cost Optimization**: Monitor actual costs and adjust budget limits accordingly
+5. **Performance Tuning**: Optimize worker concurrency based on load patterns
 
 ### Quick Start
 ```bash
