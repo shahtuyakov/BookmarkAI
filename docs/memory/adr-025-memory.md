@@ -474,12 +474,150 @@ volumes:
    - Enables local API gateway and Docker workers to share files
    - Working correctly for development environment
 
-### Next Steps Recommendations:
-1. **Production File Storage**: Migrate from local filesystem to S3 or database storage
-2. **Cleanup Strategy**: Implement automated cleanup of temporary video files (24hr retention)
-3. **Error Monitoring**: Add alerts for transcription failures and retries
-4. **Cost Optimization**: Monitor actual costs and adjust budget limits accordingly
-5. **Performance Tuning**: Optimize worker concurrency based on load patterns
+## MVP Implementation Roadmap (API-First Strategy)
+
+Based on the decision to focus on API solutions for MVP and defer local models, here's the prioritized implementation roadmap:
+
+### 🔴 Priority 1: Production Infrastructure (Critical for MVP)
+
+#### 1.1 RabbitMQ Production Deployment
+- [ ] Deploy 3-node quorum cluster for high availability
+- [ ] Configure Kubernetes StatefulSet
+- [ ] Set up persistent volumes for durability
+- [ ] Configure resource limits (vm_memory_high_watermark=0.6)
+- [ ] Implement proper backup strategy
+
+#### 1.2 Connection Reliability
+- [ ] Enable publisher confirms (`confirm_publish: true`)
+- [ ] Implement reconnect wrapper for connection drops
+- [ ] Add connection pooling
+- [ ] Add retry logic for failed publishes
+- [ ] Implement circuit breaker pattern
+
+#### 1.3 File Storage Migration
+- [ ] Create S3 bucket for video storage
+- [ ] Update YtDlpService to upload to S3
+- [ ] Update workers to download from S3
+- [ ] Implement cleanup lifecycle policies
+
+### 🟠 Priority 2: Observability & Monitoring (Essential for Operations)
+
+#### 2.1 Distributed Tracing
+- [ ] Integrate OpenTelemetry SDK
+- [ ] Implement W3C Trace Context propagation in messages
+- [ ] Deploy Jaeger backend
+- [ ] Set up end-to-end request tracing (API → Queue → Worker → DB)
+
+#### 2.2 Production Monitoring
+- [ ] Create Grafana dashboards for:
+  - [ ] Queue depth and message rates
+  - [ ] Worker performance and error rates
+  - [ ] Cost tracking and budget usage
+  - [ ] API latency and throughput
+- [ ] Configure alerts for:
+  - [ ] Queue backlog (>100 messages)
+  - [ ] High error rates (>5%)
+  - [ ] Budget threshold warnings
+  - [ ] Worker health issues
+
+#### 2.3 Node.js Metrics
+- [ ] Add Prometheus metrics to ML Producer
+- [ ] Track publisher success/failure rates
+- [ ] Monitor queue publish latency
+- [ ] Integrate with existing API metrics
+
+### 🟡 Priority 3: Scaling & Performance (Important for Growth)
+
+#### 3.1 KEDA Autoscaling
+- [ ] Install KEDA operator
+- [ ] Create ScaledObject configs for each worker type
+- [ ] Configure queue-based scaling triggers
+- [ ] Set proper cooldown periods (>300s)
+- [ ] Implement cost-aware scaling policies
+
+#### 3.2 Vector Search API
+- [ ] Create similarity search endpoints
+- [ ] Implement semantic search functionality
+- [ ] Build "More like this" recommendations
+- [ ] Add search result ranking
+- [ ] Implement caching layer for common queries
+
+#### 3.3 Batch Processing Optimization
+- [ ] Implement batch embedding API calls
+- [ ] Add scheduled batch processing
+- [ ] Configure off-peak processing for cost savings
+
+### 🟢 Priority 4: Quality & Governance (Nice to Have for MVP)
+
+#### 4.1 Contract Validation
+- [ ] Define JSON schema definitions
+- [ ] Add Zod validation in TypeScript
+- [ ] Enhance Pydantic validation in Python
+- [ ] Implement contract versioning strategy
+- [ ] Add breaking change detection
+
+#### 4.2 Comprehensive Testing
+- [ ] Set up load testing framework
+- [ ] Add chaos engineering tests
+- [ ] Create performance benchmarks
+- [ ] Test duplicate submission handling at scale
+- [ ] Verify worker crash recovery
+
+#### 4.3 Cost Optimization
+- [ ] Build cost analysis dashboards
+- [ ] Analyze usage patterns
+- [ ] Optimize model selection logic
+- [ ] Set up automated cost alerts
+- [ ] Implement budget forecasting
+
+### 🔵 Priority 5: Future Enhancements (Post-MVP)
+
+#### 5.1 Enhanced Analytics
+- [ ] Add advanced cost breakdowns
+- [ ] Build usage trends and predictions
+- [ ] Compare model performance
+- [ ] Add user behavior analytics
+
+#### 5.2 Content Intelligence
+- [ ] Implement content categorization
+- [ ] Add duplicate content detection
+- [ ] Create content quality scoring
+- [ ] Add language detection
+
+#### 5.3 Performance Optimizations
+- [ ] Add Redis caching for embeddings
+- [ ] Optimize database queries
+- [ ] Set up CDN for media files
+- [ ] Implement response compression
+
+### ⚫ Deferred: Local Model Support (Not MVP)
+These items from the ADR are explicitly deferred:
+- GPU infrastructure and node configuration
+- Local Whisper implementation
+- Local LLM implementation (Ollama/llama.cpp)
+- Local embedding models
+- GPU health checks and CUDA management
+- GPU-specific autoscaling policies
+
+### Summary by Timeline
+
+**For MVP Launch (Priorities 1-2)**:
+- Production RabbitMQ cluster
+- S3 file storage
+- Connection reliability
+- Basic monitoring and alerts
+- Distributed tracing
+
+**For Scale (Priority 3)**:
+- KEDA autoscaling
+- Vector search API
+- Batch optimizations
+
+**For Maturity (Priorities 4-5)**:
+- Contract governance
+- Comprehensive testing
+- Advanced analytics
+- Performance optimizations
 
 ### Quick Start
 ```bash

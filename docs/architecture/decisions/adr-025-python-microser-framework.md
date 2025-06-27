@@ -1,7 +1,8 @@
 # ADR-025: Python ML Microservice Framework & Messaging Architecture
 
-* **Status**: **Proposed**
+* **Status**: **Accepted** (API-First Implementation)
 * **Date**: 2025-06-22
+* **Updated**: 2025-06-27
 * **Authors**: @bookmarkai-backend, @bookmarkai-ml
 * **Supersedes**: —
 * **Superseded by**: —
@@ -30,6 +31,12 @@ The task map names this as **Task 2.5**: "Set up Python microservice framework (
 ---
 
 ## 2 — Decision
+
+**Update (2025-06-27)**: We have decided to adopt an **API-first strategy** for the MVP, using cloud ML services (OpenAI Whisper API, GPT models, text-embedding models) exclusively. Local model support (GPU infrastructure, Ollama, llama.cpp) is deferred until we have clear demand signals and cost justification. This allows us to:
+- Launch faster with zero GPU infrastructure complexity
+- Validate product-market fit before infrastructure investment
+- Gather usage data to make informed GPU vs API cost decisions
+- Maintain flexibility to add local models when economics justify it
 
 We will:
 
@@ -100,11 +107,18 @@ We will:
 
 ### 3.2 Queue & Worker Topology
 
-| Queue | Binding key | Worker image | Concurrency | Prefetch | Node selector |
-|-------|-------------|--------------|-------------|----------|---------------|
-| `ml.transcribe` | `transcribe_whisper` | `bookmarkai/worker-whisper` | 1 | 1 | GPU nodes (`nvidia.com/gpu=true`) |
-| `ml.summarize` | `summarize_llm` | `bookmarkai/worker-llm` | 4 | 8 | CPU pool |
-| `ml.embed` | `embed_vectors` | `bookmarkai/worker-vec` | 4 | 8 | CPU pool |
+**Update (2025-06-27)**: All workers currently use API-based services, running on CPU-only infrastructure:
+
+| Queue | Binding key | Worker image | Concurrency | Prefetch | API Service | Node selector |
+|-------|-------------|--------------|-------------|----------|-------------|---------------|
+| `ml.transcribe` | `transcribe_whisper` | `bookmarkai/worker-whisper` | 4 | 8 | OpenAI Whisper API | CPU pool |
+| `ml.summarize` | `summarize_llm` | `bookmarkai/worker-llm` | 4 | 8 | OpenAI GPT API | CPU pool |
+| `ml.embed` | `embed_vectors` | `bookmarkai/worker-vec` | 4 | 8 | OpenAI Embeddings API | CPU pool |
+
+Future local model queues (deferred):
+- `ml.transcribe_local` - For GPU-based Faster-Whisper (when implemented)
+- `ml.summarize_local` - For local LLM via Ollama/llama.cpp (when implemented)
+- `ml.embed_local` - For local embedding models (when implemented)
 
 ### 3.3 Worker Configuration Standards
 
@@ -120,8 +134,8 @@ celery -A common.celery_app worker \
 
 **Critical notes**:
 - Keep `mingle` enabled (disabling causes pre-"ready" hang)
-- GPU workers: use prefork pool with `concurrency=1`, `prefetch=1`
-- CPU workers: can use higher concurrency and prefetch
+- ~~GPU workers: use prefork pool with `concurrency=1`, `prefetch=1`~~ (Deferred - no GPU workers in MVP)
+- API workers: can use higher concurrency (4-8) and prefetch (8-16)
 - The `max-tasks-per-child=50` handles ML library memory leaks
 
 ### 3.4 Duplicate Protection Flow
@@ -181,12 +195,15 @@ spec:
       value: "25"
 ```
 
-### 3.8 GPU Worker Specifics
+### 3.8 GPU Worker Specifics (Deferred)
+
+**Update (2025-06-27)**: GPU infrastructure is deferred for post-MVP implementation. When local models are added:
 
 - Label GPU nodes and set `nodeSelector + tolerations`
 - Add NVIDIA health check: `nvidia-smi` liveness probe
 - Ensure proper CUDA context cleanup between tasks
 - Monitor GPU memory usage and utilization
+- Consider GPU cost vs API cost breakeven analysis
 
 ---
 
@@ -201,31 +218,50 @@ spec:
 
 ---
 
-## 5 — Lessons Learned (Pre-Implementation)
+## 5 — Lessons Learned (Post-Implementation)
 
-Based on production experience with similar architectures:
+Based on production experience with similar architectures and our implementation:
 
 1. **Celery Version Critical**: Must use 5.5.x to avoid the "global QoS" bug with quorum queues
-2. **Memory Leaks Are Real**: ML libraries (TensorFlow, PyTorch, Whisper) leak memory; worker recycling is mandatory
+2. **Memory Leaks Are Real**: ML libraries leak memory; worker recycling is mandatory (even with API-only approach)
 3. **Publisher Confirms Essential**: Without `confirm_publish`, messages can be silently dropped
 4. **Autoscaling Cooldown**: Must exceed longest task runtime to avoid killing busy pods
-5. **GPU Context Management**: CUDA contexts can stick; explicit cleanup and health checks required
+5. ~~**GPU Context Management**: CUDA contexts can stick; explicit cleanup and health checks required~~ (Deferred with GPU infrastructure)
 6. **Contract Governance**: Shared schema repository prevents message format drift
+7. **API-First Advantages**: Faster time to market, predictable costs, no GPU complexity
+8. **Cost Tracking Critical**: Built-in cost tracking from day one enables data-driven GPU vs API decisions
 
 ---
 
 ## 6 — Implementation Roadmap
 
-| Week | Deliverable |
-|------|-------------|
-| 1 | Helm deploy RabbitMQ cluster (dev & staging); enable Prometheus plugin |
-| 1 | Create `python/common/celery_app.py` with JSON serializer, queues, singleton lock |
-| 1 | Node: integrate `celery-node` producer with publisher confirms |
-| 2 | Implement Whisper worker (GPU pod) with health checks; write to `ml_results` |
-| 2 | Add OTel tracing in Node publish & Celery worker |
-| 3 | Implement LLM summarize worker; KEDA autoscaling on `ml.summarize` |
-| 3 | Dashboards + alerts on queue depth, task latency, error rate |
-| 3 | Contract validation with shared schemas repository |
+**Update (2025-06-27)**: Phase 1 Complete, MVP roadmap prioritized
+
+### Completed ✅
+- [x] Docker-based RabbitMQ with quorum queues
+- [x] Python shared module with Celery configuration
+- [x] Node.js ML producer with amqplib
+- [x] Whisper worker (API-based) with cost tracking
+- [x] LLM worker with budget controls
+- [x] Vector embedding worker
+- [x] Basic Prometheus metrics
+- [x] Database persistence layer
+
+### MVP Priorities
+| Priority | Deliverable | Timeline |
+|----------|-------------|----------|
+| 🔴 High | Production RabbitMQ cluster (3-node HA) | Week 1 |
+| 🔴 High | S3 file storage migration | Week 1 |
+| 🔴 High | Connection reliability (retries, circuit breaker) | Week 1 |
+| 🟠 Medium | OpenTelemetry distributed tracing | Week 2 |
+| 🟠 Medium | Grafana dashboards & alerts | Week 2 |
+| 🟡 Low | KEDA autoscaling configuration | Week 3 |
+| 🟡 Low | Vector search API endpoints | Week 4 |
+
+### Deferred (Post-MVP)
+- GPU infrastructure and node configuration
+- Local model implementations (Whisper, LLM, embeddings)
+- GPU-specific health checks and monitoring
 
 ---
 
@@ -256,31 +292,38 @@ Before production, test these scenarios:
 
 ## 9 — Operations Checklist
 
+**Update (2025-06-27)**: Checklist updated to reflect API-first implementation
+
 ### Infrastructure
-- [ ] RabbitMQ 3-node cluster with quorum queues enabled
+- [ ] RabbitMQ 3-node cluster with quorum queues enabled (MVP Priority)
 - [ ] Resource limits configured (`vm_memory_high_watermark=0.6`)
 - [ ] Prometheus and management plugins enabled
 - [ ] Persistent volumes for queue durability
+- [ ] S3 bucket for video storage (MVP Priority)
 
-### Python Stack
-- [ ] Celery 5.5.x with `kombu>=5.3.5`
-- [ ] `celery-singleton` for deduplication
-- [ ] Worker recycling configured (`max-tasks-per-child=50`)
-- [ ] OpenTelemetry instrumentation
+### Python Stack ✅
+- [x] Celery 5.5.x with `kombu>=5.3.5`
+- [x] `celery-singleton` for deduplication
+- [x] Worker recycling configured (`max-tasks-per_child=50`)
+- [x] Cost tracking and budget controls
+- [ ] OpenTelemetry instrumentation (MVP Priority)
 
 ### Node Integration
-- [ ] `celery-node` or `amqplib` with reconnect wrapper
-- [ ] Publisher confirms enabled
+- [x] `amqplib` integration
+- [ ] Reconnect wrapper implementation (MVP Priority)
+- [ ] Publisher confirms enabled (MVP Priority)
 - [ ] W3C traceparent propagation
 
 ### Monitoring
 - [ ] Queue depth alerts configured
 - [ ] Task failure rate alerts
-- [ ] GPU utilization dashboards
-- [ ] Memory usage tracking
+- [x] API cost tracking dashboards
+- [x] Memory usage tracking
+- [ ] Grafana dashboards (MVP Priority)
 
 ### Testing
-- [ ] Duplicate submission test passed
+- [x] Basic integration tests passed
+- [ ] Duplicate submission test at scale
 - [ ] Worker crash recovery verified
 - [ ] Autoscaling behavior validated
 - [ ] Contract validation in place
@@ -289,4 +332,12 @@ Before production, test these scenarios:
 
 ## 10 — Decision
 
-We will **deploy RabbitMQ quorum cluster with Celery 5.5 workers, implementing proper memory management, publisher confirms, and comprehensive monitoring** as the Phase 2 architecture for BookmarkAI ML pipelines. This approach balances reliability with operational maintainability while addressing known production challenges upfront.
+We will **deploy RabbitMQ quorum cluster with Celery 5.5 workers using an API-first strategy**, implementing proper memory management, publisher confirms, and comprehensive monitoring as the Phase 2 architecture for BookmarkAI ML pipelines. 
+
+**Key strategic decisions**:
+1. **API-first for MVP**: Use OpenAI APIs exclusively (Whisper, GPT, Embeddings) to minimize infrastructure complexity
+2. **Defer GPU infrastructure**: No local models until clear demand and cost justification
+3. **Cost tracking from day one**: Enable data-driven decisions about when to switch to local models
+4. **Infrastructure ready for local models**: Queue structure and task routing support future local model additions
+
+This approach allows us to launch quickly while maintaining flexibility to add local models when the economics justify the additional complexity.
