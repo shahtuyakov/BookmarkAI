@@ -47,3 +47,4 @@ Thumbs.db
 # CDK output files
 cdk.out/
 infrastructure/cdk.out/
+env/**/*.env
