@@ -13,6 +13,14 @@ build
 .env.*
 !.env.example
 
+# New environment structure
+env/development/*.env
+env/staging/*.env
+env/production/*.env
+!env/**/*.env.example
+# Keep the base.env.example for documentation
+!env/base.env.example
+
 # Logs
 logs
 *.log

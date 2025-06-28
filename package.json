@@ -24,6 +24,8 @@
     "seed:ci:local": "npm run seed:build && NODE_ENV=ci-local node scripts/dist/seed/ci.js",
     "seed:clean": "npm run seed:build && CLEAN_SEED=true node scripts/dist/seed/ci.js",
     "dev:tunnel": "node scripts/setup-ngrok.js",
+    "validate:env": "node scripts/validate-env.js",
+    "setup:env": "./scripts/setup-env.sh",
     "install:all": "pnpm install",
     "build:all": "pnpm -r build",
     "test:all": "pnpm -r test",

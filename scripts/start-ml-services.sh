@@ -17,10 +17,22 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
+# Load environment variables from the unified env system
+ENVIRONMENT="${ENVIRONMENT:-development}"
+echo -e "${YELLOW}Loading environment: ${ENVIRONMENT}${NC}"
+set -a  # Mark variables for export
+[ -f "./env/base.env" ] && source "./env/base.env"
+[ -f "./env/${ENVIRONMENT}/shared.env" ] && source "./env/${ENVIRONMENT}/shared.env"
+[ -f "./env/${ENVIRONMENT}/python-services.env" ] && source "./env/${ENVIRONMENT}/python-services.env"
+set +a  # Stop marking for export
+
 # Check for required API keys
-if [ -z "$OPENAI_API_KEY" ] || [ "$OPENAI_API_KEY" = "your_openai_api_key_here" ]; then
-    echo -e "${YELLOW}⚠️  Warning: OPENAI_API_KEY not set - Whisper worker will not function${NC}"
-    echo "Set it with: export OPENAI_API_KEY='your-actual-key'"
+if [ -z "$ML_OPENAI_API_KEY" ] || [ "$ML_OPENAI_API_KEY" = "your_openai_api_key_here" ]; then
+    echo -e "${YELLOW}⚠️  Warning: ML_OPENAI_API_KEY not set - Whisper worker will not function${NC}"
+    echo "Check env/base.env and set your OpenAI API key"
+else
+    # Export for compatibility with old variable name
+    export OPENAI_API_KEY=$ML_OPENAI_API_KEY
 fi
 
 # Function to check if a service is running
@@ -56,24 +68,6 @@ cd ..
 # Start ML services using Docker Compose
 echo -e "${YELLOW}Starting ML workers with Docker Compose...${NC}"
 cd docker
-
-# Create .env file if it doesn't exist
-if [ ! -f ".env" ]; then
-    echo -e "${YELLOW}Creating .env file for ML services...${NC}"
-    cat > .env << EOF
-# LLM Provider API Keys (add your own)
-OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
-ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-your_anthropic_api_key_here}
-
-# Whisper cost controls
-WHISPER_DAILY_COST_LIMIT=${WHISPER_DAILY_COST_LIMIT:-10.00}
-WHISPER_HOURLY_COST_LIMIT=${WHISPER_HOURLY_COST_LIMIT:-1.00}
-
-# Vector cost controls
-VECTOR_DAILY_COST_LIMIT=${VECTOR_DAILY_COST_LIMIT:-10.00}
-VECTOR_HOURLY_COST_LIMIT=${VECTOR_HOURLY_COST_LIMIT:-1.00}
-EOF
-fi
 
 # Start the ML worker containers
 echo -e "${YELLOW}Starting ML worker containers...${NC}"

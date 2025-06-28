@@ -1,3 +1,9 @@
+# Define reusable environment configuration
+x-shared-env: &shared-env
+  env_file:
+    - ../env/base.env
+    - ../env/${ENVIRONMENT:-development}/shared.env
+
 services:
   # LLM Summarization Worker
   llm-worker:
@@ -5,48 +11,28 @@ services:
       context: ../python
       dockerfile: llm-service/Dockerfile
     container_name: bookmarkai-llm-worker
+    <<: *shared-env
+    env_file:
+      - ../env/base.env
+      - ../env/${ENVIRONMENT:-development}/shared.env
+      - ../env/${ENVIRONMENT:-development}/python-services.env
     ports:
       - '9091:9091'  # Prometheus metrics endpoint
     environment:
-      # Celery configuration
-      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      
-      # Database configuration
-      DATABASE_URL: postgresql://bookmarkai:bookmarkai_password@postgres:5432/bookmarkai_dev
-      
-      # Redis for singleton locks
-      REDIS_URL: redis://redis:6379/0
-      
-      # Worker configuration
-      WORKER_CONCURRENCY: 4
-      WORKER_PREFETCH_MULTIPLIER: 8
-      WORKER_MAX_TASKS_PER_CHILD: 50
-      
-      # LLM configuration (will be populated from environment)
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      
-      # Cost controls
-      LLM_DAILY_COST_LIMIT: ${LLM_DAILY_COST_LIMIT:-20.00}
-      LLM_HOURLY_COST_LIMIT: ${LLM_HOURLY_COST_LIMIT:-2.00}
-      LLM_BUDGET_STRICT_MODE: ${LLM_BUDGET_STRICT_MODE:-false}
-      
-      # Prometheus metrics
+      # Override specific values that need to reference other containers
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      MQ_HOST: rabbitmq
+      # Construct URLs using the loaded env variables
+      CELERY_BROKER_URL: amqp://${MQ_USER}:${MQ_PASSWORD}@rabbitmq:${MQ_PORT}/
+      CELERY_RESULT_BACKEND: redis://redis:${CACHE_PORT}/1
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      REDIS_URL: redis://redis:${CACHE_PORT}/0
+      # Service-specific settings
       WORKER_TYPE: llm
       SERVICE_NAME: llm-service
       PROMETHEUS_METRICS_PORT: 9091
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_llm
-      
-      # Database configuration for cost tracking
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: bookmarkai_dev
-      POSTGRES_USER: bookmarkai
-      POSTGRES_PASSWORD: bookmarkai_password
-      
-      # Logging
-      LOG_LEVEL: INFO
     # RabbitMQ is now in main docker-compose.yml
     external_links:
       - ml-rabbitmq:rabbitmq
@@ -73,34 +59,36 @@ services:
       context: ../python
       dockerfile: whisper-service/Dockerfile
     container_name: bookmarkai-whisper-worker
+    <<: *shared-env
+    env_file:
+      - ../env/base.env
+      - ../env/${ENVIRONMENT:-development}/shared.env
+      - ../env/${ENVIRONMENT:-development}/python-services.env
     ports:
       - '9092:9092'  # Prometheus metrics endpoint
     environment:
-      # Celery configuration
-      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      
-      # Database configuration
+      # Override specific values that need to reference other containers
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      MQ_HOST: rabbitmq
+      # Construct URLs using the loaded env variables
+      CELERY_BROKER_URL: amqp://${MQ_USER}:${MQ_PASSWORD}@rabbitmq:${MQ_PORT}/
+      CELERY_RESULT_BACKEND: redis://redis:${CACHE_PORT}/1
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      REDIS_URL: redis://redis:${CACHE_PORT}/0
+      # Postgres individual vars for compatibility
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_DB: bookmarkai_dev
-      POSTGRES_USER: bookmarkai
-      POSTGRES_PASSWORD: bookmarkai_password
-      
-      # Redis for singleton locks
-      REDIS_URL: redis://redis:6379/0
-      
-      # Worker configuration
-      WORKER_CONCURRENCY: 4
-      WORKER_PREFETCH_MULTIPLIER: 8
-      WORKER_MAX_TASKS_PER_CHILD: 50
-      
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       # OpenAI configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      
-      # Cost controls
-      WHISPER_DAILY_COST_LIMIT: ${WHISPER_DAILY_COST_LIMIT:-10.00}
-      WHISPER_HOURLY_COST_LIMIT: ${WHISPER_HOURLY_COST_LIMIT:-1.00}
+      OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
+      # Service-specific settings
+      WORKER_TYPE: whisper
+      SERVICE_NAME: whisper-service
+      PROMETHEUS_METRICS_PORT: 9092
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_whisper
       
       # Silence detection
       WHISPER_SILENCE_THRESHOLD_DB: ${WHISPER_SILENCE_THRESHOLD_DB:--40.0}
@@ -108,12 +96,6 @@ services:
       # AWS/S3 configuration
       AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
       S3_MEDIA_BUCKET: ${S3_MEDIA_BUCKET}
-      
-      # Prometheus metrics
-      WORKER_TYPE: whisper
-      SERVICE_NAME: whisper-service
-      PROMETHEUS_METRICS_PORT: 9092
-      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_whisper
       
       # Logging
       LOG_LEVEL: INFO
@@ -123,7 +105,7 @@ services:
     volumes:
       - ../python/whisper-service:/app/whisper-service
       - ../python/shared:/app/shared:ro
-      - /tmp/bookmarkai-videos:/tmp/bookmarkai-videos  # Shared video storage with local API gateway
+      - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}  # Mount video directory
     command: >
       celery -A whisper_service.celery_app worker
       --loglevel=info
@@ -144,49 +126,43 @@ services:
       context: ../python
       dockerfile: vector-service/Dockerfile
     container_name: bookmarkai-vector-worker
+    <<: *shared-env
+    env_file:
+      - ../env/base.env
+      - ../env/${ENVIRONMENT:-development}/shared.env
+      - ../env/${ENVIRONMENT:-development}/python-services.env
     ports:
       - '9093:9093'  # Prometheus metrics endpoint
     environment:
-      # Celery configuration
-      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      
-      # Database configuration
+      # Override specific values that need to reference other containers
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      MQ_HOST: rabbitmq
+      # Construct URLs using the loaded env variables
+      CELERY_BROKER_URL: amqp://${MQ_USER}:${MQ_PASSWORD}@rabbitmq:${MQ_PORT}/
+      CELERY_RESULT_BACKEND: redis://redis:${CACHE_PORT}/1
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      REDIS_URL: redis://redis:${CACHE_PORT}/0
+      # Postgres individual vars for compatibility
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_DB: bookmarkai_dev
-      POSTGRES_USER: bookmarkai
-      POSTGRES_PASSWORD: bookmarkai_password
-      
-      # Redis for singleton locks
-      REDIS_URL: redis://redis:6379/0
-      
-      # Worker configuration
-      WORKER_CONCURRENCY: 4
-      WORKER_PREFETCH_MULTIPLIER: 8
-      WORKER_MAX_TASKS_PER_CHILD: 50
-      
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       # OpenAI configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      
-      # Model selection thresholds
-      VECTOR_SMALL_THRESHOLD: ${VECTOR_SMALL_THRESHOLD:-1000}
-      VECTOR_LARGE_THRESHOLD: ${VECTOR_LARGE_THRESHOLD:-5000}
-      VECTOR_DEFAULT_MODEL: ${VECTOR_DEFAULT_MODEL:-text-embedding-3-small}
-      
-      # Batch processing
-      VECTOR_BATCH_SIZE: ${VECTOR_BATCH_SIZE:-100}
-      
-      # Cost controls
-      VECTOR_DAILY_COST_LIMIT: ${VECTOR_DAILY_COST_LIMIT:-10.00}
-      VECTOR_HOURLY_COST_LIMIT: ${VECTOR_HOURLY_COST_LIMIT:-1.00}
-      VECTOR_BUDGET_STRICT_MODE: ${VECTOR_BUDGET_STRICT_MODE:-false}
-      
-      # Prometheus metrics
+      OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
+      # Service-specific settings
       WORKER_TYPE: vector
       SERVICE_NAME: vector-service
       PROMETHEUS_METRICS_PORT: 9093
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_vector
+      # Model selection thresholds
+      VECTOR_SMALL_THRESHOLD: ${VECTOR_SMALL_THRESHOLD:-1000}
+      VECTOR_LARGE_THRESHOLD: ${VECTOR_LARGE_THRESHOLD:-5000}
+      VECTOR_DEFAULT_MODEL: ${ML_EMBEDDING_MODEL:-text-embedding-3-small}
+      # Batch processing
+      VECTOR_BATCH_SIZE: ${VECTOR_BATCH_SIZE:-100}
+      VECTOR_BUDGET_STRICT_MODE: ${VECTOR_BUDGET_STRICT_MODE:-false}
       
       # Logging
       LOG_LEVEL: INFO
@@ -196,7 +172,7 @@ services:
     volumes:
       - ../python/vector-service:/app
       - ../python/shared:/app/shared:ro
-      - /tmp/bookmarkai-videos:/tmp/bookmarkai-videos  # Bind mount to local filesystem (for future use)
+      - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}  # Mount video directory
     command: >
       celery -A vector_service.celery_app worker
       --loglevel=info

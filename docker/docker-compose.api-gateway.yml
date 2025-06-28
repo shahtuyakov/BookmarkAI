@@ -1,34 +1,30 @@
+# Define reusable environment configuration
+x-shared-env: &shared-env
+  env_file:
+    - ../env/base.env
+    - ../env/${ENVIRONMENT:-development}/shared.env
+
 services:
   api-gateway:
     build:
       context: ../
       dockerfile: docker/Dockerfile.api-gateway
-      target: development
+      target: ${BUILD_TARGET:-development}
     container_name: bookmarkai-api-gateway
+    <<: *shared-env
+    env_file:
+      - ../env/base.env
+      - ../env/${ENVIRONMENT:-development}/shared.env
+      - ../env/${ENVIRONMENT:-development}/api-gateway.env
     ports:
-      - "3001:3001"
+      - "${API_PORT:-3001}:${API_PORT:-3001}"
     environment:
-      NODE_ENV: development
-      PORT: 3001
-      DATABASE_URL: postgresql://bookmarkai:bookmarkai123@postgres:5432/bookmarkai_dev
-      DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-      DATABASE_USER: bookmarkai
-      DATABASE_PASSWORD: bookmarkai123
-      DATABASE_NAME: bookmarkai_dev
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      RABBITMQ_URL: amqp://ml:ml_password@rabbitmq:5672/
-      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      PREFERRED_LLM_BACKEND: ${PREFERRED_LLM_BACKEND:-api}
-      # S3 Storage configuration
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      S3_MEDIA_BUCKET: ${S3_MEDIA_BUCKET}
-      S3_VIDEO_PREFIX: ${S3_VIDEO_PREFIX:-temp/videos/}
-      STORAGE_MODE: ${STORAGE_MODE:-local}
-      S3_SPLIT_PERCENTAGE: ${S3_SPLIT_PERCENTAGE:-10}
-      # Add other environment variables as needed
+      # Override specific values that need to reference other containers
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      MQ_HOST: rabbitmq
+      # Container-specific settings
+      PORT: ${API_PORT:-3001}
     depends_on:
       - postgres
       - redis
