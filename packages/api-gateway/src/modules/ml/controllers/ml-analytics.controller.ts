@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { MLAnalyticsService } from '../services/ml-analytics.service';
+import { MLProducerService } from '../ml-producer.service';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import {
   CostSummaryDto,
@@ -23,7 +24,10 @@ import {
 @ApiBearerAuth()
 @Roles('admin')
 export class MLAnalyticsController {
-  constructor(private readonly mlAnalyticsService: MLAnalyticsService) {}
+  constructor(
+    private readonly mlAnalyticsService: MLAnalyticsService,
+    private readonly mlProducerService: MLProducerService,
+  ) {}
 
   @Get('transcription/costs')
   @ApiOperation({ summary: 'Get transcription cost summary' })
@@ -89,5 +93,37 @@ export class MLAnalyticsController {
       throw new HttpException('Transcription result not found', HttpStatus.NOT_FOUND);
     }
     return result;
+  }
+
+  @Get('health')
+  @ApiOperation({ summary: 'Get ML producer health status' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Health status retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        healthy: { type: 'boolean' },
+        rabbitmq: {
+          type: 'object',
+          properties: {
+            connectionState: { type: 'string' },
+            reconnectAttempts: { type: 'number' },
+            consecutiveFailures: { type: 'number' },
+            circuitBreakerOpen: { type: 'boolean' },
+          },
+        },
+      },
+    },
+  })
+  @Roles('admin')
+  async getHealthStatus() {
+    const isHealthy = await this.mlProducerService.isHealthy();
+    const status = this.mlProducerService.getStatus();
+    
+    return {
+      healthy: isHealthy,
+      rabbitmq: status,
+    };
   }
 }
