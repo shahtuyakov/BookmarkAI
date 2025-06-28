@@ -2,7 +2,7 @@
 
 * **Status**: **Accepted** (API-First Implementation)
 * **Date**: 2025-06-22
-* **Updated**: 2025-06-27
+* **Updated**: 2025-06-28
 * **Authors**: @bookmarkai-backend, @bookmarkai-ml
 * **Supersedes**: —
 * **Superseded by**: —
@@ -230,12 +230,14 @@ Based on production experience with similar architectures and our implementation
 6. **Contract Governance**: Shared schema repository prevents message format drift
 7. **API-First Advantages**: Faster time to market, predictable costs, no GPU complexity
 8. **Cost Tracking Critical**: Built-in cost tracking from day one enables data-driven GPU vs API decisions
+9. **Metrics Naming Consistency**: Dashboard metric names must match actual exported metrics (e.g., `ml_cost_dollars_total` not `ml_cost_usd_total`)
+10. **Environment Variables**: Workers require proper environment loading; use start-ml-services.sh script for consistent setup
 
 ---
 
 ## 6 — Implementation Roadmap
 
-**Update (2025-06-27)**: Phase 1 Complete, MVP roadmap prioritized
+**Update (2025-06-28)**: Infrastructure and monitoring complete, MVP nearly ready
 
 ### Completed ✅
 - [x] Docker-based RabbitMQ with quorum queues
@@ -244,17 +246,23 @@ Based on production experience with similar architectures and our implementation
 - [x] Whisper worker (API-based) with cost tracking
 - [x] LLM worker with budget controls
 - [x] Vector embedding worker
-- [x] Basic Prometheus metrics
 - [x] Database persistence layer
+- [x] Prometheus metrics for ML Producer (June 28)
+  - Connection state, task metrics, circuit breaker tracking
+  - Exposed at `/api/ml/metrics/prometheus`
+- [x] Grafana dashboards (June 28)
+  - ML Producer Monitoring dashboard
+  - ML Analytics & Cost Monitoring dashboard
+  - Python worker metrics integration
 
 ### MVP Priorities
 | Priority | Deliverable | Timeline |
 |----------|-------------|----------|
-| 🔴 High | Production RabbitMQ cluster (3-node HA) | Week 1 |
-| 🔴 High | S3 file storage migration | Week 1 |
-| 🔴 High | Connection reliability (retries, circuit breaker) | Week 1 |
+| ✅ Done | Production RabbitMQ cluster (3-node HA) | Completed |
+| 🔴 High | S3 file storage migration to production | Week 1 |
+| 🟠 Medium | Connection reliability (publisher confirms, reconnect wrapper) | Week 1 |
 | 🟠 Medium | OpenTelemetry distributed tracing | Week 2 |
-| 🟠 Medium | Grafana dashboards & alerts | Week 2 |
+| ✅ Done | Grafana dashboards & alerts | Completed |
 | 🟡 Low | KEDA autoscaling configuration | Week 3 |
 | 🟡 Low | Vector search API endpoints | Week 4 |
 
@@ -292,34 +300,45 @@ Before production, test these scenarios:
 
 ## 9 — Operations Checklist
 
-**Update (2025-06-27)**: Checklist updated to reflect API-first implementation
+**Update (2025-06-28)**: Checklist updated to reflect completed infrastructure and monitoring
 
-### Infrastructure
-- [ ] RabbitMQ 3-node cluster with quorum queues enabled (MVP Priority)
-- [ ] Resource limits configured (`vm_memory_high_watermark=0.6`)
-- [ ] Prometheus and management plugins enabled
-- [ ] Persistent volumes for queue durability
-- [ ] S3 bucket for video storage (MVP Priority)
+### Infrastructure ✅
+- [x] RabbitMQ with quorum queues enabled (single-node for dev)
+- [x] RabbitMQ 3-node cluster configuration (docker-compose.rabbitmq-cluster.yml)
+- [x] HAProxy load balancer for cluster
+- [x] TLS support configuration (optional, backward compatible)
+- [x] Resource limits configured (`vm_memory_high_watermark=0.6`)
+- [x] Prometheus and management plugins enabled
+- [x] Persistent volumes for queue durability (`rabbitmq-data`)
+- [x] S3-compatible storage (MinIO for local dev)
+- [ ] Production S3 bucket configuration (AWS)
 
 ### Python Stack ✅
 - [x] Celery 5.5.x with `kombu>=5.3.5`
 - [x] `celery-singleton` for deduplication
 - [x] Worker recycling configured (`max-tasks-per_child=50`)
 - [x] Cost tracking and budget controls
+- [x] Prometheus metrics exposure (ports 9091-9093)
 - [ ] OpenTelemetry instrumentation (MVP Priority)
 
 ### Node Integration
 - [x] `amqplib` integration
+- [x] ML Producer Service with metrics
+- [x] Connection state tracking and circuit breaker
 - [ ] Reconnect wrapper implementation (MVP Priority)
 - [ ] Publisher confirms enabled (MVP Priority)
 - [ ] W3C traceparent propagation
 
-### Monitoring
-- [ ] Queue depth alerts configured
-- [ ] Task failure rate alerts
+### Monitoring ✅
+- [x] Prometheus metrics collection configured
+- [x] Grafana dashboards deployed:
+  - ML Producer Monitoring (connection health, task metrics)
+  - ML Analytics & Cost Monitoring (cost tracking, performance)
+  - Python ML Services (partial - Celery metrics pending)
 - [x] API cost tracking dashboards
 - [x] Memory usage tracking
-- [ ] Grafana dashboards (MVP Priority)
+- [ ] Queue depth alerts configured
+- [ ] Task failure rate alerts
 
 ### Testing
 - [x] Basic integration tests passed
