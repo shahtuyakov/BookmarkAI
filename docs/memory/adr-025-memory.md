@@ -2226,3 +2226,169 @@ After implementing all fixes:
 2. Monitor Whisper service for successful S3 downloads
 3. Consider implementing S3 lifecycle policies for automatic cleanup
 4. Add CloudWatch metrics for S3 operations
+
+## TLS-Ready Code and Local RabbitMQ Cluster Implementation (June 29, 2025)
+
+### Overview
+Since AWS account is not available, implemented TLS-ready code for future cloud migration and created a local 3-node RabbitMQ cluster for high availability testing.
+
+### What Was Implemented
+
+#### 1. Python Celery TLS Support ✅
+Updated `python/shared/src/bookmarkai_shared/celery_config.py`:
+- Added SSL/TLS configuration functions
+- Support for both AMQP and AMQPS protocols
+- Configurable certificate verification
+- Custom CA and client certificate support
+- Connection pooling with TLS
+- Automatic protocol detection from URL
+
+Key features:
+```python
+# New functions added:
+- get_ssl_options(): Configures SSL/TLS options
+- get_broker_transport_options(): Includes SSL in transport options
+# Environment variables:
+- RABBITMQ_USE_SSL: Enable/disable TLS
+- RABBITMQ_VERIFY_PEER: Certificate verification
+- RABBITMQ_SSL_PROTOCOL: TLS version (TLSv1.2/TLSv1.3)
+- RABBITMQ_SSL_CACERT: CA certificate path
+- RABBITMQ_SSL_CERTFILE: Client certificate
+- RABBITMQ_SSL_KEYFILE: Client private key
+```
+
+#### 2. Node.js ML Producer TLS Support ✅
+Updated `packages/api-gateway/src/modules/ml/ml-producer.service.ts`:
+- Automatic TLS detection from URL or config
+- Support for custom certificates
+- Maintains backward compatibility
+- Connection options for self-signed certs
+
+Key changes:
+```typescript
+// Detects TLS from:
+- URL scheme (amqps://)
+- RABBITMQ_USE_SSL environment variable
+// Certificate support for self-hosted RabbitMQ
+// Automatic handling for cloud services (Amazon MQ)
+```
+
+#### 3. Local RabbitMQ Cluster Setup ✅
+Created complete high availability cluster configuration:
+
+**Infrastructure Files:**
+- `docker/docker-compose.rabbitmq-cluster.yml`: 3-node cluster + HAProxy
+- `docker/rabbitmq-cluster/rabbitmq.conf`: TLS-enabled configuration
+- `docker/rabbitmq-cluster/haproxy.cfg`: Load balancer configuration
+- `docker/rabbitmq-cluster/generate-certificates.sh`: Self-signed cert generation
+- `docker/rabbitmq-cluster/setup-cluster.sh`: Automatic cluster formation
+
+**Port Configuration (avoiding conflicts with existing RabbitMQ on 5672):**
+- Load Balanced AMQP: **5680** (was 5670)
+- Load Balanced AMQPS: **5690** (was 5669)
+- Node 1: 5681 (AMQP), 5691 (AMQPS), 15681 (Management)
+- Node 2: 5682 (AMQP), 5692 (AMQPS), 15682 (Management)
+- Node 3: 5683 (AMQP), 5693 (AMQPS), 15683 (Management)
+- HAProxy Stats: 8404
+
+**Management Scripts:**
+- `scripts/start-rabbitmq-cluster.sh`: Start cluster with auto-setup
+- `scripts/stop-rabbitmq-cluster.sh`: Stop cluster (with --clean option)
+- `scripts/test-rabbitmq-tls.sh`: Test all connections (Python & Node.js)
+- `scripts/setup-rabbitmq-cluster.sh`: Manual cluster setup from host
+
+#### 4. Configuration Examples ✅
+Created comprehensive configuration files:
+- `env/.env.rabbitmq-tls.example`: All connection options
+- Support for single instance, cluster, and cloud modes
+- Feature flags for gradual migration
+
+### Architecture Decisions
+
+1. **Port Shifting**: All cluster ports shifted by +8 to avoid conflicts with existing RabbitMQ (5672)
+2. **HAProxy Load Balancer**: Provides automatic failover and health monitoring
+3. **Quorum Queues**: Configured by default for durability and replication
+4. **TLS Support**: Both AMQP and AMQPS available simultaneously
+5. **Self-Signed Certificates**: For local development and testing
+
+### Testing Results (June 29, 2025)
+
+#### Cluster Formation
+- 3-node cluster successfully formed
+- All nodes connected and healthy
+- Cluster name: bookmarkai-ml-cluster
+
+#### TLS Connection Testing
+Using certificates in `docker/rabbitmq-cluster/certificates/`:
+- ✅ AMQP non-TLS connections working through HAProxy (port 5680)
+- ✅ AMQPS TLS connections working with CA certificate verification (port 5690)
+- ✅ Direct node connections working (both AMQP and AMQPS)
+- ✅ Python Celery configuration tested with SSL options
+- ✅ Node.js environment configuration examples provided
+
+#### HAProxy Issues Fixed
+- Initial HAProxy health check failure for AMQP
+- Fixed by removing complex AMQP protocol check
+- Now using simple TCP checks for better reliability
+
+### Testing Capabilities
+
+The local cluster enables testing of:
+- High availability scenarios
+- Automatic failover
+- Load distribution
+- TLS/SSL connections with proper certificates
+- Connection resilience
+- Cluster partition handling
+
+### Migration Path
+
+1. **Current State**: Single RabbitMQ on port 5672 (unchanged)
+2. **Testing Phase**: Local cluster on ports 568x/569x
+3. **Future Cloud**: Amazon MQ or other managed service
+
+The code now supports seamless switching between:
+- Non-TLS single instance (current)
+- Non-TLS cluster (testing HA)
+- TLS cluster (testing security)
+- Cloud TLS (production ready)
+
+### Usage Examples
+
+```bash
+# Start cluster
+./scripts/start-rabbitmq-cluster.sh
+
+# Test connections with certificates
+./scripts/test-rabbitmq-tls.sh
+
+# Or use custom Python test
+python3 scripts/test-tls-with-certs.py
+
+# Connect to cluster (non-TLS)
+RABBITMQ_URL=amqp://ml:ml_password@localhost:5680/
+
+# Connect to cluster (TLS with CA cert)
+RABBITMQ_URL=amqps://ml:ml_password@localhost:5690/
+RABBITMQ_USE_SSL=true
+RABBITMQ_SSL_CACERT=docker/rabbitmq-cluster/certificates/ca_certificate.pem
+
+# Keep using existing single instance
+RABBITMQ_URL=amqp://ml:ml_password@localhost:5672/
+```
+
+### Key Benefits
+
+1. **Zero Downtime Migration**: Can test cluster while keeping existing RabbitMQ running
+2. **TLS Testing**: Verify TLS configuration with proper certificates before cloud deployment
+3. **HA Testing**: Test failover scenarios locally
+4. **Code Ready**: Both Python and Node.js support TLS without further changes
+5. **Flexible Configuration**: Environment variables control all aspects
+6. **Certificate Support**: Proper CA-based certificate verification instead of disabling security
+
+### Documentation Created
+- `docs/rabbitmq-tls-guide.md`: Comprehensive TLS configuration guide
+- Test scripts demonstrating proper certificate usage
+- Environment configuration examples for all scenarios
+
+This implementation provides a complete testing environment for high availability and TLS features without requiring AWS account or affecting the existing RabbitMQ instance.

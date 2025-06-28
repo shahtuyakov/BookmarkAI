@@ -3,18 +3,82 @@ Shared Celery configuration for BookmarkAI ML services.
 Based on ADR-025: Python ML Microservice Framework & Messaging Architecture
 """
 import os
-from typing import Dict, Any
+import ssl
+from typing import Dict, Any, Optional
 from kombu import Queue, Exchange
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def get_ssl_options() -> Optional[Dict[str, Any]]:
+    """Get SSL/TLS options for broker connection."""
+    use_ssl = os.environ.get('RABBITMQ_USE_SSL', 'false').lower() == 'true'
+    
+    if not use_ssl:
+        return None
+    
+    ssl_options = {
+        'ssl_version': getattr(ssl, os.environ.get('RABBITMQ_SSL_PROTOCOL', 'PROTOCOL_TLSv1_2')),
+        'cert_reqs': ssl.CERT_REQUIRED if os.environ.get('RABBITMQ_VERIFY_PEER', 'true').lower() == 'true' else ssl.CERT_NONE,
+    }
+    
+    # Optional certificate paths for self-signed or custom CA
+    ca_cert = os.environ.get('RABBITMQ_SSL_CACERT')
+    client_cert = os.environ.get('RABBITMQ_SSL_CERTFILE')
+    client_key = os.environ.get('RABBITMQ_SSL_KEYFILE')
+    
+    if ca_cert and os.path.exists(ca_cert):
+        ssl_options['ca_certs'] = ca_cert
+    
+    if client_cert and os.path.exists(client_cert):
+        ssl_options['certfile'] = client_cert
+        
+    if client_key and os.path.exists(client_key):
+        ssl_options['keyfile'] = client_key
+    
+    logger.info(f"SSL/TLS enabled for RabbitMQ connection with verify_peer={ssl_options['cert_reqs'] == ssl.CERT_REQUIRED}")
+    return ssl_options
+
+
+def get_broker_transport_options() -> Dict[str, Any]:
+    """Get broker transport options including SSL configuration."""
+    transport_options = {
+        'confirm_publish': True,
+        'max_retries': 5,
+        'interval_start': 0,
+        'interval_step': 0.2,
+        'interval_max': 1,
+    }
+    
+    # Add SSL options if enabled
+    ssl_options = get_ssl_options()
+    if ssl_options:
+        transport_options['ssl'] = ssl_options
+        
+    # Connection pool settings for better performance
+    transport_options.update({
+        'max_connections': int(os.environ.get('CELERY_BROKER_POOL_LIMIT', '10')),
+        'heartbeat': int(os.environ.get('RABBITMQ_HEARTBEAT', '60')),
+        'connection_timeout': int(os.environ.get('RABBITMQ_CONNECTION_TIMEOUT', '30')),
+    })
+    
+    return transport_options
 
 
 def get_celery_config() -> Dict[str, Any]:
-    """Get Celery configuration with environment overrides."""
+    """Get Celery configuration with environment overrides and TLS support."""
     
-    # Broker configuration
+    # Broker configuration - supports both AMQP and AMQPS
     broker_url = os.environ.get(
         'CELERY_BROKER_URL',
         'amqp://ml:ml_password@localhost:5672/'
     )
+    
+    # Log the broker URL (without password) for debugging
+    if broker_url:
+        safe_url = broker_url.replace(broker_url.split('@')[0].split('://')[-1], 'ml:****')
+        logger.info(f"Broker URL configured: {safe_url}")
     
     # Result backend configuration
     result_backend = os.environ.get(
@@ -37,14 +101,8 @@ def get_celery_config() -> Dict[str, Any]:
         'broker_url': broker_url,
         'result_backend': result_backend,
         
-        # Transport options for publisher confirms (ADR-025)
-        'broker_transport_options': {
-            'confirm_publish': True,
-            'max_retries': 5,
-            'interval_start': 0,
-            'interval_step': 0.2,
-            'interval_max': 1,
-        },
+        # Transport options including SSL/TLS support
+        'broker_transport_options': get_broker_transport_options(),
         
         # Serialization
         'task_serializer': 'json',

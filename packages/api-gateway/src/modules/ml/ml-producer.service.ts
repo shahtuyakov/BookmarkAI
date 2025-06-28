@@ -76,11 +76,38 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
         'amqp://ml:ml_password@localhost:5672/'
       );
 
-      this.connection = await amqplib.connect(brokerUrl, {
-        heartbeat: 60,
-        // Add connection timeout
-        timeout: 10000,
-      });
+      // Build connection options with TLS support
+      const connectionOptions: any = {
+        heartbeat: parseInt(this.configService.get<string>('RABBITMQ_HEARTBEAT', '60')),
+        timeout: parseInt(this.configService.get<string>('RABBITMQ_CONNECTION_TIMEOUT', '10000')),
+      };
+
+      // Check if we're using AMQPS (TLS)
+      const useSsl = this.configService.get<string>('RABBITMQ_USE_SSL', 'false').toLowerCase() === 'true' || 
+                     brokerUrl.startsWith('amqps://');
+
+      if (useSsl) {
+        // For cloud services like Amazon MQ, TLS is handled automatically
+        // For self-hosted with custom certificates, add certificate options
+        const caCert = this.configService.get<string>('RABBITMQ_SSL_CACERT', '');
+        const clientCert = this.configService.get<string>('RABBITMQ_SSL_CERTFILE', '');
+        const clientKey = this.configService.get<string>('RABBITMQ_SSL_KEYFILE', '');
+        const verifyPeer = this.configService.get<string>('RABBITMQ_VERIFY_PEER', 'true').toLowerCase() === 'true';
+
+        if (caCert || clientCert || clientKey || !verifyPeer) {
+          const fs = require('fs');
+          connectionOptions.socket = {
+            cert: clientCert ? fs.readFileSync(clientCert) : undefined,
+            key: clientKey ? fs.readFileSync(clientKey) : undefined,
+            ca: caCert ? [fs.readFileSync(caCert)] : undefined,
+            rejectUnauthorized: verifyPeer,
+          };
+        }
+
+        this.logger.log('Connecting to RabbitMQ with TLS/SSL enabled');
+      }
+
+      this.connection = await amqplib.connect(brokerUrl, connectionOptions);
 
       // Set up connection event handlers
       this.connection.on('error', (err) => {
