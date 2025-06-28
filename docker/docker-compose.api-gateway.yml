@@ -22,6 +22,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:-your-jwt-secret}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       PREFERRED_LLM_BACKEND: ${PREFERRED_LLM_BACKEND:-api}
+      # S3 Storage configuration
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_MEDIA_BUCKET: ${S3_MEDIA_BUCKET}
+      S3_VIDEO_PREFIX: ${S3_VIDEO_PREFIX:-temp/videos/}
+      STORAGE_MODE: ${STORAGE_MODE:-local}
+      S3_SPLIT_PERCENTAGE: ${S3_SPLIT_PERCENTAGE:-10}
       # Add other environment variables as needed
     depends_on:
       - postgres

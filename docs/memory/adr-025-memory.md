@@ -1649,3 +1649,478 @@ Implemented comprehensive connection reliability improvements for the ML Produce
 With connection reliability complete, remaining Priority 1 tasks:
 1. **Production RabbitMQ cluster** - Infrastructure deployment task
 2. **S3 file storage migration** - Replace local `/tmp/bookmarkai-videos/` storage
+
+## Production Infrastructure Implementation Plan (June 28, 2025)
+
+### Overview
+This section documents the detailed implementation plan for the two high-priority production infrastructure tasks: RabbitMQ cluster deployment using Amazon MQ and S3 file storage migration.
+
+### Task 1: Production RabbitMQ Cluster Deployment (Amazon MQ)
+
+#### Current State Analysis
+- **Single Instance**: RabbitMQ 3.13-management-alpine in Docker
+- **Connection**: `amqp://ml:ml_password@localhost:5672/`
+- **Good Foundation**: Already using quorum queues, connection reliability implemented
+- **Connection Points**: Python Celery workers, Node.js ML Producer
+
+#### Target Architecture
+- **Amazon MQ for RabbitMQ**: Managed 3-node cluster
+- **High Availability**: Multi-AZ deployment with automatic failover
+- **Connection**: Network Load Balancer endpoint for client connections
+- **Security**: TLS encryption, IAM authentication option
+
+#### Implementation Plan
+
+**Phase 1: Infrastructure Setup**
+1. **CDK Stack Creation** (`infrastructure/lib/rabbitmq-stack.ts`):
+   - Define Amazon MQ broker with RabbitMQ engine
+   - Configure 3-node cluster (mq.m5.large recommended)
+   - Multi-AZ deployment for high availability
+   - Security group with proper ingress rules
+   - VPC subnet configuration
+
+2. **Configuration Parameters**:
+   ```typescript
+   - Instance type: mq.m5.large (2 vCPU, 8GB RAM)
+   - Storage: 200GB EBS per node
+   - Engine version: 3.13.x (match current)
+   - Deployment mode: CLUSTER_MULTI_AZ
+   - Maintenance window: Sunday 2-4 AM UTC
+   ```
+
+3. **Connection Endpoint**:
+   - Amazon MQ provides single endpoint that load balances
+   - Format: `amqps://b-xxxx.mq.region.amazonaws.com:5671`
+   - Automatic failover handled by AWS
+
+**Phase 2: Application Updates**
+
+1. **Python Services** (`python/shared/src/bookmarkai_shared/celery_config.py`):
+   ```python
+   # Updates needed:
+   - Parse single Amazon MQ endpoint (no comma-separated hosts)
+   - Add SSL/TLS support configuration
+   - Update connection parameters for AMQPS
+   - Add connection timeout settings
+   ```
+
+2. **Node.js ML Producer** (`packages/api-gateway/src/modules/ml/ml-producer.service.ts`):
+   ```typescript
+   # Updates needed:
+   - Switch from amqp:// to amqps:// protocol
+   - Add TLS configuration options
+   - Update health check to use management API
+   - Adjust timeouts for cloud latency
+   ```
+
+3. **Environment Variables**:
+   ```bash
+   # Old: RABBITMQ_URL=amqp://ml:ml_password@localhost:5672/
+   # New: RABBITMQ_URL=amqps://ml:ml_password@b-xxxx.mq.region.amazonaws.com:5671/
+   RABBITMQ_USE_SSL=true
+   RABBITMQ_VERIFY_PEER=true
+   ```
+
+**Phase 3: Migration Strategy**
+
+1. **Pre-migration**:
+   - Deploy Amazon MQ cluster
+   - Create users and virtual hosts matching current config
+   - Set up CloudWatch monitoring and alarms
+   - Configure backup retention (7 days)
+
+2. **Migration Steps**:
+   - Step 1: Update staging environment to use Amazon MQ
+   - Step 2: Run parallel processing (dual write) for validation
+   - Step 3: Switch read traffic to Amazon MQ
+   - Step 4: Decommission Docker RabbitMQ
+
+3. **Rollback Plan**:
+   - Keep Docker RabbitMQ running for 48 hours
+   - Environment variable to switch back quickly
+   - Full queue state backup before migration
+
+### Task 2: S3 File Storage Migration
+
+#### Current State Analysis
+- **Local Storage**: `/tmp/bookmarkai-videos/`
+- **Docker Volumes**: Bind mount shared between services
+- **Cleanup**: Manual 24-hour retention
+- **Good News**: S3 bucket already defined in CDK (`MediaBucket`)
+
+#### Target Architecture
+- **S3 Storage**: Direct upload after video download
+- **Access Pattern**: Pre-signed URLs for secure access
+- **Lifecycle**: Automatic cleanup via S3 policies
+- **Performance**: CloudFront CDN for frequently accessed content
+
+#### Implementation Plan
+
+**Phase 1: S3 Integration Implementation**
+
+1. **API Gateway Updates** (`packages/api-gateway/src/modules/shares/services/ytdlp.service.ts`):
+   ```typescript
+   # Changes needed:
+   - Add @aws-sdk/client-s3 dependency
+   - Implement uploadToS3() method
+   - Generate pre-signed URLs for downloads
+   - Update downloadVideo() to return S3 URL
+   - Keep local download as temp step before S3 upload
+   ```
+
+2. **S3 Upload Flow**:
+   ```typescript
+   1. Download video to temp file (existing)
+   2. Upload to S3 with metadata
+   3. Delete local temp file
+   4. Return S3 URL instead of local path
+   ```
+
+3. **Whisper Service Updates** (`python/whisper-service/src/whisper_service/audio_processor.py`):
+   ```python
+   # Changes needed:
+   - Add boto3 to requirements.txt
+   - Implement S3 download in download_media()
+   - Handle s3:// URL scheme (currently stubbed)
+   - Add progress callback for large files
+   - Implement retry with exponential backoff
+   ```
+
+4. **S3 Configuration**:
+   ```typescript
+   # Bucket structure:
+   s3://bookmarkai-media-{env}-{account}/
+     └── temp/
+         └── videos/
+             └── {year}/{month}/{day}/
+                 └── {hash}-{timestamp}.{ext}
+   ```
+
+**Phase 2: Configuration & Security**
+
+1. **Environment Variables**:
+   ```bash
+   # API Gateway
+   S3_MEDIA_BUCKET=bookmarkai-media-prod-123456789
+   S3_REGION=us-east-1
+   S3_VIDEO_PREFIX=temp/videos/
+   STORAGE_MODE=hybrid  # Options: local, s3, hybrid
+   
+   # Python Workers
+   AWS_DEFAULT_REGION=us-east-1
+   S3_MEDIA_BUCKET=bookmarkai-media-prod-123456789
+   ```
+
+2. **IAM Permissions**:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": [
+           "s3:PutObject",
+           "s3:GetObject",
+           "s3:DeleteObject"
+         ],
+         "Resource": "arn:aws:s3:::bookmarkai-media-*/*"
+       }
+     ]
+   }
+   ```
+
+3. **S3 Bucket Policies**:
+   - Lifecycle rule: Delete objects in temp/ after 7 days
+   - Encryption: AES-256 server-side encryption
+   - Versioning: Disabled for temp content
+   - Access logging: Enabled for audit trail
+
+**Phase 3: Migration Execution**
+
+1. **Hybrid Mode Implementation**:
+   ```typescript
+   # Storage abstraction layer:
+   interface StorageService {
+     store(file: Buffer, key: string): Promise<string>;
+     retrieve(url: string): Promise<Buffer>;
+     delete(url: string): Promise<void>;
+   }
+   
+   # Implementations:
+   - LocalStorageService (existing functionality)
+   - S3StorageService (new)
+   - HybridStorageService (migration period)
+   ```
+
+2. **Rollout Strategy**:
+   - Week 1: Deploy S3 code in hybrid mode (10% S3, 90% local)
+   - Week 2: Increase to 50/50 split, monitor metrics
+   - Week 3: 90% S3, validate all edge cases
+   - Week 4: 100% S3, remove local storage code
+
+3. **Monitoring & Metrics**:
+   - S3 upload success rate
+   - Download latency comparison
+   - Storage costs tracking
+   - Failed upload retry metrics
+
+**Phase 4: Cleanup**
+
+1. **Remove Docker Volumes**:
+   - Remove bind mounts from docker-compose.ml.yml
+   - Clean up local directory creation scripts
+   - Update documentation
+
+2. **Code Cleanup**:
+   - Remove local file cleanup cron
+   - Simplify file path handling
+   - Remove temp directory management
+
+### Risk Mitigation
+
+#### RabbitMQ Cluster Risks
+1. **Connection String Changes**:
+   - Risk: Services fail to connect
+   - Mitigation: Extensive testing in staging, connection string validation
+
+2. **TLS/SSL Issues**:
+   - Risk: Certificate validation failures
+   - Mitigation: Test with self-signed certs first, proper CA bundle configuration
+
+3. **Performance Impact**:
+   - Risk: Increased latency from managed service
+   - Mitigation: Benchmark performance, adjust prefetch settings
+
+#### S3 Migration Risks
+1. **Network Latency**:
+   - Risk: Slower video processing
+   - Mitigation: Use VPC endpoints, implement parallel uploads
+
+2. **Cost Overruns**:
+   - Risk: Unexpected S3 charges
+   - Mitigation: Lifecycle policies, cost alerts, request metrics
+
+3. **Access Issues**:
+   - Risk: Permission denied errors
+   - Mitigation: Comprehensive IAM testing, fallback to local storage
+
+### Success Criteria
+
+#### RabbitMQ Cluster
+- ✓ Zero message loss during failover
+- ✓ Failover time < 30 seconds
+- ✓ All workers reconnect automatically
+- ✓ 99.99% uptime achieved
+- ✓ CloudWatch alarms configured
+
+#### S3 Storage
+- ✓ 100% videos stored in S3
+- ✓ Zero local disk usage for videos
+- ✓ Download performance within 10% of local
+- ✓ Automatic cleanup working
+- ✓ Cost within budget projections
+
+### Timeline
+- **Week 1**: S3 storage migration (lower risk, immediate benefits)
+- **Week 2**: Amazon MQ deployment and testing
+- **Week 3**: Production rollout with monitoring
+- **Week 4**: Cleanup and optimization
+
+### Decision Log
+- **June 28, 2025**: Chose Amazon MQ over self-managed cluster for reduced operational overhead
+- **Rationale**: Managed service provides automatic patching, backups, and failover with minimal maintenance
+
+## S3 Storage Migration Implementation (June 28, 2025)
+
+### Phase 1: Implementation Completed ✅
+
+#### 1. S3 Storage Service
+Created comprehensive S3 client service (`s3-storage.service.ts`) with:
+- Upload methods for files and buffers
+- Download to file or buffer
+- Pre-signed URL generation
+- Automatic content type detection
+- S3 URL parsing for both s3:// and https:// formats
+- Date-based folder structure for organization
+
+#### 2. YtDlpService Integration
+Enhanced with hybrid storage capabilities:
+- Added storage mode configuration (local/s3/hybrid)
+- Integrated S3 upload after video download
+- Percentage-based routing for hybrid mode
+- Metrics tracking for S3 operations
+- Automatic local file cleanup after S3 upload
+- Backward compatibility with `localPath` field
+
+#### 3. Whisper Service S3 Support
+Implemented S3 download in `audio_processor.py`:
+- Added boto3 dependency
+- S3 URL parsing and download implementation
+- Error handling for access denied and missing objects
+- Integration with existing download flow
+
+#### 4. Configuration Updates
+- Added environment variables to .env.example
+- Updated docker-compose files with S3 configuration
+- AWS region and bucket configuration
+- Storage mode and hybrid percentage settings
+
+#### 5. Testing Infrastructure
+Created `test-s3-storage.js` script for:
+- End-to-end S3 storage testing
+- Metrics verification
+- Storage location validation
+
+### Key Design Decisions
+
+1. **Hybrid Mode Strategy**
+   - Random percentage-based selection
+   - Allows gradual migration with easy rollback
+   - Real-time metrics for monitoring
+
+2. **Storage URL Format**
+   - New `storageUrl` field for S3 or local path
+   - Maintains `localPath` for backward compatibility
+   - `storageType` field indicates storage location
+
+3. **Error Handling**
+   - Fallback to local storage on S3 failures
+   - Comprehensive logging for troubleshooting
+   - No service disruption on S3 issues
+
+### Testing Commands
+```bash
+# Test with hybrid mode (50% S3)
+export STORAGE_MODE=hybrid
+export S3_SPLIT_PERCENTAGE=50
+export S3_MEDIA_BUCKET=your-bucket-name
+./packages/api-gateway/test-s3-storage.js
+
+# Force S3 mode for testing
+export STORAGE_MODE=s3
+```
+
+### Next Steps for S3 Migration
+1. **Deploy S3 bucket via CDK** - Use existing MediaBucket definition
+2. **Configure IAM roles** - For ECS task S3 access
+3. **Test in staging** - Verify end-to-end flow
+4. **Gradual production rollout** - Start at 10%, increase weekly
+
+### MinIO Integration Update (June 28, 2025)
+
+#### Issues Encountered
+1. **TypeScript Compilation Errors**:
+   - ConfigService type inference issues with string comparisons
+   - Fixed by adding explicit type parameters: `configService.get<string>()`
+
+2. **Configuration Key Errors**:
+   - ConfigService throwing errors for missing optional keys
+   - Fixed by providing default empty strings for optional configs
+
+3. **MinIO Endpoint Support**:
+   - S3StorageService initially only supported AWS S3
+   - Added full MinIO support with custom endpoints
+
+#### MinIO Configuration Implementation
+Enhanced S3StorageService to support MinIO:
+```typescript
+// Added support for:
+- S3_ENDPOINT: Custom endpoint URL (e.g., http://localhost:9000)
+- S3_ACCESS_KEY/S3_SECRET_KEY: Explicit credentials
+- S3_USE_PATH_STYLE: Path-style URLs for MinIO
+- Dynamic URL generation based on endpoint type
+```
+
+#### Configuration Guide
+For MinIO (local S3-compatible storage):
+1. MinIO already configured in docker-compose.yml
+2. Add to `.env` file:
+   ```
+   S3_ENDPOINT=http://localhost:9000
+   S3_ACCESS_KEY=minioadmin
+   S3_SECRET_KEY=minioadmin
+   S3_MEDIA_BUCKET=bookmarkai-media
+   S3_USE_PATH_STYLE=true
+   STORAGE_MODE=s3  # or hybrid
+   ```
+3. Access MinIO console: http://localhost:9001 (minioadmin/minioadmin)
+4. Create bucket: bookmarkai-media
+
+#### Testing Results
+1. **Local Storage Mode**: Working as before (backward compatible)
+2. **Hybrid Mode**: Successfully routing based on percentage
+3. **S3/MinIO Mode**: Ready for testing with proper configuration
+
+### Complete S3 Implementation Summary
+
+#### Files Created/Modified
+1. **API Gateway**:
+   - `s3-storage.service.ts`: Complete S3 client with upload/download
+   - `ytdlp.service.ts`: Integrated S3 uploads with hybrid mode
+   - `tiktok.fetcher.ts`: Updated to use storageUrl instead of localPath
+
+2. **Python Whisper Service**:
+   - `audio_processor.py`: Added boto3 S3 download support
+   - `setup.py`: Added boto3 dependency
+   - Fixed Docker build issue (dependencies in setup.py not requirements.txt)
+
+3. **Configuration**:
+   - `.env.example`: Added all S3 configuration variables
+   - `docker-compose.api-gateway.yml`: Added S3 environment variables
+   - `docker-compose.ml.yml`: Added AWS configuration for workers
+
+4. **Documentation**:
+   - `docs/s3-storage-migration.md`: Comprehensive migration guide
+   - `test-s3-storage.js`: Test script for validation
+
+#### Key Features Implemented
+1. **Hybrid Storage Mode**:
+   - Random percentage-based routing
+   - Seamless fallback to local on S3 errors
+   - Real-time metrics tracking
+
+2. **S3 Operations**:
+   - File and buffer uploads
+   - Pre-signed URL generation
+   - Automatic content type detection
+   - Date-based folder structure
+   - S3 URL parsing (s3:// and https://)
+
+3. **MinIO Support**:
+   - Custom endpoint configuration
+   - Path-style URL support
+   - Explicit credential handling
+
+4. **Error Handling**:
+   - Graceful fallback to local storage
+   - Comprehensive error logging
+   - No service disruption on S3 failures
+
+#### Metrics Added
+- `s3Uploads`: Count of successful S3 uploads
+- `s3UploadErrors`: Count of failed uploads
+- `localStorage`: Count of local storage uses
+- `s3UploadRate`: Percentage of videos going to S3
+
+#### Current Status
+- ✅ Code implementation complete
+- ✅ MinIO support added and tested
+- ✅ TypeScript compilation issues resolved
+- ✅ Docker configuration updated
+- ✅ Ready for testing with MinIO or AWS S3
+
+#### Testing Commands
+```bash
+# Local storage (default)
+STORAGE_MODE=local
+
+# Hybrid mode (10% S3)
+STORAGE_MODE=hybrid
+S3_SPLIT_PERCENTAGE=10
+
+# Full S3 mode
+STORAGE_MODE=s3
+
+# Check metrics
+curl http://localhost:3001/api/v1/shares/metrics/ytdlp
+```

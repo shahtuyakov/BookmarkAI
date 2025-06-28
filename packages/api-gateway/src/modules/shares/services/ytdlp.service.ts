@@ -5,10 +5,13 @@ import { Redis } from 'ioredis';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { S3StorageService } from './s3-storage.service';
 
 export interface YtDlpResult {
   url: string;           // Original URL for reference
-  localPath?: string;    // Path to downloaded file
+  localPath?: string;    // Path to downloaded file (deprecated, use storageUrl)
+  storageUrl?: string;   // S3 URL or local path
+  storageType?: 'local' | 's3';  // Storage location type
   duration?: number;
   title?: string;
   description?: string;
@@ -36,6 +39,8 @@ export class YtDlpService {
   private readonly timeout = 60000; // 60 seconds (increased for downloads)
   private redisClient: Redis;
   private readonly downloadDir: string;
+  private readonly storageMode: 'local' | 's3' | 'hybrid';
+  private readonly s3SplitPercentage: number;
   
   // Metrics
   private metrics = {
@@ -45,14 +50,24 @@ export class YtDlpService {
     successfulExtractions: 0,
     failedExtractions: 0,
     timeouts: 0,
+    s3Uploads: 0,
+    s3UploadErrors: 0,
+    localStorage: 0,
   };
   
   constructor(
     private readonly configService: ConfigService,
+    private readonly s3Storage: S3StorageService,
   ) {
     // Set up download directory
     this.downloadDir = this.configService.get('YTDLP_DOWNLOAD_DIR', '/tmp/bookmarkai-videos');
     this.ensureDownloadDir();
+    
+    // Configure storage mode
+    this.storageMode = this.configService.get('STORAGE_MODE', 'local') as 'local' | 's3' | 'hybrid';
+    this.s3SplitPercentage = parseInt(this.configService.get('S3_SPLIT_PERCENTAGE', '10'), 10);
+    
+    this.logger.log(`Storage mode: ${this.storageMode}${this.storageMode === 'hybrid' ? ` (${this.s3SplitPercentage}% S3)` : ''}`);
     
     // Create Redis client for caching
     this.redisClient = new Redis({
@@ -220,20 +235,21 @@ export class YtDlpService {
             
             if (fs.existsSync(infoJsonPath)) {
               const infoData = JSON.parse(fs.readFileSync(infoJsonPath, 'utf8'));
-              const result = this.parseYtDlpOutput(infoData, videoId);
               
               // Clean up info JSON file
               fs.unlinkSync(infoJsonPath);
               
-              // Debug: Verify video file still exists after processing
-              if (result.localPath && fs.existsSync(result.localPath)) {
-                const stats = fs.statSync(result.localPath);
-                this.logger.log(`Video file confirmed after processing: ${result.localPath} (${stats.size} bytes)`);
-              } else {
-                this.logger.error(`Video file missing after processing: ${result.localPath}`);
-              }
-              
-              resolve(result);
+              // Parse and handle storage
+              this.parseYtDlpOutput(infoData, videoId).then(result => {
+                // Debug: Verify storage result
+                if (result.storageUrl) {
+                  this.logger.log(`Video stored at: ${result.storageUrl} (${result.storageType})`);
+                } else {
+                  this.logger.error(`Failed to store video`);
+                }
+                
+                resolve(result);
+              });
             } else {
               this.logger.error(`Info JSON file not found after download: ${infoJsonPath}`);
               resolve(null);
@@ -241,8 +257,7 @@ export class YtDlpService {
           } else {
             // When not downloading, parse stdout JSON
             const data = JSON.parse(stdout);
-            const result = this.parseYtDlpOutput(data);
-            resolve(result);
+            this.parseYtDlpOutput(data).then(result => resolve(result));
           }
         } catch (error) {
           this.logger.error(`Failed to parse yt-dlp output: ${error.message}`);
@@ -255,7 +270,7 @@ export class YtDlpService {
   /**
    * Parse yt-dlp JSON output
    */
-  private parseYtDlpOutput(data: any, videoId?: string): YtDlpResult {
+  private async parseYtDlpOutput(data: any, videoId?: string): Promise<YtDlpResult> {
     // Find the best video format
     let videoUrl = data.url || data.webpage_url;
     
@@ -295,16 +310,52 @@ export class YtDlpService {
       })),
     };
     
-    // If we downloaded the video, find the local file
+    // If we downloaded the video, handle storage
     if (videoId) {
       const localPath = this.findDownloadedFile(videoId);
       if (localPath) {
-        result.localPath = localPath;
         try {
           const stats = fs.statSync(localPath);
           result.fileSize = stats.size;
+          
+          // Determine storage destination
+          const useS3 = this.shouldUseS3();
+          
+          if (useS3 && this.s3Storage.isConfigured()) {
+            // Upload to S3
+            const s3Result = await this.uploadToS3(localPath, data);
+            if (s3Result) {
+              result.storageUrl = s3Result.s3Url;
+              result.storageType = 's3';
+              this.metrics.s3Uploads++;
+              
+              // Delete local file after successful S3 upload
+              try {
+                fs.unlinkSync(localPath);
+                this.logger.log(`Deleted local file after S3 upload: ${localPath}`);
+              } catch (error) {
+                this.logger.warn(`Failed to delete local file: ${error.message}`);
+              }
+            } else {
+              // Fallback to local storage if S3 upload fails
+              result.localPath = localPath;
+              result.storageUrl = localPath;
+              result.storageType = 'local';
+              this.metrics.s3UploadErrors++;
+              this.metrics.localStorage++;
+            }
+          } else {
+            // Use local storage
+            result.localPath = localPath;
+            result.storageUrl = localPath;
+            result.storageType = 'local';
+            this.metrics.localStorage++;
+          }
         } catch (error) {
-          this.logger.warn(`Could not get file size for ${localPath}: ${error.message}`);
+          this.logger.warn(`Error processing downloaded file: ${error.message}`);
+          result.localPath = localPath;
+          result.storageUrl = localPath;
+          result.storageType = 'local';
         }
       }
     }
@@ -407,11 +458,18 @@ export class YtDlpService {
     const successRate = (this.metrics.successfulExtractions + this.metrics.cacheHits) > 0
       ? ((this.metrics.successfulExtractions + this.metrics.cacheHits) / this.metrics.totalRequests) * 100
       : 0;
+      
+    const s3UploadRate = this.metrics.successfulExtractions > 0
+      ? (this.metrics.s3Uploads / this.metrics.successfulExtractions) * 100
+      : 0;
 
     return {
       ...this.metrics,
       cacheHitRate: `${cacheHitRate.toFixed(2)}%`,
       successRate: `${successRate.toFixed(2)}%`,
+      s3UploadRate: `${s3UploadRate.toFixed(2)}%`,
+      storageMode: this.storageMode,
+      s3Configured: this.s3Storage.isConfigured(),
     };
   }
 
@@ -488,6 +546,50 @@ export class YtDlpService {
     }
   }
   
+  /**
+   * Determine whether to use S3 based on storage mode
+   */
+  private shouldUseS3(): boolean {
+    if (this.storageMode === 's3') {
+      return true;
+    }
+    
+    if (this.storageMode === 'hybrid') {
+      // Use random percentage for hybrid mode
+      const random = Math.random() * 100;
+      return random < this.s3SplitPercentage;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Upload video to S3
+   */
+  private async uploadToS3(localPath: string, metadata: any) {
+    try {
+      const uploadMetadata = {
+        'video-title': metadata.title || 'Unknown',
+        'video-duration': String(metadata.duration || 0),
+        'video-uploader': metadata.uploader || 'Unknown',
+        'source-url': metadata.webpage_url || metadata.url,
+      };
+      
+      const result = await this.s3Storage.uploadFile(localPath, {
+        metadata: uploadMetadata,
+      });
+      
+      if (result) {
+        this.logger.log(`Successfully uploaded to S3: ${result.s3Url}`);
+      }
+      
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to upload to S3: ${error.message}`);
+      return null;
+    }
+  }
+
   /**
    * Clean up resources
    */

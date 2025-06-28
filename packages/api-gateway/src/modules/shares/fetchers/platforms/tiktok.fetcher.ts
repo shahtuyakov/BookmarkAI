@@ -86,7 +86,8 @@ export class TikTokFetcher extends BaseContentFetcher {
 
       // Download the video immediately using yt-dlp
       let videoUrl: string | undefined;
-      let localVideoPath: string | undefined;
+      let storageUrl: string | undefined;
+      let storageType: 'local' | 's3' | undefined;
       let duration: number | undefined;
       let fileSize: number | undefined;
       
@@ -96,14 +97,15 @@ export class TikTokFetcher extends BaseContentFetcher {
         
         if (ytDlpResult) {
           videoUrl = ytDlpResult.url;          // Original URL for reference
-          localVideoPath = ytDlpResult.localPath; // Local file path for processing
+          storageUrl = ytDlpResult.storageUrl || ytDlpResult.localPath; // Storage location (S3 or local)
+          storageType = ytDlpResult.storageType;
           duration = ytDlpResult.duration;
           fileSize = ytDlpResult.fileSize;
           
-          if (localVideoPath) {
-            this.logger.log(`Successfully downloaded TikTok video to: ${localVideoPath}`);
+          if (storageUrl) {
+            this.logger.log(`Successfully stored TikTok video at: ${storageUrl} (${storageType || 'local'})`);
           } else {
-            this.logger.warn(`Video download completed but no local file found`);
+            this.logger.warn(`Video download completed but no storage location found`);
           }
         } else {
           this.logger.warn(
@@ -123,12 +125,12 @@ export class TikTokFetcher extends BaseContentFetcher {
         },
         media: {
           type: 'video',
-          url: localVideoPath || videoUrl, // Prioritize local file path for processing
-          originalUrl: videoUrl,            // Keep original URL for reference
+          url: storageUrl || videoUrl,     // Storage location (S3 or local path)
+          originalUrl: videoUrl,           // Keep original URL for reference
           thumbnailUrl: data.thumbnail_url,
-          duration: duration,               // Duration from yt-dlp
+          duration: duration,              // Duration from yt-dlp
           fileSize: fileSize,              // File size in bytes
-          isLocalFile: !!localVideoPath,   // Flag to indicate local file vs URL
+          isLocalFile: storageType === 'local',   // Flag to indicate local file vs URL
         },
         metadata: {
           author: data.author_name,
@@ -139,8 +141,9 @@ export class TikTokFetcher extends BaseContentFetcher {
         platformData: {
           ...data,
           extractedVideoUrl: videoUrl,     // Original extracted URL
-          localVideoPath: localVideoPath, // Downloaded file path
-          downloadSuccess: !!localVideoPath, // Download status for debugging
+          storageUrl: storageUrl,          // Storage location (S3 or local)
+          storageType: storageType,        // Storage type indicator
+          downloadSuccess: !!storageUrl,   // Download status for debugging
         },
         hints: {
           hasNativeCaptions: true, // TikTok videos often have captions

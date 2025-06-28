@@ -105,6 +105,10 @@ services:
       # Silence detection
       WHISPER_SILENCE_THRESHOLD_DB: ${WHISPER_SILENCE_THRESHOLD_DB:--40.0}
       
+      # AWS/S3 configuration
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      S3_MEDIA_BUCKET: ${S3_MEDIA_BUCKET}
+      
       # Prometheus metrics
       WORKER_TYPE: whisper
       SERVICE_NAME: whisper-service

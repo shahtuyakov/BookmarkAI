@@ -9,6 +9,7 @@ import {
   GenericFetcher,
 } from './platforms';
 import { YtDlpService } from '../services/ytdlp.service';
+import { S3StorageService } from '../services/s3-storage.service';
 
 /**
  * Module for content fetchers
@@ -22,6 +23,7 @@ import { YtDlpService } from '../services/ytdlp.service';
     
     // Services
     YtDlpService,
+    S3StorageService,
     
     // Platform fetchers
     TikTokFetcher,

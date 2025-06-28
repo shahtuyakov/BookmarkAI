@@ -7,6 +7,8 @@ from typing import Tuple, List, Optional
 from urllib.parse import urlparse
 import requests
 import ffmpeg
+import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +76,24 @@ class AudioProcessor:
                         temp_file.write(chunk)
                         
             elif parsed_url.scheme == 's3':
-                # TODO: Implement S3 download with boto3
-                raise NotImplementedError("S3 download not yet implemented")
+                # Download from S3
+                bucket_name = parsed_url.netloc
+                key = parsed_url.path.lstrip('/')
+                
+                logger.info(f"Downloading from S3: bucket={bucket_name}, key={key}")
+                
+                try:
+                    s3_client = boto3.client('s3')
+                    s3_client.download_file(bucket_name, key, temp_file.name)
+                    logger.info(f"Successfully downloaded from S3 to: {temp_file.name}")
+                except ClientError as e:
+                    error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+                    if error_code == 'NoSuchKey':
+                        raise ValueError(f"S3 object not found: {media_url}")
+                    elif error_code == 'AccessDenied':
+                        raise ValueError(f"Access denied to S3 object: {media_url}")
+                    else:
+                        raise Exception(f"S3 download failed: {str(e)}")
             else:
                 raise ValueError(f"Unsupported URL scheme: {parsed_url.scheme}")
             
