@@ -106,13 +106,27 @@ class MediaPreflightService:
         # Basic URL validation for remote URLs only
         try:
             parsed = urlparse(url)
-            if not parsed.scheme in ['http', 'https']:
+            if not parsed.scheme in ['http', 'https', 's3']:
                 result['valid'] = False
                 result['reason'] = f"Unsupported URL scheme: {parsed.scheme}"
                 return result
         except Exception as e:
             result['valid'] = False
             result['reason'] = f"Invalid URL: {str(e)}"
+            return result
+        
+        # Special handling for S3 URLs
+        if parsed.scheme == 's3':
+            # S3 URLs are in format s3://bucket/key
+            if not parsed.netloc:
+                result['valid'] = False
+                result['reason'] = "Invalid S3 URL: missing bucket name"
+                return result
+            
+            result['metadata']['is_s3_url'] = True
+            result['metadata']['s3_bucket'] = parsed.netloc
+            result['metadata']['s3_key'] = parsed.path.lstrip('/')
+            # Skip HEAD request for S3 URLs as they require authentication
             return result
         
         # Check URL patterns for media content

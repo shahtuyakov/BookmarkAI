@@ -16,6 +16,39 @@ echo -e "${YELLOW}Stopping ML worker containers...${NC}"
 
 # Stop Docker services
 echo -e "${YELLOW}Stopping Docker services...${NC}"
+
+# Set default environment variable to avoid warnings
+export ENVIRONMENT=${ENVIRONMENT:-development}
+
+# Load environment variables
+ENV_DIR="../env"
+if [ -f "$ENV_DIR/base.env" ]; then
+    set -a
+    source "$ENV_DIR/base.env"
+    set +a
+fi
+if [ -f "$ENV_DIR/${ENVIRONMENT}/shared.env" ]; then
+    set -a
+    source "$ENV_DIR/${ENVIRONMENT}/shared.env"
+    set +a
+fi
+if [ -f "$ENV_DIR/${ENVIRONMENT}/python-services.env" ]; then
+    set -a
+    source "$ENV_DIR/${ENVIRONMENT}/python-services.env"
+    set +a
+fi
+
+# Export minimal defaults if variables are still not set (for docker-compose parsing)
+export DB_USER=${DB_USER:-postgres}
+export DB_PASSWORD=${DB_PASSWORD:-password}
+export DB_NAME=${DB_NAME:-bookmarkai}
+export MQ_USER=${MQ_USER:-guest}
+export MQ_PASSWORD=${MQ_PASSWORD:-guest}
+export MQ_PORT=${MQ_PORT:-5672}
+export CACHE_PORT=${CACHE_PORT:-6379}
+export ML_OPENAI_API_KEY=${ML_OPENAI_API_KEY:-dummy}
+export S3_MEDIA_BUCKET=${S3_MEDIA_BUCKET:-bookmarkai-media}
+
 cd docker
 
 # Check which workers are running

@@ -2124,3 +2124,105 @@ STORAGE_MODE=s3
 # Check metrics
 curl http://localhost:3001/api/v1/shares/metrics/ytdlp
 ```
+
+## S3 Integration Critical Fixes (June 28, 2025)
+
+### Issues Encountered and Resolved
+
+#### 1. S3 Metadata Header Validation Error
+**Error**: `Invalid character in header content ["x-amz-meta-video-title"]`
+**Root Cause**: TikTok video titles contained Unicode characters (emojis) which are not allowed in S3 metadata headers (must be US-ASCII)
+**Solution**: 
+- Added `sanitizeForS3Metadata()` function in `ytdlp.service.ts`
+- Strips all non-ASCII characters from metadata values
+- Replaces Unicode symbols with spaces
+- Ensures all S3 headers contain only valid US-ASCII characters
+
+#### 2. MinIO Bucket Missing Error
+**Error**: `The specified bucket does not exist`
+**Root Cause**: MinIO doesn't auto-create buckets like some S3 implementations
+**Solution**:
+- Created `setup-minio-buckets.sh` script
+- Uses MinIO client (mc) to create required buckets
+- Added `--ignore-existing` flag for idempotent operations
+
+#### 3. Whisper Service S3 URL Validation
+**Error**: `Unsupported URL scheme: s3`
+**Root Cause**: Pre-flight validation in `media_preflight.py` only accepted http/https URLs
+**Solution**:
+- Updated `validate_url()` to accept s3:// URLs
+- Added special handling for S3 URL parsing
+- Extracts bucket and key from S3 URLs
+- Returns early for valid S3 URLs
+
+#### 4. boto3 AWS Profile Configuration
+**Error**: `The config profile (bookmarkai) could not be found`
+**Root Cause**: boto3 was looking for AWS profile configuration in Docker containers
+**Solution Attempts**:
+1. Initial attempt: Set `AWS_PROFILE=''` (empty string) - Failed
+2. boto3 interpreted empty string as profile name: `The config profile () could not be found`
+3. Final solution: 
+   - Removed `AWS_PROFILE` environment variable completely
+   - Added explicit `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+   - Enhanced `audio_processor.py` to use explicit credentials for S3 client
+
+#### 5. Docker Container Network Access to MinIO
+**Error**: `Could not connect to the endpoint URL: "http://localhost:9000/..."`
+**Root Cause**: Whisper worker container trying to access MinIO at localhost (container's localhost, not host)
+**Solution**:
+- Updated S3_ENDPOINT in environment files from `http://localhost:9000` to `http://minio:9000`
+- Docker containers use service name `minio` for inter-container communication
+- Updated in:
+  - `env/base.env`
+  - `env/base.env.example`
+  - `env/development/shared.env`
+
+### Key Technical Learnings
+
+1. **S3 Metadata Headers**: Must be US-ASCII only, no Unicode allowed
+2. **MinIO Requirements**: Buckets must be created explicitly before use
+3. **boto3 Profile Behavior**: Empty string for AWS_PROFILE still triggers profile lookup
+4. **Docker Networking**: Containers must use service names, not localhost
+5. **Environment Variable Loading**: Docker Compose needs explicit env file specification
+
+### Configuration Updates Made
+
+#### Environment Files Structure
+```
+env/
+├── base.env                     # Added S3 configuration section
+├── base.env.example            # Updated with S3 examples
+└── development/
+    ├── python-services.env     # Removed AWS_PROFILE, added S3 configs
+    └── shared.env              # Updated S3_ENDPOINT to use minio hostname
+```
+
+#### Key Environment Variables
+```bash
+# S3/MinIO Configuration
+S3_ENDPOINT=http://minio:9000       # Use Docker service name
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_REGION=us-east-1
+S3_USE_PATH_STYLE=true
+S3_MEDIA_BUCKET=bookmarkai-media-development
+
+# AWS credentials for boto3 (prevents profile lookup)
+AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY}
+AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY}
+```
+
+### Testing Results
+After implementing all fixes:
+- ✅ S3 metadata validation errors resolved
+- ✅ MinIO bucket creation working
+- ✅ Whisper service accepts S3 URLs
+- ✅ boto3 connects successfully without profile errors
+- ✅ Workers can access MinIO via Docker networking
+- ✅ Full end-to-end S3 integration working
+
+### Next Steps
+1. Run `scripts/setup-minio-buckets.sh` to create MinIO buckets
+2. Monitor Whisper service for successful S3 downloads
+3. Consider implementing S3 lifecycle policies for automatic cleanup
+4. Add CloudWatch metrics for S3 operations

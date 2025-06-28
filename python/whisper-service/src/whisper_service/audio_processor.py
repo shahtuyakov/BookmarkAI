@@ -83,7 +83,27 @@ class AudioProcessor:
                 logger.info(f"Downloading from S3: bucket={bucket_name}, key={key}")
                 
                 try:
-                    s3_client = boto3.client('s3')
+                    # Configure S3 client for MinIO or AWS
+                    s3_config = {
+                        'region_name': os.environ.get('AWS_REGION', 'us-east-1')
+                    }
+                    
+                    # Check if we're using MinIO (custom endpoint)
+                    s3_endpoint = os.environ.get('S3_ENDPOINT')
+                    if s3_endpoint:
+                        logger.info(f"Using custom S3 endpoint: {s3_endpoint}")
+                        s3_config['endpoint_url'] = s3_endpoint
+                        s3_config['use_ssl'] = not s3_endpoint.startswith('http://')
+                        
+                        # Use explicit credentials for MinIO
+                        access_key = os.environ.get('S3_ACCESS_KEY') or os.environ.get('AWS_ACCESS_KEY_ID')
+                        secret_key = os.environ.get('S3_SECRET_KEY') or os.environ.get('AWS_SECRET_ACCESS_KEY')
+                        
+                        if access_key and secret_key:
+                            s3_config['aws_access_key_id'] = access_key
+                            s3_config['aws_secret_access_key'] = secret_key
+                    
+                    s3_client = boto3.client('s3', **s3_config)
                     s3_client.download_file(bucket_name, key, temp_file.name)
                     logger.info(f"Successfully downloaded from S3 to: {temp_file.name}")
                 except ClientError as e:

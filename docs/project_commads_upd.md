@@ -90,8 +90,12 @@ docker ps
 # Now includes both LLM and Whisper workers!
 ./scripts/start-ml-services.sh
 
+docker compose --env-file ../env/base.env -f docker-compose.ml.yml up -d
+
 # Stop ML workers
 ./scripts/stop-ml-services.sh
+
+docker compose --env-file ../env/base.env -f docker-compose.ml.yml down
 
 # View ML worker logs
 docker logs -f bookmarkai-llm-worker

@@ -564,15 +564,50 @@ export class YtDlpService {
   }
 
   /**
+   * Sanitize string for S3 metadata headers
+   * S3 metadata headers must be US-ASCII and cannot contain certain characters
+   */
+  private sanitizeForS3Metadata(value: string): string {
+    if (!value) return '';
+    
+    // Remove non-ASCII characters and replace with ASCII equivalents where possible
+    let sanitized = value
+      // Remove emojis and other Unicode symbols
+      .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
+      .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Symbols & pictographs
+      .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transport & map symbols
+      .replace(/[\u{1F700}-\u{1F77F}]/gu, '') // Alchemical symbols
+      .replace(/[\u{1F780}-\u{1F7FF}]/gu, '') // Geometric shapes extended
+      .replace(/[\u{1F800}-\u{1F8FF}]/gu, '') // Supplemental arrows-C
+      .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Miscellaneous symbols
+      .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
+      // Replace common Unicode characters with ASCII equivalents
+      .replace(/[""]/g, '"')
+      .replace(/['']/g, "'")
+      .replace(/[–—]/g, '-')
+      .replace(/…/g, '...')
+      // Remove control characters
+      .replace(/[\x00-\x1F\x7F]/g, '')
+      // Replace any remaining non-ASCII with space
+      .replace(/[^\x20-\x7E]/g, ' ')
+      // Collapse multiple spaces
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Ensure it's not empty after sanitization
+    return sanitized || 'Unknown';
+  }
+
+  /**
    * Upload video to S3
    */
   private async uploadToS3(localPath: string, metadata: any) {
     try {
       const uploadMetadata = {
-        'video-title': metadata.title || 'Unknown',
+        'video-title': this.sanitizeForS3Metadata(metadata.title || 'Unknown'),
         'video-duration': String(metadata.duration || 0),
-        'video-uploader': metadata.uploader || 'Unknown',
-        'source-url': metadata.webpage_url || metadata.url,
+        'video-uploader': this.sanitizeForS3Metadata(metadata.uploader || 'Unknown'),
+        'source-url': this.sanitizeForS3Metadata(metadata.webpage_url || metadata.url),
       };
       
       const result = await this.s3Storage.uploadFile(localPath, {
