@@ -62,8 +62,8 @@ active_tasks = Gauge(
 
 # Cost metrics
 ml_cost_total = Counter(
-    'ml_cost_dollars_total',
-    'Total cost of ML operations in dollars',
+    'ml_cost_usd_total',
+    'Total cost of ML operations in USD',
     ['task_type', 'model', 'worker_type'],
     registry=registry
 )

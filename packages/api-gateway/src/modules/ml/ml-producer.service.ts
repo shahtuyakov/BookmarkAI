@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '../../config/services/config.service';
+import { MLMetricsService } from './services/ml-metrics.service';
 import * as amqplib from 'amqplib';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -47,7 +48,10 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
   private circuitBreakerOpenUntil: Date | null = null;
   private readonly circuitBreakerCooldown = 30000; // 30 seconds
   
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly metricsService: MLMetricsService,
+  ) {}
 
   async onModuleInit() {
     await this.connect();
@@ -69,6 +73,7 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.connectionState = ConnectionState.CONNECTING;
+    this.metricsService.setConnectionState('CONNECTING');
 
     try {
       const brokerUrl = this.configService.get<string>(
@@ -186,14 +191,19 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
 
       // Reset reconnection state on successful connection
       this.connectionState = ConnectionState.CONNECTED;
+      this.metricsService.setConnectionState('CONNECTED');
       this.reconnectAttempts = 0;
+      this.metricsService.setReconnectAttempts(0);
       this.consecutiveFailures = 0;
+      this.metricsService.setCircuitBreakerState(false);
       this.circuitBreakerOpenUntil = null;
 
       this.logger.log('Connected to RabbitMQ and initialized ML queues');
     } catch (error) {
       this.connectionState = ConnectionState.DISCONNECTED;
+      this.metricsService.setConnectionState('DISCONNECTED');
       this.logger.error('Failed to connect to RabbitMQ:', error);
+      this.metricsService.incrementConnectionError(error.message || 'unknown');
       this.handleConnectionError();
       throw error;
     }
@@ -205,6 +215,7 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.connectionState = ConnectionState.DISCONNECTED;
+    this.metricsService.setConnectionState('DISCONNECTED');
     this.channel = null;
     this.connection = null;
 
@@ -227,6 +238,7 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
     );
 
     this.reconnectAttempts++;
+    this.metricsService.setReconnectAttempts(this.reconnectAttempts);
     this.logger.log(`Scheduling reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
 
     this.reconnectTimer = setTimeout(async () => {
@@ -240,6 +252,7 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
 
   private async disconnect(): Promise<void> {
     this.connectionState = ConnectionState.CLOSING;
+    this.metricsService.setConnectionState('CLOSING');
 
     try {
       if (this.channel) {
@@ -251,10 +264,12 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
         this.connection = null;
       }
       this.connectionState = ConnectionState.CLOSED;
+      this.metricsService.setConnectionState('CLOSED');
       this.logger.log('Disconnected from RabbitMQ');
     } catch (error) {
       this.logger.error('Error disconnecting from RabbitMQ:', error);
       this.connectionState = ConnectionState.CLOSED;
+      this.metricsService.setConnectionState('CLOSED');
     }
   }
 
@@ -266,6 +281,7 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
     if (new Date() > this.circuitBreakerOpenUntil) {
       this.circuitBreakerOpenUntil = null;
       this.consecutiveFailures = 0;
+      this.metricsService.setCircuitBreakerState(false);
       return false;
     }
     
@@ -274,6 +290,8 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
 
   private openCircuitBreaker(): void {
     this.circuitBreakerOpenUntil = new Date(Date.now() + this.circuitBreakerCooldown);
+    this.metricsService.incrementCircuitBreakerTrips();
+    this.metricsService.setCircuitBreakerState(true);
     this.logger.warn(`Circuit breaker opened until ${this.circuitBreakerOpenUntil.toISOString()}`);
   }
 
@@ -474,7 +492,14 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async publishTask(task: MLTaskPayload, overrideTaskName?: string): Promise<void> {
-    await this.ensureConnected();
+    const startTime = Date.now();
+    
+    try {
+      await this.ensureConnected();
+    } catch (error) {
+      this.metricsService.incrementTasksSent(task.taskType, 'circuit_breaker_open');
+      throw error;
+    }
 
     // Determine routing key based on task type and backend
     let routingKey = `ml.${task.taskType.split('_')[0]}`;
@@ -537,6 +562,14 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
 
     const messageBuffer = Buffer.from(JSON.stringify(celeryMessage));
     
+    // Record message size
+    this.metricsService.recordMessageSize(task.taskType, messageBuffer.length);
+    
+    // Track retries
+    if (task.metadata.retryCount > 0) {
+      this.metricsService.incrementTaskRetry(task.taskType);
+    }
+    
     try {
       // Publish with mandatory flag and wait for confirmation
       await new Promise<void>((resolve, reject) => {
@@ -569,6 +602,11 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
       // Reset consecutive failures on success
       this.consecutiveFailures = 0;
       
+      // Record success metrics
+      const durationSeconds = (Date.now() - startTime) / 1000;
+      this.metricsService.recordTaskPublishDuration(task.taskType, 'success', durationSeconds);
+      this.metricsService.incrementTasksSent(task.taskType, 'success');
+      
       this.logger.log(`Published ${task.taskType} task for share ${task.shareId}`);
     } catch (error) {
       this.consecutiveFailures++;
@@ -579,6 +617,11 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
       }
       
       this.logger.error(`Failed to publish task: ${error.message}`, error);
+      
+      // Record failure metrics
+      const durationSeconds = (Date.now() - startTime) / 1000;
+      this.metricsService.recordTaskPublishDuration(task.taskType, 'failure', durationSeconds);
+      this.metricsService.incrementTasksSent(task.taskType, 'failure');
       
       // Handle connection errors specifically
       if (error.message?.includes('Channel closed') || 
@@ -612,6 +655,11 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
     consecutiveFailures: number;
     circuitBreakerOpen: boolean;
   } {
+    // Update metrics gauges whenever status is requested
+    this.metricsService.setConnectionState(this.connectionState);
+    this.metricsService.setReconnectAttempts(this.reconnectAttempts);
+    this.metricsService.setCircuitBreakerState(this.isCircuitBreakerOpen());
+    
     return {
       connectionState: this.connectionState,
       reconnectAttempts: this.reconnectAttempts,

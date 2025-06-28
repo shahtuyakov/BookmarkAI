@@ -154,6 +154,7 @@ services:
     depends_on:
       - loki
       - tempo
+      - prometheus
 
   # Loki for log aggregation
   loki:
@@ -184,7 +185,13 @@ services:
       - '9090:9090'
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../docs/prometheus-alerts-ml.yml:/etc/prometheus/alerts/ml-alerts.yml:ro
       - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
 
 volumes:
   postgres-data:

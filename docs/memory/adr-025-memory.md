@@ -359,6 +359,176 @@ Complete vector embedding service following ADR-025 patterns:
 - ✅ Database persistence working (test failures are expected for non-existent share_ids)
 - ✅ Full production integration working with TikTok videos (June 27, 2025)
 
+## Node.js ML Producer Prometheus Metrics Implementation (June 28, 2025)
+
+### Overview
+Implemented comprehensive Prometheus metrics for the Node.js ML Producer service to monitor RabbitMQ connection health, task processing, and performance.
+
+### Implementation Details
+
+1. **ML Metrics Service** (`packages/api-gateway/src/modules/ml/services/ml-metrics.service.ts`)
+   - Created dedicated metrics service using prom-client
+   - Implemented counters, histograms, and gauges for comprehensive monitoring
+   - Key metrics:
+     - `ml_producer_tasks_sent_total` - Task send counter with labels
+     - `ml_producer_task_publish_duration_seconds` - Publish latency histogram
+     - `ml_producer_connection_state` - Connection state gauge
+     - `ml_producer_circuit_breaker_state` - Circuit breaker state gauge
+     - `ml_producer_message_size_bytes` - Message size histogram
+
+2. **ML Producer Integration**
+   - Integrated metrics throughout ML Producer service lifecycle
+   - Added metrics tracking for:
+     - Connection state changes
+     - Task publishing (success/failure)
+     - Circuit breaker state transitions
+     - Retry attempts
+     - Message sizes
+
+3. **Metrics Endpoints** (`packages/api-gateway/src/modules/ml/controllers/ml-metrics.controller.ts`)
+   - `/api/ml/metrics/prometheus` - Prometheus format metrics
+   - `/api/ml/metrics/json` - JSON format for debugging
+
+4. **Key Design Decisions**
+   - Used Prometheus client registry for metrics collection
+   - Implemented graceful degradation - metrics failures don't affect core functionality
+   - Added detailed labels for granular monitoring
+   - Created comprehensive documentation and alert rules
+
+### Documentation Created
+- **ML Producer Metrics Guide** (`docs/ml-producer-metrics.md`)
+  - Detailed metrics documentation
+  - Testing instructions
+  - Grafana query examples
+  
+- **Prometheus Alert Rules** (`docs/prometheus-alerts-ml.yml`)
+  - Connection health alerts
+  - Circuit breaker alerts
+  - Task processing alerts
+  - SLO monitoring
+
+- **Test Script** (`packages/api-gateway/test-ml-metrics.js`)
+  - Validates metrics endpoints
+  - Tests both Prometheus and JSON formats
+
+### API Endpoint Structure
+- Infrastructure endpoints (metrics, health): `/api/[endpoint]`
+- Business endpoints (shares, auth): `/api/v1/[endpoint]`
+
+### Testing Instructions Summary
+```bash
+# Test Prometheus metrics
+curl http://localhost:3001/api/ml/metrics/prometheus
+
+# Test JSON metrics  
+curl http://localhost:3001/api/ml/metrics/json
+```
+
+### Next Steps
+- Create Grafana dashboards for ML monitoring ✅
+- Add OpenTelemetry instrumentation
+- Set up contract validation
+- Configure KEDA autoscaling
+- Implement similarity search API endpoints
+
+## Grafana ML Monitoring Dashboards (June 28, 2025)
+
+### Overview
+Created comprehensive Grafana dashboards for monitoring ML services across the BookmarkAI platform.
+
+### Dashboards Created
+
+1. **ML Producer Monitoring** (`ml-producer-monitoring`)
+   - Connection health visualization
+   - Task processing metrics
+   - Performance metrics (latency, message size)
+   - Error and retry tracking
+
+2. **ML Analytics & Cost Monitoring** (`ml-analytics-monitoring`)
+   - Cost overview with budget gauges
+   - ML task performance metrics
+   - Transcription analytics
+   - Cost breakdown by task type
+
+3. **Python ML Services (Celery)** (`python-ml-services`)
+   - Celery worker status
+   - Task execution metrics
+   - Task performance percentiles
+   - Queue health monitoring
+
+### Implementation Details
+
+1. **Dashboard Provisioning Structure**
+   ```
+   docker/grafana/provisioning/
+   ├── datasources/
+   │   └── datasources.yaml
+   └── dashboards/
+       ├── dashboards.yaml
+       ├── ml-producer-dashboard.json
+       ├── ml-analytics-dashboard.json
+       └── python-ml-services-dashboard.json
+   ```
+
+2. **Prometheus Configuration Updates**
+   - Added ML Producer scrape config
+   - Added Celery Flower scrape config
+   - Configured alert rule loading
+
+3. **Docker Compose Updates**
+   - Added Prometheus dependency to Grafana
+   - Mounted alert rules to Prometheus
+   - Configured proper command arguments
+
+4. **Documentation** (`docs/grafana-ml-dashboards.md`)
+   - Dashboard descriptions
+   - Setup instructions
+   - Usage guidelines
+   - Metrics reference
+   - Troubleshooting guide
+
+### Dashboard Features
+
+**ML Producer Monitoring:**
+- Real-time connection status
+- Circuit breaker visualization
+- Task send rate by type/status
+- Latency percentiles (p50, p95, p99)
+- Message size distribution
+
+**ML Analytics & Cost:**
+- 24h cost tracking
+- Budget usage gauges
+- Cost per task metrics
+- Task completion rates
+- Audio duration analytics
+
+**Python Services:**
+- Worker count and status
+- Task queue lengths
+- Success rate gauge
+- Task runtime percentiles
+- Failure rate tracking
+
+### Testing
+Created test script: `scripts/test-grafana-dashboards.sh`
+- Validates Grafana/Prometheus status
+- Checks metrics endpoints
+- Lists provisioned dashboards
+- Provides dashboard URLs
+
+### Access URLs
+- Grafana: http://localhost:3000 (admin/admin)
+- ML Producer Dashboard: http://localhost:3000/d/ml-producer-monitoring
+- ML Analytics Dashboard: http://localhost:3000/d/ml-analytics-monitoring
+- Python Services Dashboard: http://localhost:3000/d/python-ml-services
+
+### Next Steps
+- Add OpenTelemetry instrumentation
+- Set up contract validation
+- Configure KEDA autoscaling
+- Implement similarity search API endpoints
+
 ## Production TikTok Video Processing Integration (June 27, 2025)
 
 ### Issues Encountered & Resolved
@@ -2392,3 +2562,124 @@ RABBITMQ_URL=amqp://ml:ml_password@localhost:5672/
 - Environment configuration examples for all scenarios
 
 This implementation provides a complete testing environment for high availability and TLS features without requiring AWS account or affecting the existing RabbitMQ instance.
+
+## Node.js ML Producer Prometheus Metrics Implementation (June 29, 2025)
+
+### Overview
+Implemented comprehensive Prometheus metrics for the Node.js ML Producer service to monitor RabbitMQ message publishing, connection health, and task processing performance.
+
+### What Was Implemented
+
+#### 1. ML Metrics Service ✅
+Created `packages/api-gateway/src/modules/ml/services/ml-metrics.service.ts`:
+- Uses `prom-client` library for Prometheus integration
+- Comprehensive metric types: counters, histograms, and gauges
+- Automatic default Node.js metrics collection
+- Helper methods for easy metric updates throughout the codebase
+
+**Metrics Implemented:**
+- **Counters:**
+  - `ml_producer_tasks_sent_total`: Total tasks sent (by task_type and status)
+  - `ml_producer_task_retries_total`: Task retry attempts
+  - `ml_producer_connection_errors_total`: Connection errors by type
+  - `ml_producer_circuit_breaker_trips_total`: Circuit breaker activations
+
+- **Histograms:**
+  - `ml_producer_task_publish_duration_seconds`: Publishing latency
+  - `ml_producer_message_size_bytes`: Message size distribution
+
+- **Gauges:**
+  - `ml_producer_connection_state`: Current connection state (0-4)
+  - `ml_producer_circuit_breaker_state`: Circuit breaker status (0/1)
+  - `ml_producer_reconnect_attempts`: Current reconnection attempt count
+
+#### 2. ML Producer Integration ✅
+Updated `packages/api-gateway/src/modules/ml/ml-producer.service.ts`:
+- Injected MLMetricsService dependency
+- Added metric tracking throughout connection lifecycle:
+  - Connection state changes
+  - Reconnection attempts
+  - Circuit breaker state changes
+- Task publishing metrics:
+  - Success/failure tracking with timing
+  - Message size recording
+  - Retry count tracking
+- Error tracking with specific error types
+
+#### 3. Metrics Endpoints ✅
+Created `packages/api-gateway/src/modules/ml/controllers/ml-metrics.controller.ts`:
+- `/api/metrics/prometheus`: Prometheus text format endpoint
+- `/api/metrics/ml-producer`: JSON format for debugging
+- Proper Swagger/OpenAPI documentation
+- Authentication required for both endpoints
+
+#### 4. Module Configuration ✅
+Updated `packages/api-gateway/src/modules/ml/ml.module.ts`:
+- Added MLMetricsService to providers
+- Added MLMetricsController to controllers
+- Exported metrics service for use in other modules
+
+### Key Design Decisions
+
+1. **Metric Labels**: Used consistent labeling for task types and statuses
+2. **Histogram Buckets**: Carefully chosen for expected latency and size distributions
+3. **Gauge Updates**: Updated on health checks to ensure current state visibility
+4. **Performance**: Minimal overhead with in-memory metric storage
+5. **Integration**: Seamlessly integrated with existing connection reliability features
+
+### Documentation Created
+
+#### 1. Comprehensive Metrics Guide
+`docs/ml-producer-metrics.md`:
+- Complete list of all metrics exposed
+- Endpoint documentation
+- Integration instructions for Prometheus
+- Example Grafana queries
+- Testing instructions
+
+#### 2. Production Alert Rules
+`docs/prometheus-alerts-ml.yml`:
+- Connection health alerts
+- Circuit breaker monitoring
+- High failure rate detection
+- Latency SLO violations
+- Task-specific monitoring
+
+#### 3. Test Script
+`packages/api-gateway/test-ml-metrics.js`:
+- Automated testing of all endpoints
+- Metric generation through API calls
+- Validation of metric updates
+
+### API Endpoints
+
+**Note**: The API uses different prefixes for different endpoint types:
+- Business endpoints (shares, auth): `/api/v1/`
+- Infrastructure endpoints (metrics, health): `/api/` (no version)
+
+**Endpoints Created:**
+- `GET /api/metrics/prometheus` - Prometheus text format
+- `GET /api/metrics/ml-producer` - JSON debugging format
+- `GET /api/ml/analytics/health` - Health status (existing, now updates metrics)
+
+### Testing Instructions Provided
+
+Comprehensive testing guide includes:
+1. Authentication setup
+2. Prometheus endpoint testing
+3. JSON metrics validation
+4. Health endpoint verification
+5. Metric generation through share creation
+6. Connection failure simulation
+7. Continuous monitoring scripts
+8. Prometheus scraping configuration
+9. Grafana query examples
+
+### Next Steps
+
+With Prometheus metrics for Node.js ML Producer completed, the remaining observability tasks are:
+1. **Create Grafana dashboards for ML monitoring** - Visualize the metrics
+2. **Add OpenTelemetry instrumentation** - Distributed tracing
+3. Other lower priority items (contract validation, KEDA autoscaling, similarity search)
+
+The metrics implementation follows Prometheus best practices and provides comprehensive visibility into ML task publishing operations, connection health, and performance characteristics.

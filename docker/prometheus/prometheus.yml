@@ -2,7 +2,46 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Load alert rules
+rule_files:
+  - '/etc/prometheus/alerts/*.yml'
+
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+
+  # ML Producer metrics from API Gateway
+  - job_name: 'ml-producer'
+    metrics_path: '/api/ml/metrics/prometheus'
+    static_configs:
+      # Use the special Docker hostname that points to host machine
+      - targets: ['host.docker.internal:3001']
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Python ML Services
+  - job_name: 'llm-worker'
+    static_configs:
+      - targets: ['host.docker.internal:9091']
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  - job_name: 'whisper-worker'
+    static_configs:
+      - targets: ['host.docker.internal:9092']
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  - job_name: 'vector-worker'
+    static_configs:
+      - targets: ['host.docker.internal:9093']
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  # Celery Flower metrics (if enabled)
+  - job_name: 'celery-flower'
+    static_configs:
+      - targets: ['host.docker.internal:5555']
+    scrape_interval: 30s
+    scrape_timeout: 10s
