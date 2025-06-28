@@ -259,7 +259,7 @@ Based on production experience with similar architectures and our implementation
 | Priority | Deliverable | Timeline |
 |----------|-------------|----------|
 | ✅ Done | Production RabbitMQ cluster (3-node HA) | Completed |
-| 🔴 High | S3 file storage migration to production | Week 1 |
+| ⏸️ Deferred | S3 file storage migration to production | Post-MVP |
 | 🟠 Medium | Connection reliability (publisher confirms, reconnect wrapper) | Week 1 |
 | 🟠 Medium | OpenTelemetry distributed tracing | Week 2 |
 | ✅ Done | Grafana dashboards & alerts | Completed |
@@ -311,7 +311,7 @@ Before production, test these scenarios:
 - [x] Prometheus and management plugins enabled
 - [x] Persistent volumes for queue durability (`rabbitmq-data`)
 - [x] S3-compatible storage (MinIO for local dev)
-- [ ] Production S3 bucket configuration (AWS)
+- [ ] Production S3 bucket configuration (AWS) - **Deferred until AWS account available**
 
 ### Python Stack ✅
 - [x] Celery 5.5.x with `kombu>=5.3.5`

@@ -67,6 +67,12 @@ This document captures the implementation details and decisions made while imple
 - **Solution**: Updated dashboard queries to match actual metric names from workers
 - **Note**: Celery/Flower metrics require additional configuration for full dashboard functionality
 
+### Storage Strategy
+- **Local Development**: Using MinIO S3-compatible storage
+- **Bucket**: `bookmarkai-media-development` 
+- **Access**: MinIO console at http://localhost:9001
+- **Future**: Will migrate to AWS S3 when account is available
+
 ## Whisper Service Implementation
 
 ### Core Implementation ✅
@@ -190,11 +196,41 @@ This document captures the implementation details and decisions made while imple
 - Analytics API endpoints
 - Cost tracking and budget management
 
-### Remaining Tasks
-- OpenTelemetry instrumentation
-- Contract validation
-- KEDA autoscaling
-- Similarity search API endpoints
+### Remaining Tasks List
+
+Medium Priority Items 🟠
+
+1. Connection reliability improvements (Week 1)
+    - Implement reconnect wrapper for amqplib in Node.js
+    - Enable publisher confirms (confirm_publish: true)
+    - Add proper retry logic for failed publishes
+2. OpenTelemetry distributed tracing (Week 2)
+    - Integrate OpenTelemetry SDK in both Node.js and Python
+    - Implement W3C Trace Context propagation in AMQP headers
+    - Configure Jaeger backend for trace collection
+    - Set up end-to-end request tracing (API → Queue → Worker → DB)
+
+Low Priority Items 🟡
+
+1. Set up contract validation (Week 3)
+    - Create shared schema repository for message contracts
+    - Implement validation with pydantic (Python) and zod (TypeScript)
+    - Version contracts in message format
+2. Configure KEDA autoscaling (Week 3)
+    - Set up KEDA ScaledObjects for each worker type
+    - Configure queue-based scaling triggers
+    - Test scale-up/down behavior under load
+3. Implement similarity search API endpoints (Week 4)
+    - Create vector search endpoints using pgvector
+    - Implement semantic search functionality
+    - Add API documentation
+
+### Deferred Tasks
+- **AWS S3 Configuration** (June 28, 2025): Deferred until AWS account is available
+  - Will continue using MinIO for local S3-compatible storage
+  - Files stored in MinIO bucket: `bookmarkai-media-development`
+  - MinIO console: http://localhost:9001/browser/bookmarkai-media-development
+  - Production S3 migration will be done after functional app is complete
 
 ## Technical Decisions Summary
 
