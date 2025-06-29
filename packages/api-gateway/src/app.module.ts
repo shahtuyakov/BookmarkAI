@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SharesModule } from './modules/shares/shares.module';
+import { MLModule } from './modules/ml/ml.module';
 import { RateLimitMiddleware } from './modules/auth/middlewares/rate-limit.middleware';
 import { ConfigService } from './config/services/config.service';
 
@@ -33,6 +34,7 @@ import { ConfigService } from './config/services/config.service';
     HealthModule,
     AuthModule,
     SharesModule,
+    MLModule,
   ],
 })
 export class AppModule {

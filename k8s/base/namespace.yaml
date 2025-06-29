@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bookmarkai
+  labels:
+    app.kubernetes.io/name: bookmarkai
+    app.kubernetes.io/part-of: bookmarkai
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bookmarkai-ml
+  labels:
+    app.kubernetes.io/name: bookmarkai-ml
+    app.kubernetes.io/part-of: bookmarkai
+    keda.sh/enabled: "true"

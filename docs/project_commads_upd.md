@@ -32,8 +32,20 @@ pnpm -w run db:migrate
 
 ### Development Servers
 
-# Start API gateway in development mode
+# Start API gateway in development mode (locally)
 pnpm -w run dev:api
+
+# Run API gateway in Docker (from project root)
+docker build -t bookmarkai-api-gateway -f docker/Dockerfile.api-gateway .
+
+# Start with docker-compose (includes all dependencies)
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.api-gateway.yml up -d api-gateway
+
+# Create Docker network if needed
+docker network create docker_bookmarkai-network
+
+# View API gateway logs
+docker logs -f bookmarkai-api-gateway
 
 # Start extension in development mode (hot reload)
 pnpm -w run dev:extension
@@ -72,6 +84,60 @@ pnpm -w run build:all
 # List all running containers
 docker ps
 
+### ML Worker Services
+
+# Start ML workers (includes RabbitMQ, Redis, PostgreSQL if needed)
+# Now includes both LLM and Whisper workers!
+./scripts/start-ml-services.sh
+
+docker compose --env-file ../env/base.env -f docker-compose.ml.yml up -d
+
+# Stop ML workers
+./scripts/stop-ml-services.sh
+
+docker compose --env-file ../env/base.env -f docker-compose.ml.yml down
+
+# View ML worker logs
+docker logs -f bookmarkai-llm-worker
+docker logs -f bookmarkai-whisper-worker
+docker logs -f bookmarkai-vector-worker
+
+# Access RabbitMQ Management UI
+# URL: http://localhost:15672
+# Credentials: ml/ml_password
+
+# Monitor Celery workers with Flower (optional)
+docker compose -f docker/docker-compose.ml.yml --profile monitoring up -d flower
+# URL: http://localhost:5555
+# Credentials: admin/bookmarkai123
+
+# Test ML pipeline
+cd packages/api-gateway && pnpm test:ml-pipeline
+
+# Run ML worker locally for development
+cd python/llm-service
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ../shared
+pip install -e .
+celery -A llm_service.celery_app worker --loglevel=info --queues=ml.summarize
+
+# Run Whisper worker locally for development
+cd python/whisper-service
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ../shared
+pip install -e .
+celery -A whisper_service.celery_app worker --loglevel=info --queues=ml.transcribe
+
+# Run Vector worker locally for development
+cd python/vector-service
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ../shared
+pip install -e .
+celery -A vector_service.celery_app worker --loglevel=info --queues=ml.embed
+
 ### Database Management
 
 # Get the port of the postgres container
@@ -95,8 +161,89 @@ psql -U bookmarkai -d bookmarkai_dev
 # Exit psql
 \q
 
+# Check ML results table
+\d ml_results
+SELECT * FROM ml_results;
+
+# Check transcription costs table
+\d transcription_costs
+SELECT * FROM transcription_costs;
+
+# View cost analytics
+SELECT * FROM transcription_cost_analytics;
+
+# Check vector embeddings and costs
+\d vector_costs
+SELECT * FROM vector_costs ORDER BY created_at DESC LIMIT 5;
+
+# View vector budget status
+SELECT * FROM vector_budget_status;
+
+# View hourly vector costs
+SELECT * FROM hourly_vector_costs ORDER BY hour DESC LIMIT 10;
+
+# Check embeddings with pgvector
+\d embeddings
+SELECT COUNT(*) FROM embeddings;
+
+# Find similar embeddings (example)
+SELECT share_id, 1 - (embedding <=> '[0.1, 0.2, ...]'::vector) AS similarity 
+FROM embeddings 
+ORDER BY embedding <=> '[0.1, 0.2, ...]'::vector 
+LIMIT 10;
+
 # Test Redis connectivity
 docker exec -it docker-redis-1 redis-cli ping
+
+### Whisper Service & Video Transcription
+
+# Test Whisper worker with direct RabbitMQ message
+cd packages/api-gateway
+node test-whisper-direct.js
+
+# Test with TikTok URL (requires yt-dlp)
+node test-whisper-tiktok.js
+
+# Install yt-dlp locally (macOS)
+brew install yt-dlp
+# or
+pip3 install yt-dlp
+
+# Check yt-dlp installation
+yt-dlp --version
+
+# Rebuild Whisper Docker image after changes
+docker compose -f docker/docker-compose.ml.yml build whisper-worker
+
+# View Whisper worker environment
+docker exec bookmarkai-whisper-worker env | grep OPENAI
+
+# Test video URL extraction (TikTok)
+yt-dlp --dump-json --no-download "https://www.tiktok.com/@user/video/123"
+
+### Vector Embedding Service
+
+# Test vector embedding task
+cd packages/api-gateway
+node test-embedding-task.js
+
+# Run full vector integration test
+./scripts/test-vector-integration.sh
+
+# Test vector migration
+./scripts/test-vector-migration.sh
+
+# Monitor vector worker metrics
+curl http://localhost:9093/metrics | grep ml_embeddings
+
+# Check vector service health
+docker exec bookmarkai-vector-worker python -c "from vector_service.tasks import health_check; print(health_check())"
+
+# Rebuild vector Docker image after changes
+docker compose -f docker/docker-compose.ml.yml build vector-worker
+
+# View vector worker environment
+docker exec bookmarkai-vector-worker env | grep VECTOR
 
 ### Infrastructure (AWS CDK)
 
@@ -164,6 +311,13 @@ npx husky uninstall
 - `@bookmarkai/sdk` - TypeScript SDK  
 - `@bookmarkai/mobile` - React Native mobile app
 - Other packages: web, shared, fetchers, orchestrator
+
+### Python ML Services:
+- `python/llm-service` - LLM summarization worker ✓
+- `python/whisper-service` - Audio/video transcription ✓ (OpenAI Whisper API)
+- `python/vector-service` - Text embeddings ✓ (OpenAI text-embedding-3)
+- `python/caption-service` - Image captioning (planned)
+- `python/shared` - Shared Celery configuration ✓
 
 ### Common Filter Commands:
 ```bash
@@ -238,3 +392,39 @@ cd ios && xcodebuild test -scheme BookmarkAI -destination 'platform=iOS Simulato
 
 # Android contract tests  
 cd android && ./gradlew testDebugUnitTest --tests "*ContractTest*"
+
+### Troubleshooting
+
+# Clean Docker build cache
+docker builder prune -f
+
+# Remove all stopped containers
+docker container prune -f
+
+# Check disk space used by Docker
+docker system df
+
+# Clean up everything (WARNING: removes all Docker data)
+docker system prune -a
+
+# Fix pnpm module resolution issues
+pnpm store prune
+pnpm install --force
+
+# Check which process is using a port (e.g., 3001)
+lsof -i :3001
+
+# Kill process using a port
+kill -9 $(lsof -t -i:3001)
+
+# Verify environment variables
+printenv | grep -E "(DATABASE|REDIS|RABBITMQ|OPENAI)"
+
+# Check ML worker queue status
+docker exec -it ml-rabbitmq rabbitmqctl list_queues
+
+# Debug RabbitMQ connections
+docker exec -it ml-rabbitmq rabbitmqctl list_connections
+
+# Clear Redis cache
+docker exec -it docker-redis-1 redis-cli FLUSHALL

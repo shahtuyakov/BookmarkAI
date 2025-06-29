@@ -11,16 +11,27 @@ import {
   FetcherErrorCode,
   RetryableFetcherError,
 } from '../interfaces/fetcher-error.interface';
+import { YtDlpService } from '../../services/ytdlp.service';
 
 /**
  * TikTok content fetcher using oEmbed API
  * No authentication required, but limited metadata available
+ * 
+ * NOTE: Video URL extraction is attempted but often fails due to TikTok's anti-bot measures.
+ * For reliable video extraction, consider:
+ * 1. Using yt-dlp as a subprocess (most reliable)
+ * 2. Using a headless browser with Puppeteer/Playwright
+ * 3. Using a specialized TikTok API service
+ * 4. Implementing TikTok's official API (requires approval)
  */
 @Injectable()
 export class TikTokFetcher extends BaseContentFetcher {
   private readonly oembedEndpoint = 'https://www.tiktok.com/oembed';
 
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly ytDlpService: YtDlpService,
+  ) {
     super(Platform.TIKTOK, configService);
   }
 
@@ -73,6 +84,39 @@ export class TikTokFetcher extends BaseContentFetcher {
         );
       }
 
+      // Download the video immediately using yt-dlp
+      let videoUrl: string | undefined;
+      let storageUrl: string | undefined;
+      let storageType: 'local' | 's3' | undefined;
+      let duration: number | undefined;
+      let fileSize: number | undefined;
+      
+      try {
+        this.logger.log(`Downloading TikTok video for immediate processing: ${request.url}`);
+        const ytDlpResult = await this.ytDlpService.extractVideoInfo(request.url, true); // Download video
+        
+        if (ytDlpResult) {
+          videoUrl = ytDlpResult.url;          // Original URL for reference
+          storageUrl = ytDlpResult.storageUrl || ytDlpResult.localPath; // Storage location (S3 or local)
+          storageType = ytDlpResult.storageType;
+          duration = ytDlpResult.duration;
+          fileSize = ytDlpResult.fileSize;
+          
+          if (storageUrl) {
+            this.logger.log(`Successfully stored TikTok video at: ${storageUrl} (${storageType || 'local'})`);
+          } else {
+            this.logger.warn(`Video download completed but no storage location found`);
+          }
+        } else {
+          this.logger.warn(
+            `yt-dlp could not download TikTok video. ` +
+            `This may be due to TikTok's anti-bot measures or regional restrictions.`
+          );
+        }
+      } catch (extractError) {
+        this.logger.warn(`Failed to download TikTok video with yt-dlp: ${extractError.message}`);
+      }
+
       // Build standardized response
       const result: FetchResponse = {
         content: {
@@ -81,8 +125,12 @@ export class TikTokFetcher extends BaseContentFetcher {
         },
         media: {
           type: 'video',
+          url: storageUrl || videoUrl,     // Storage location (S3 or local path)
+          originalUrl: videoUrl,           // Keep original URL for reference
           thumbnailUrl: data.thumbnail_url,
-          // TikTok oEmbed doesn't provide video URL or duration
+          duration: duration,              // Duration from yt-dlp
+          fileSize: fileSize,              // File size in bytes
+          isLocalFile: storageType === 'local',   // Flag to indicate local file vs URL
         },
         metadata: {
           author: data.author_name,
@@ -90,7 +138,13 @@ export class TikTokFetcher extends BaseContentFetcher {
           // Extract video ID from embed HTML if available
           platformId: this.extractVideoId(data.html),
         },
-        platformData: data,
+        platformData: {
+          ...data,
+          extractedVideoUrl: videoUrl,     // Original extracted URL
+          storageUrl: storageUrl,          // Storage location (S3 or local)
+          storageType: storageType,        // Storage type indicator
+          downloadSuccess: !!storageUrl,   // Download status for debugging
+        },
         hints: {
           hasNativeCaptions: true, // TikTok videos often have captions
           requiresAuth: false,
@@ -100,6 +154,7 @@ export class TikTokFetcher extends BaseContentFetcher {
       this.logMetrics('fetch_success', { 
         url: request.url,
         hasMedia: !!result.media?.thumbnailUrl,
+        hasVideoUrl: !!result.media?.url,
         hasAuthor: !!result.metadata.author,
       });
 
@@ -166,4 +221,5 @@ export class TikTokFetcher extends BaseContentFetcher {
     const match = html.match(/embed\/v2\/(\d+)/);
     return match?.[1];
   }
+
 }

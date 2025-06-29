@@ -1,0 +1,30 @@
+# Vector Embedding Service Requirements
+# Core dependencies from setup.py
+
+# Shared BookmarkAI module
+-e ../shared
+
+# Celery and task management
+celery[redis]>=5.5.0
+celery-singleton>=0.3.1
+
+# OpenAI for embeddings
+openai>=1.0.0
+tiktoken>=0.5.0
+
+# Data processing
+numpy>=1.24.0
+pydantic>=2.0.0
+
+# Database
+psycopg2-binary>=2.9.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Retry logic
+tenacity>=8.0.0
+
+# Text splitting
+langchain>=0.2.0
+langchain-text-splitters>=0.2.0

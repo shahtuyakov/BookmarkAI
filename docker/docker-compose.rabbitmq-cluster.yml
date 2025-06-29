@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  # RabbitMQ Node 1 (Master)
+  rabbitmq1:
+    image: rabbitmq:3.13-management-alpine
+    hostname: rabbitmq1
+    container_name: rabbitmq-node1
+    ports:
+      - "5681:5672"    # AMQP port (shifted from 5672)
+      - "5691:5671"    # AMQPS port (shifted from 5671)
+      - "15681:15672"  # Management UI (shifted from 15672)
+    environment:
+      RABBITMQ_DEFAULT_USER: ml
+      RABBITMQ_DEFAULT_PASS: ml_password
+      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_ERLANG_COOKIE: bookmarkai_cookie_secret
+      RABBITMQ_NODENAME: rabbit@rabbitmq1
+      # Enable management plugin
+      RABBITMQ_PLUGINS: rabbitmq_management rabbitmq_management_agent
+    volumes:
+      - rabbitmq1-data:/var/lib/rabbitmq
+      - ./rabbitmq-cluster/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-cluster/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq-cluster/certificates:/etc/rabbitmq/certificates:ro
+    networks:
+      rabbitmq-cluster:
+        aliases:
+          - rabbitmq-cluster
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # RabbitMQ Node 2
+  rabbitmq2:
+    image: rabbitmq:3.13-management-alpine
+    hostname: rabbitmq2
+    container_name: rabbitmq-node2
+    ports:
+      - "5682:5672"    # AMQP port (shifted from 5673)
+      - "5692:5671"    # AMQPS port (shifted from 5674)
+      - "15682:15672"  # Management UI (shifted from 15673)
+    environment:
+      RABBITMQ_DEFAULT_USER: ml
+      RABBITMQ_DEFAULT_PASS: ml_password
+      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_ERLANG_COOKIE: bookmarkai_cookie_secret
+      RABBITMQ_NODENAME: rabbit@rabbitmq2
+    volumes:
+      - rabbitmq2-data:/var/lib/rabbitmq
+      - ./rabbitmq-cluster/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-cluster/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq-cluster/certificates:/etc/rabbitmq/certificates:ro
+    networks:
+      - rabbitmq-cluster
+    depends_on:
+      - rabbitmq1
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # RabbitMQ Node 3
+  rabbitmq3:
+    image: rabbitmq:3.13-management-alpine
+    hostname: rabbitmq3
+    container_name: rabbitmq-node3
+    ports:
+      - "5683:5672"    # AMQP port (shifted from 5675)
+      - "5693:5671"    # AMQPS port (shifted from 5676)
+      - "15683:15672"  # Management UI (shifted from 15674)
+    environment:
+      RABBITMQ_DEFAULT_USER: ml
+      RABBITMQ_DEFAULT_PASS: ml_password
+      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_ERLANG_COOKIE: bookmarkai_cookie_secret
+      RABBITMQ_NODENAME: rabbit@rabbitmq3
+    volumes:
+      - rabbitmq3-data:/var/lib/rabbitmq
+      - ./rabbitmq-cluster/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-cluster/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq-cluster/certificates:/etc/rabbitmq/certificates:ro
+    networks:
+      - rabbitmq-cluster
+    depends_on:
+      - rabbitmq1
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # HAProxy Load Balancer for high availability
+  haproxy:
+    image: haproxy:alpine
+    container_name: rabbitmq-haproxy
+    ports:
+      - "5680:5672"    # AMQP load balanced port (shifted from 5670)
+      - "5690:5671"    # AMQPS load balanced port (shifted from 5669)
+      - "15680:15672"  # Management UI load balanced (shifted from 15670)
+      - "8404:8404"    # HAProxy stats
+    volumes:
+      - ./rabbitmq-cluster/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./rabbitmq-cluster/certificates:/etc/ssl/certs:ro
+    networks:
+      - rabbitmq-cluster
+    depends_on:
+      - rabbitmq1
+      - rabbitmq2
+      - rabbitmq3
+
+  # Cluster setup helper
+  rabbitmq-setup:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq-setup
+    environment:
+      RABBITMQ_ERLANG_COOKIE: bookmarkai_cookie_secret
+    volumes:
+      - ./rabbitmq-cluster/setup-cluster.sh:/setup-cluster.sh:ro
+    networks:
+      - rabbitmq-cluster
+    depends_on:
+      rabbitmq1:
+        condition: service_healthy
+      rabbitmq2:
+        condition: service_healthy
+      rabbitmq3:
+        condition: service_healthy
+    command: /setup-cluster.sh
+    restart: "no"
+
+volumes:
+  rabbitmq1-data:
+  rabbitmq2-data:
+  rabbitmq3-data:
+
+networks:
+  rabbitmq-cluster:
+    driver: bridge

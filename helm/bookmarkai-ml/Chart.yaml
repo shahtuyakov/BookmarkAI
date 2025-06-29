@@ -1,0 +1,34 @@
+apiVersion: v2
+name: bookmarkai-ml
+description: BookmarkAI ML Workers with KEDA Autoscaling
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+keywords:
+  - ml
+  - celery
+  - keda
+  - autoscaling
+  - rabbitmq
+
+home: https://github.com/yourusername/bookmarkai
+sources:
+  - https://github.com/yourusername/bookmarkai
+
+maintainers:
+  - name: BookmarkAI Team
+    email: team@bookmarkai.com
+
+dependencies:
+  - name: keda
+    version: "2.13.0"
+    repository: https://kedacore.github.io/charts
+    condition: keda.enabled
+  - name: prometheus
+    version: "25.8.0"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+    
+annotations:
+  category: MachineLearning

@@ -1,0 +1,52 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: whisper-worker-scaler
+  namespace: bookmarkai-ml
+spec:
+  scaleTargetRef:
+    name: whisper-worker
+  pollingInterval: 30
+  cooldownPeriod: 600  # 10 minutes cooldown for expensive transcription
+  idleReplicaCount: 0
+  minReplicaCount: 1
+  maxReplicaCount: 5   # Lower max due to resource intensity
+  triggers:
+  - type: rabbitmq
+    metadata:
+      protocol: amqp
+      queueName: ml.transcribe
+      mode: QueueLength
+      value: "2"  # Only 2 messages per replica due to high resource usage
+      activationValue: "1"
+    authenticationRef:
+      name: rabbitmq-trigger-auth
+  # Memory-based scaling
+  - type: memory
+    metricType: Utilization
+    metadata:
+      value: "70"  # Scale up at 70% memory usage
+  # Custom metric for transcription duration
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus.bookmarkai.svc.cluster.local:9090
+      metricName: ml_transcription_duration_seconds
+      query: |
+        histogram_quantile(0.95, 
+          sum(rate(ml_transcription_duration_seconds_bucket[5m])) by (le)
+        )
+      threshold: "300"  # Scale up if 95th percentile > 5 minutes
+      activationThreshold: "60"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # 10 minutes before scale down
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120  # Remove 1 pod every 2 minutes
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 1  # Add only 1 pod at a time
+        periodSeconds: 60

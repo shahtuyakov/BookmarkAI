@@ -1,0 +1,48 @@
+# Define reusable environment configuration
+x-shared-env: &shared-env
+  env_file:
+    - ../env/base.env
+    - ../env/${ENVIRONMENT:-development}/shared.env
+
+services:
+  api-gateway:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.api-gateway
+      target: ${BUILD_TARGET:-development}
+    container_name: bookmarkai-api-gateway
+    <<: *shared-env
+    env_file:
+      - ../env/base.env
+      - ../env/${ENVIRONMENT:-development}/shared.env
+      - ../env/${ENVIRONMENT:-development}/api-gateway.env
+    ports:
+      - "${API_PORT:-3001}:${API_PORT:-3001}"
+    environment:
+      # Override specific values that need to reference other containers
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      MQ_HOST: rabbitmq
+      # Container-specific settings
+      PORT: ${API_PORT:-3001}
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    volumes:
+      # Mount source code for hot reload in development
+      - ../packages/api-gateway/src:/app/packages/api-gateway/src
+      - ../packages/sdk/src:/app/packages/sdk/src
+      # Shared video storage
+      - bookmarkai-videos:/tmp/bookmarkai-videos
+    networks:
+      - bookmarkai-network
+
+volumes:
+  bookmarkai-videos:
+    driver: local
+
+networks:
+  bookmarkai-network:
+    external: true
+    name: docker_bookmarkai-network

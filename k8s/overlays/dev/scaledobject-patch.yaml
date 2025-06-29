@@ -1,0 +1,27 @@
+# Adjust KEDA scaling for development
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: llm-worker-scaler
+spec:
+  maxReplicaCount: 3  # Lower max in dev
+  idleReplicaCount: 1  # Keep 1 running in dev
+  cooldownPeriod: 60  # Faster scale down in dev
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: whisper-worker-scaler
+spec:
+  maxReplicaCount: 2
+  idleReplicaCount: 0  # Can scale to 0 in dev
+  cooldownPeriod: 120
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vector-worker-scaler
+spec:
+  maxReplicaCount: 5
+  idleReplicaCount: 1
+  cooldownPeriod: 60

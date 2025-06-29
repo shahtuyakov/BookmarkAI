@@ -11,6 +11,18 @@ import { ApiExceptionFilter } from './common/filters/api-exception.filter';
 import { SHARE_QUEUE } from './modules/shares/queue/share-queue.constants';
 import { ConfigService } from './config/services/config.service';
 import { corsConfig } from './config/cors';
+import { initializeTracing } from './tracing/tracing';
+
+// Initialize OpenTelemetry tracing if enabled
+const TRACING_ENABLED = process.env.ENABLE_TRACING !== 'false'; // Default to true
+if (TRACING_ENABLED) {
+  try {
+    initializeTracing();
+  } catch (error) {
+    // Log error but don't fail startup
+    console.error('Failed to initialize tracing:', error);
+  }
+}
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');

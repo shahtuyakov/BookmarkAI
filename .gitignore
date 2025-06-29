@@ -13,6 +13,14 @@ build
 .env.*
 !.env.example
 
+# New environment structure
+env/development/*.env
+env/staging/*.env
+env/production/*.env
+!env/**/*.env.example
+# Keep the base.env.example for documentation
+!env/base.env.example
+
 # Logs
 logs
 *.log
@@ -29,6 +37,18 @@ coverage
 !.vscode/extensions.json
 !.vscode/settings.json
 
+# Claude Code
+.claude/memory/
+.claude/cache/
+.claude/settings.local.json
+# Keep config and prompts for team sharing
+!.claude/config.json
+!.claude/prompts/
+!.claude/patterns/
+!.claude/templates/
+!.claude/commands/
+!.claude/README.md
+
 # OS
 .DS_Store
 Thumbs.db
@@ -39,3 +59,4 @@ Thumbs.db
 # CDK output files
 cdk.out/
 infrastructure/cdk.out/
+env/**/*.env

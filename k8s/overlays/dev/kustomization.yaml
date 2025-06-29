@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bookmarkai-ml-dev
+
+bases:
+  - ../../base
+
+namePrefix: dev-
+nameSuffix: ""
+
+commonLabels:
+  environment: development
+
+patchesStrategicMerge:
+  - ml-workers-config-patch.yaml
+  - resource-limits-patch.yaml
+  - scaledobject-patch.yaml
+
+configMapGenerator:
+  - name: ml-workers-config
+    behavior: merge
+    literals:
+      - CELERY_TASK_ALWAYS_EAGER=false
+      - LOG_LEVEL=DEBUG
+      - ENABLE_CONTRACT_VALIDATION=false  # Disable in dev for flexibility
+
+secretGenerator:
+  - name: ml-workers-secrets
+    behavior: merge
+    literals:
+      - DB_PASSWORD=dev-password
+      - ML_OPENAI_API_KEY=sk-dev-key
+
+replicas:
+  - name: llm-worker
+    count: 1
+  - name: whisper-worker
+    count: 1
+  - name: vector-worker
+    count: 1
