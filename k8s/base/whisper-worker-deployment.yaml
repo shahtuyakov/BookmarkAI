@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whisper-worker
+  namespace: bookmarkai-ml
+  labels:
+    app: whisper-worker
+    app.kubernetes.io/name: whisper-worker
+    app.kubernetes.io/component: ml-worker
+    app.kubernetes.io/part-of: bookmarkai
+spec:
+  replicas: 1  # KEDA will manage scaling
+  selector:
+    matchLabels:
+      app: whisper-worker
+  template:
+    metadata:
+      labels:
+        app: whisper-worker
+        app.kubernetes.io/name: whisper-worker
+        app.kubernetes.io/component: ml-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9092"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: whisper-worker
+        image: bookmarkai/whisper-worker:latest
+        imagePullPolicy: Always
+        command: 
+          - "celery"
+          - "-A"
+          - "whisper_service.celery_app"
+          - "worker"
+          - "--loglevel=info"
+          - "--queues=ml.transcribe"
+          - "--concurrency=1"  # Lower concurrency for resource-intensive transcription
+          - "--max-tasks-per-child=25"
+          - "-O"
+          - "fair"
+        ports:
+        - containerPort: 9092
+          name: metrics
+        envFrom:
+        - configMapRef:
+            name: ml-workers-config
+        - secretRef:
+            name: ml-workers-secrets
+        env:
+        - name: SERVICE_NAME
+          value: "whisper-worker"
+        - name: WORKER_TYPE
+          value: "whisper"
+        - name: PROMETHEUS_PORT
+          value: "9092"
+        - name: TMPDIR
+          value: "/tmp/whisper"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "4000m"
+        livenessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - whisper_service.celery_app
+            - inspect
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - whisper_service.celery_app
+            - inspect
+            - ping
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 10
+        volumeMounts:
+        - name: prometheus-multiproc
+          mountPath: /tmp/prometheus_multiproc
+        - name: whisper-cache
+          mountPath: /tmp/whisper
+        - name: video-storage
+          mountPath: /tmp/videos
+      volumes:
+      - name: prometheus-multiproc
+        emptyDir: {}
+      - name: whisper-cache
+        emptyDir:
+          sizeLimit: 10Gi
+      - name: video-storage
+        persistentVolumeClaim:
+          claimName: video-storage-pvc
+      terminationGracePeriodSeconds: 300  # Longer grace period for transcription tasks
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whisper-worker-metrics
+  namespace: bookmarkai-ml
+  labels:
+    app: whisper-worker
+    prometheus: "true"
+spec:
+  selector:
+    app: whisper-worker
+  ports:
+  - name: metrics
+    port: 9092
+    targetPort: 9092
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: video-storage-pvc
+  namespace: bookmarkai-ml
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: fast-ssd  # Adjust based on your cluster

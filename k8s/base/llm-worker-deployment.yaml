@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-worker
+  namespace: bookmarkai-ml
+  labels:
+    app: llm-worker
+    app.kubernetes.io/name: llm-worker
+    app.kubernetes.io/component: ml-worker
+    app.kubernetes.io/part-of: bookmarkai
+spec:
+  replicas: 1  # KEDA will manage scaling
+  selector:
+    matchLabels:
+      app: llm-worker
+  template:
+    metadata:
+      labels:
+        app: llm-worker
+        app.kubernetes.io/name: llm-worker
+        app.kubernetes.io/component: ml-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: llm-worker
+        image: bookmarkai/llm-worker:latest
+        imagePullPolicy: Always
+        command: 
+          - "celery"
+          - "-A"
+          - "llm_service.celery_app"
+          - "worker"
+          - "--loglevel=info"
+          - "--queues=ml.summarize"
+          - "--concurrency=2"  # Per pod concurrency
+          - "--max-tasks-per-child=50"
+          - "-O"
+          - "fair"
+        ports:
+        - containerPort: 9091
+          name: metrics
+        envFrom:
+        - configMapRef:
+            name: ml-workers-config
+        - secretRef:
+            name: ml-workers-secrets
+        env:
+        - name: SERVICE_NAME
+          value: "llm-worker"
+        - name: WORKER_TYPE
+          value: "llm"
+        - name: PROMETHEUS_PORT
+          value: "9091"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - llm_service.celery_app
+            - inspect
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - llm_service.celery_app
+            - inspect
+            - ping
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 10
+        volumeMounts:
+        - name: prometheus-multiproc
+          mountPath: /tmp/prometheus_multiproc
+      volumes:
+      - name: prometheus-multiproc
+        emptyDir: {}
+      terminationGracePeriodSeconds: 120  # Allow time for task completion
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-worker-metrics
+  namespace: bookmarkai-ml
+  labels:
+    app: llm-worker
+    prometheus: "true"
+spec:
+  selector:
+    app: llm-worker
+  ports:
+  - name: metrics
+    port: 9091
+    targetPort: 9091
+  type: ClusterIP

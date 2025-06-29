@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vector-worker
+  namespace: bookmarkai-ml
+  labels:
+    app: vector-worker
+    app.kubernetes.io/name: vector-worker
+    app.kubernetes.io/component: ml-worker
+    app.kubernetes.io/part-of: bookmarkai
+spec:
+  replicas: 1  # KEDA will manage scaling
+  selector:
+    matchLabels:
+      app: vector-worker
+  template:
+    metadata:
+      labels:
+        app: vector-worker
+        app.kubernetes.io/name: vector-worker
+        app.kubernetes.io/component: ml-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9093"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: vector-worker
+        image: bookmarkai/vector-worker:latest
+        imagePullPolicy: Always
+        command: 
+          - "celery"
+          - "-A"
+          - "vector_service.celery_app"
+          - "worker"
+          - "--loglevel=info"
+          - "--queues=ml.embed"
+          - "--concurrency=4"  # Higher concurrency for lightweight embedding
+          - "--max-tasks-per-child=100"
+          - "-O"
+          - "fair"
+        ports:
+        - containerPort: 9093
+          name: metrics
+        envFrom:
+        - configMapRef:
+            name: ml-workers-config
+        - secretRef:
+            name: ml-workers-secrets
+        env:
+        - name: SERVICE_NAME
+          value: "vector-worker"
+        - name: WORKER_TYPE
+          value: "vector"
+        - name: PROMETHEUS_PORT
+          value: "9093"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - vector_service.celery_app
+            - inspect
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - vector_service.celery_app
+            - inspect
+            - ping
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 10
+        volumeMounts:
+        - name: prometheus-multiproc
+          mountPath: /tmp/prometheus_multiproc
+      volumes:
+      - name: prometheus-multiproc
+        emptyDir: {}
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-worker-metrics
+  namespace: bookmarkai-ml
+  labels:
+    app: vector-worker
+    prometheus: "true"
+spec:
+  selector:
+    app: vector-worker
+  ports:
+  - name: metrics
+    port: 9093
+    targetPort: 9093
+  type: ClusterIP
