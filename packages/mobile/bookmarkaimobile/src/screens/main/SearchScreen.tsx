@@ -20,7 +20,7 @@ const SearchScreen = () => {
 
   // Perform search using direct API call
   const performSearch = useCallback(async (query: string, pageCursor?: string) => {
-    if (!client || query.trim().length === 0) return;
+    if (!client || query.trim().length < 3) return;
 
     try {
       setIsLoading(true);
@@ -28,11 +28,11 @@ const SearchScreen = () => {
       // Make authenticated request using the client's network adapter
       const response = await client.request({
         method: 'POST',
-        url: '/v1/shares/search/text',
+        url: '/v1/shares/search/similar',
         data: {
           query: query.trim(),
           limit: 20,
-          minSimilarity: 0.7,
+          minSimilarity: 0.2,
           cursor: pageCursor,
         },
       });
@@ -40,16 +40,60 @@ const SearchScreen = () => {
       // Handle the response
       const data = response.data;
       
-      if (pageCursor) {
-        // Append results for pagination
-        setSearchResults(prev => [...prev, ...data.items]);
+      // Check if data has the expected structure
+      if (data.data && data.data.items) {
+        // Response is wrapped in { success: true, data: { items: [...] } }
+        const items = data.data.items.map((item: any) => ({
+          id: item.shareId,
+          url: item.url,
+          title: item.title,
+          platform: item.platform,
+          thumbnailUrl: item.thumbnailUrl,
+          mediaType: item.contentType,
+          status: 'done',
+          createdAt: item.createdAt,
+          updatedAt: item.processedAt,
+          // Keep similarity for display
+          similarity: item.similarity,
+        }));
+        if (pageCursor) {
+          // Append results for pagination
+          setSearchResults(prev => [...prev, ...items]);
+        } else {
+          // Replace results for new search
+          setSearchResults(items);
+        }
+        setCursor(data.data.cursor);
+        setHasMore(data.data.hasMore);
+      } else if (data.items) {
+        // Response has items directly
+        const items = data.items.map((item: any) => ({
+          id: item.shareId,
+          url: item.url,
+          title: item.title,
+          platform: item.platform,
+          thumbnailUrl: item.thumbnailUrl,
+          mediaType: item.contentType,
+          status: 'done',
+          createdAt: item.createdAt,
+          updatedAt: item.processedAt,
+          // Keep similarity for display
+          similarity: item.similarity,
+        }));
+        if (pageCursor) {
+          // Append results for pagination
+          setSearchResults(prev => [...prev, ...items]);
+        } else {
+          // Replace results for new search
+          setSearchResults(items);
+        }
+        setCursor(data.cursor);
+        setHasMore(data.hasMore);
       } else {
-        // Replace results for new search
-        setSearchResults(data.items);
+        console.error('Unexpected response structure:', data);
+        setSearchResults([]);
       }
       
-      setCursor(data.cursor);
-      setHasMore(data.hasMore);
       setHasSearched(true);
     } catch (error) {
       console.error('Search failed:', error);
@@ -71,7 +115,7 @@ const SearchScreen = () => {
   // Handle search input change
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    if (query.trim().length > 0) {
+    if (query.trim().length >= 3) {
       debouncedSearch(query);
     } else {
       setSearchResults([]);
@@ -111,6 +155,15 @@ const SearchScreen = () => {
   // Empty state
   const renderEmptyState = () => {
     if (!hasSearched) {
+      if (searchQuery.trim().length > 0 && searchQuery.trim().length < 3) {
+        return (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Enter at least 3 characters to search
+            </Text>
+          </View>
+        );
+      }
       return (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>
@@ -151,7 +204,7 @@ const SearchScreen = () => {
       <View style={styles.searchContainer}>
         <TextInput
           mode="outlined"
-          placeholder="Search your bookmarks..."
+          placeholder="Search your bookmarks (min. 3 characters)..."
           value={searchQuery}
           onChangeText={handleSearchChange}
           left={<TextInput.Icon icon="magnify" />}
