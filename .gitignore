@@ -37,6 +37,18 @@ coverage
 !.vscode/extensions.json
 !.vscode/settings.json
 
+# Claude Code
+.claude/memory/
+.claude/cache/
+.claude/settings.local.json
+# Keep config and prompts for team sharing
+!.claude/config.json
+!.claude/prompts/
+!.claude/patterns/
+!.claude/templates/
+!.claude/commands/
+!.claude/README.md
+
 # OS
 .DS_Store
 Thumbs.db

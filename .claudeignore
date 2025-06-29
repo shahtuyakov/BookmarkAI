@@ -1,0 +1,119 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+.Python
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+.next/
+out/
+coverage/
+.coverage
+htmlcov/
+*.log
+
+# IDE and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment and secrets  
+.env
+.env.*
+!.env.example
+!env/base.env.example
+!env/.env.*.example
+env/base.env
+env/development/*.env
+env/staging/*.env  
+env/production/*.env
+secrets/
+*.pem
+*.key
+*.cert
+
+# Large binary files
+*.mp4
+*.mp3
+*.wav
+*.pdf
+*.zip
+*.tar.gz
+*.dmg
+*.iso
+*.jar
+
+# Test data
+test-data/
+fixtures/large/
+*.test.large.json
+
+# Temporary files
+tmp/
+temp/
+.cache/
+*.tmp
+*.bak
+*.swp
+
+# Mobile specific
+ios/Pods/
+android/.gradle/
+android/app/build/
+*.ipa
+*.apk
+*.aab
+
+# Docker volumes
+postgres-data/
+redis-data/
+rabbitmq-data/
+
+# Generated files
+*.generated.ts
+*.generated.js
+schema.graphql
+swagger.json
+
+# Logs and monitoring
+logs/
+*.log
+.monitoring/
+prometheus-data/
+grafana-data/
+
+# ML model files
+*.pkl
+*.h5
+*.pt
+*.pth
+models/checkpoints/
+models/cache/
+
+# Large datasets
+datasets/
+data/raw/
+data/processed/
+embeddings/
+
+# Documentation builds
+docs/_build/
+docs/.docusaurus/
+site/
+
+# Specific to BookmarkAI
+shared-videos/
+transcripts/cache/
+summaries/cache/
+vector-cache/
+.claude/cache/
+.claude/memory/*.tmp
