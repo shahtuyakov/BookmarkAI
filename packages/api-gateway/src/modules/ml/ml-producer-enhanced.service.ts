@@ -4,6 +4,16 @@ import { MLMetricsService } from './services/ml-metrics.service';
 import * as amqplib from 'amqplib';
 import { v4 as uuidv4 } from 'uuid';
 import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import {
+  SummarizationTaskSchema,
+  TranscriptionTaskSchema,
+  EmbeddingTaskSchema,
+  BatchEmbeddingTaskSchema,
+  type SummarizationTask,
+  type TranscriptionTask,
+  type EmbeddingTask,
+  type BatchEmbeddingTask,
+} from '@bookmarkai/contracts';
 
 export interface MLTaskPayload {
   version: '1.0';
@@ -74,10 +84,18 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
   private readonly publishTimeout = 5000; // 5 seconds
   private pendingConfirms: Map<number, { resolve: Function; reject: Function; timer: NodeJS.Timeout }> = new Map();
   
+  // Contract validation
+  private readonly enableContractValidation: boolean;
+  
   constructor(
     private readonly configService: ConfigService,
     private readonly metricsService: MLMetricsService,
-  ) {}
+  ) {
+    this.enableContractValidation = this.configService.get<string>('ENABLE_CONTRACT_VALIDATION', 'false') === 'true';
+    if (this.enableContractValidation) {
+      this.logger.log('Contract validation is enabled for ML tasks');
+    }
+  }
 
   async onModuleInit() {
     await this.connect();
@@ -656,6 +674,31 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
   }
 
   private async publishTask(task: MLTaskPayload, overrideTaskName?: string): Promise<void> {
+    // Validate task against schema if enabled
+    if (this.enableContractValidation) {
+      try {
+        switch (task.taskType) {
+          case 'summarize_llm':
+            SummarizationTaskSchema.parse(task);
+            break;
+          case 'transcribe_whisper':
+            TranscriptionTaskSchema.parse(task);
+            break;
+          case 'embed_vectors':
+            if (task.shareId.startsWith('batch-')) {
+              BatchEmbeddingTaskSchema.parse(task);
+            } else {
+              EmbeddingTaskSchema.parse(task);
+            }
+            break;
+        }
+      } catch (error) {
+        this.logger.error(`Contract validation failed for ${task.taskType}:`, error);
+        this.metricsService.incrementTasksSent(task.taskType, 'validation_error');
+        throw new Error(`Invalid task payload: ${error.message}`);
+      }
+    }
+
     // Get current trace context
     const tracer = trace.getTracer('ml-producer');
     const span = tracer.startSpan('ml.publish_task', {
@@ -667,6 +710,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         'messaging.operation': 'publish',
         'ml.task_type': task.taskType,
         'ml.share_id': task.shareId,
+        'ml.contract_validation': this.enableContractValidation,
       },
     });
 

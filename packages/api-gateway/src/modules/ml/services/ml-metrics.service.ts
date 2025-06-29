@@ -113,7 +113,7 @@ export class MLMetricsService implements OnModuleInit {
   }
   
   // Task metrics
-  incrementTasksSent(taskType: string, status: 'success' | 'failure' | 'timeout' | 'circuit_breaker_open'): void {
+  incrementTasksSent(taskType: string, status: 'success' | 'failure' | 'timeout' | 'circuit_breaker_open' | 'validation_error'): void {
     this.tasksSentCounter.inc({ task_type: taskType, status });
   }
   
