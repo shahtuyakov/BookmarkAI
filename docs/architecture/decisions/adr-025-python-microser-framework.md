@@ -237,12 +237,14 @@ Based on production experience with similar architectures and our implementation
 13. **Publisher Confirm Timeouts**: 5-second timeout prevents indefinite hanging on broker confirms
 14. **Health Monitoring Value**: Proactive health checks (30s) catch connection issues before they affect traffic
 15. **Memory-Based Retry Sufficient**: In-memory retry queue handles most transient failures; Redis persistence can be added later
+16. **Synchronous Services for Real-time Features** (June 30, 2025): Search requires immediate embedding generation; created dedicated embedding service alongside async task queue
+17. **SDK Generation Complexity**: Multiple SDK implementations (generated vs custom) require careful integration strategy
 
 ---
 
 ## 6 — Implementation Roadmap
 
-**Update (2025-06-29)**: Infrastructure, monitoring, and reliability features complete - MVP ready
+**Update (2025-06-30)**: Infrastructure, monitoring, reliability features, and search functionality complete - MVP ready
 
 ### Completed ✅
 - [x] Docker-based RabbitMQ with quorum queues
@@ -265,6 +267,10 @@ Based on production experience with similar architectures and our implementation
   - ML Producer Monitoring dashboard
   - ML Analytics & Cost Monitoring dashboard
   - Python worker metrics integration
+- [x] Search API with Real Embeddings (June 30)
+  - Synchronous embedding service for real-time search
+  - OpenAPI spec for search endpoints
+  - Mobile app search UI implementation
 
 ### MVP Priorities
 | Priority | Deliverable | Timeline |
@@ -275,7 +281,7 @@ Based on production experience with similar architectures and our implementation
 | 🟠 Medium | OpenTelemetry distributed tracing | Week 2 |
 | ✅ Done | Grafana dashboards & alerts | Completed |
 | 🟡 Low | KEDA autoscaling configuration | Week 3 |
-| 🟡 Low | Vector search API endpoints | Week 4 |
+| ✅ Done | Vector search API endpoints | Completed June 30 |
 
 ### Deferred (Post-MVP)
 - GPU infrastructure and node configuration

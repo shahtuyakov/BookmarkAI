@@ -38,7 +38,7 @@ services:
       - ml-rabbitmq:rabbitmq
     volumes:
       - ../python/llm-service:/app
-      - ../python/shared:/app/shared:ro
+      - ../python/shared:/shared:ro
     command: >
       celery -A llm_service.celery_app worker
       --loglevel=info
@@ -112,7 +112,7 @@ services:
       - ml-rabbitmq:rabbitmq
     volumes:
       - ../python/whisper-service:/app/whisper-service
-      - ../python/shared:/app/shared:ro
+      - ../python/shared:/shared:ro
       - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}  # Mount video directory
     command: >
       celery -A whisper_service.celery_app worker
@@ -191,7 +191,7 @@ services:
       - ml-rabbitmq:rabbitmq
     volumes:
       - ../python/vector-service:/app
-      - ../python/shared:/app/shared:ro
+      - ../python/shared:/shared:ro
       - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}  # Mount video directory
     command: >
       celery -A vector_service.celery_app worker

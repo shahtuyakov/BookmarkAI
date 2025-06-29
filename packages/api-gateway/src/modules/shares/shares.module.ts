@@ -5,15 +5,19 @@ import { AuthModule } from '../auth/auth.module';
 import { DrizzleService } from '../../database/services/drizzle.service';
 import { SharesController } from './controllers/shares.controller';
 import { MetricsController } from './controllers/metrics.controller';
+import { SearchController } from './controllers/search.controller';
 import { SharesService } from './services/shares.service';
 import { IdempotencyService } from './services/idempotency.service';
 import { MetricsService } from './services/metrics.service';
+import { SearchService } from './services/search.service';
 import { SharesRateLimitMiddleware } from './middlewares/rate-limit.middleware';
 import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ErrorService } from './services/error.service';
 import { ShareProcessor } from './queue/share-processor';
+import { SearchRepository } from './repositories/search.repository';
 import { FetchersModule } from './fetchers/fetchers.module';
 import { MLModule } from '../ml/ml.module';
+import * as Redis from 'ioredis';
 
 /**
  * Module for share management functionality
@@ -55,19 +59,32 @@ import { MLModule } from '../ml/ml.module';
       }),
     }),
   ],
-  controllers: [SharesController, MetricsController],
+  controllers: [SharesController, MetricsController, SearchController],
   providers: [
     SharesService,
     IdempotencyService,
     MetricsService,
+    SearchService,
+    SearchRepository,
     DrizzleService,
     ErrorService,
     ShareProcessor, // Register the processor here
+    {
+      provide: Redis.Redis,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        return new Redis.Redis({
+          host: configService.get('REDIS_HOST', 'localhost'),
+          port: configService.get('REDIS_PORT', 6379),
+        });
+      },
+    },
   ],
   exports: [
     SharesService,
     IdempotencyService,
     ErrorService,
+    SearchService,
     BullModule, // Export BullModule so other modules can access the queue
   ],
 })

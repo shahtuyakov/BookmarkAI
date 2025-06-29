@@ -363,30 +363,9 @@
         "Complex code transformations",
         "Cross-language code analysis"
       ],
-      "examples": {
-        "findFunctions": "sg --pattern 'function $FUNC($$$ARGS) { $$$BODY }' --lang typescript",
-        "findArrowFunctions": "sg --pattern 'const $NAME = ($$$ARGS) => { $$$BODY }' --lang typescript",
-        "findAsyncArrows": "sg --pattern 'const $NAME = async ($$$ARGS) => { $$$BODY }' --lang typescript",
-        "findClasses": "sg --pattern 'class $NAME { $$$BODY }' --lang typescript",
-        "findImports": "sg --pattern 'import { $$$ITEMS } from $MODULE' --lang typescript",
-        "findHooks": "sg --pattern 'use$HOOK($$$ARGS)' --lang typescript",
-        "findAsync": "sg --pattern 'async function $NAME($$$ARGS) { $$$BODY }' --lang typescript",
-        "findExports": "sg --pattern 'export { $$$ITEMS }' --lang typescript",
-        "pythonFunctions": "sg --pattern 'def $FUNC($$$ARGS):\n    $$$BODY' --lang python",
-        "pythonAsyncFunctions": "sg --pattern 'async def $FUNC($$$ARGS):\n    $$$BODY' --lang python",
-        "pythonClasses": "sg --pattern 'class $NAME($$$BASES):\n    $$$BODY' --lang python",
-        "pythonDecorators": "sg --pattern '@$DECORATOR\ndef $FUNC($$$ARGS):\n    $$$BODY' --lang python",
-        "nestjsControllers": "sg --pattern '@Controller($PATH)\nexport class $NAME { $$$BODY }' --lang typescript",
-        "nestjsGetEndpoints": "sg --pattern '@Get($PATH)\n$$$DECORATORS\nasync $METHOD($$$ARGS) { $$$BODY }' --lang typescript",
-        "nestjsPostEndpoints": "sg --pattern '@Post($PATH)\n$$$DECORATORS\nasync $METHOD($$$ARGS) { $$$BODY }' --lang typescript",
-        "nestjsInjectable": "sg --pattern '@Injectable()\nexport class $SERVICE { $$$BODY }' --lang typescript",
-        "reactComponents": "sg --pattern 'const $COMP = ($$$PROPS) => {\n  $$$BODY\n}' --lang tsx",
-        "reactHooks": "sg --pattern 'const [$STATE, $SETTER] = useState($INIT)' --lang tsx",
-        "bullMQProcessors": "sg --pattern '@Processor($QUEUE)\nexport class $PROCESSOR { $$$BODY }' --lang typescript",
-        "drizzleSchemas": "sg --pattern 'export const $TABLE = pgTable($NAME, { $$$FIELDS })' --lang typescript",
-        "celeryTasks": "sg --pattern '@app.task\ndef $TASK($$$ARGS):\n    $$$BODY' --lang python",
-        "opentelemetrySpans": "sg --pattern 'const span = tracer.startSpan($NAME, { $$$OPTIONS })' --lang typescript"
-      },
+      "moreDetails": {
+        "sgHelp": "sg --help"
+        },
       "priority": "Use ast-grep FIRST for any syntax-aware or structural search before falling back to text-based tools like grep/rg",
       "when_to_use": [
         "Finding all function definitions",

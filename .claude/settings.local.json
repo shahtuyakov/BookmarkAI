@@ -3,7 +3,9 @@
     "allow": [
       "Bash(grep:*)",
       "Bash(find:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "mcp__zen__planner"
     ]
   },
   "enableAllProjectMcpServers": false
