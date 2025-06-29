@@ -7,6 +7,7 @@ import {
   DefaultValuePipe,
   HttpException,
   HttpStatus,
+  Inject,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { MLAnalyticsService } from '../services/ml-analytics.service';
@@ -26,7 +27,7 @@ import {
 export class MLAnalyticsController {
   constructor(
     private readonly mlAnalyticsService: MLAnalyticsService,
-    private readonly mlProducerService: MLProducerService,
+    @Inject('MLProducerService') private readonly mlProducerService: MLProducerService,
   ) {}
 
   @Get('transcription/costs')

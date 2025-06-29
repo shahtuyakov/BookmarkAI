@@ -10,6 +10,7 @@ import { ShareStatus } from '../constants/share-status.enum';
 import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
 import { FetcherError } from '../fetchers/interfaces/fetcher-error.interface';
 import { Platform } from '../constants/platform.enum';
+import { Inject } from '@nestjs/common';
 import { MLProducerService } from '../../ml/ml-producer.service';
 
 /**
@@ -25,7 +26,7 @@ export class ShareProcessor {
     private readonly db: DrizzleService,
     private readonly configService: ConfigService,
     private readonly fetcherRegistry: ContentFetcherRegistry,
-    private readonly mlProducer: MLProducerService,
+    @Inject('MLProducerService') private readonly mlProducer: MLProducerService,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);

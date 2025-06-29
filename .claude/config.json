@@ -334,6 +334,22 @@
     ],
     "astGrepCapabilities": {
       "description": "ast-grep (sg) - structural search/rewrite tool for many languages",
+      "syntax": {
+        "basicCommand": "sg --pattern 'PATTERN' --lang LANGUAGE [PATH]",
+        "metavariables": {
+          "$VAR": "Matches a single node (identifier, expression, etc.)",
+          "$$$VAR": "Matches zero or more nodes (multiple arguments, statements, etc.)",
+          "$_": "Matches any single node (wildcard)",
+          "$$$": "Matches any sequence of nodes (wildcard)"
+        },
+        "tips": [
+          "Use --pattern flag for inline patterns",
+          "Use $$$VAR for multiple items (args, statements)",
+          "Use $VAR for single items",
+          "Include newlines \\n for multi-line patterns",
+          "Language flag is required (--lang typescript, --lang python, etc.)"
+        ]
+      },
       "supportedLanguages": [
         "typescript", "javascript", "tsx", "jsx",
         "python", "rust", "go", "java", "c", "cpp",
@@ -348,16 +364,28 @@
         "Cross-language code analysis"
       ],
       "examples": {
-        "findFunctions": "sg --lang typescript 'function $FUNC($_) { $$$ }'",
-        "findClasses": "sg --lang typescript 'class $NAME { $$$ }'",
-        "findImports": "sg --lang typescript 'import { $ITEMS } from \"$MODULE\"'",
-        "findHooks": "sg --lang typescript 'use$HOOK($_)'",
-        "findAsync": "sg --lang typescript 'async function $NAME($_) { $$$ }'",
-        "findExports": "sg --lang typescript 'export { $ITEMS }'",
-        "pythonFunctions": "sg --lang python 'def $FUNC($_): $$$'",
-        "pythonClasses": "sg --lang python 'class $NAME: $$$'",
-        "nestjsControllers": "sg --lang typescript '@Controller($_) class $NAME { $$$ }'",
-        "reactComponents": "sg --lang tsx 'const $COMP = ($_) => { $$$ }'"
+        "findFunctions": "sg --pattern 'function $FUNC($$$ARGS) { $$$BODY }' --lang typescript",
+        "findArrowFunctions": "sg --pattern 'const $NAME = ($$$ARGS) => { $$$BODY }' --lang typescript",
+        "findAsyncArrows": "sg --pattern 'const $NAME = async ($$$ARGS) => { $$$BODY }' --lang typescript",
+        "findClasses": "sg --pattern 'class $NAME { $$$BODY }' --lang typescript",
+        "findImports": "sg --pattern 'import { $$$ITEMS } from $MODULE' --lang typescript",
+        "findHooks": "sg --pattern 'use$HOOK($$$ARGS)' --lang typescript",
+        "findAsync": "sg --pattern 'async function $NAME($$$ARGS) { $$$BODY }' --lang typescript",
+        "findExports": "sg --pattern 'export { $$$ITEMS }' --lang typescript",
+        "pythonFunctions": "sg --pattern 'def $FUNC($$$ARGS):\n    $$$BODY' --lang python",
+        "pythonAsyncFunctions": "sg --pattern 'async def $FUNC($$$ARGS):\n    $$$BODY' --lang python",
+        "pythonClasses": "sg --pattern 'class $NAME($$$BASES):\n    $$$BODY' --lang python",
+        "pythonDecorators": "sg --pattern '@$DECORATOR\ndef $FUNC($$$ARGS):\n    $$$BODY' --lang python",
+        "nestjsControllers": "sg --pattern '@Controller($PATH)\nexport class $NAME { $$$BODY }' --lang typescript",
+        "nestjsGetEndpoints": "sg --pattern '@Get($PATH)\n$$$DECORATORS\nasync $METHOD($$$ARGS) { $$$BODY }' --lang typescript",
+        "nestjsPostEndpoints": "sg --pattern '@Post($PATH)\n$$$DECORATORS\nasync $METHOD($$$ARGS) { $$$BODY }' --lang typescript",
+        "nestjsInjectable": "sg --pattern '@Injectable()\nexport class $SERVICE { $$$BODY }' --lang typescript",
+        "reactComponents": "sg --pattern 'const $COMP = ($$$PROPS) => {\n  $$$BODY\n}' --lang tsx",
+        "reactHooks": "sg --pattern 'const [$STATE, $SETTER] = useState($INIT)' --lang tsx",
+        "bullMQProcessors": "sg --pattern '@Processor($QUEUE)\nexport class $PROCESSOR { $$$BODY }' --lang typescript",
+        "drizzleSchemas": "sg --pattern 'export const $TABLE = pgTable($NAME, { $$$FIELDS })' --lang typescript",
+        "celeryTasks": "sg --pattern '@app.task\ndef $TASK($$$ARGS):\n    $$$BODY' --lang python",
+        "opentelemetrySpans": "sg --pattern 'const span = tracer.startSpan($NAME, { $$$OPTIONS })' --lang typescript"
       },
       "priority": "Use ast-grep FIRST for any syntax-aware or structural search before falling back to text-based tools like grep/rg",
       "when_to_use": [
@@ -385,6 +413,28 @@
       "currentModel": "Default (Opus 4 + Sonnet 4)",
       "switchCommand": "Use /model command or --model flag",
       "customModelFlag": "--model <model-name>"
+    }
+  },
+  "customTriggers": {
+    "supermode": {
+      "pattern": "activate super",
+      "actions": ["parallel_execution", "predictive_mode", "dream_planning"]
+    },
+    "beastmode": {
+      "pattern": "activate beast mode",
+      "actions": ["aggressive_parallelization", "speculative_execution", "preemptive_solving", "10x_speed"]
+    },
+    "dreammode": {
+      "pattern": "dream up",
+      "actions": ["creative_refactoring", "radical_architecture", "future_planning"]
+    },
+    "quantummode": {
+      "pattern": "quantum debug",
+      "actions": ["parallel_universe_execution", "state_superposition", "probability_analysis"]
+    },
+    "timetravel": {
+      "pattern": "show evolution",
+      "actions": ["git_timeline_reconstruction", "bug_lifecycle_analysis", "code_archaeology"]
     }
   }
 }

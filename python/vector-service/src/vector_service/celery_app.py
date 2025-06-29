@@ -8,6 +8,7 @@ from celery import Celery
 from celery.signals import worker_ready, worker_process_init
 from dotenv import load_dotenv
 from bookmarkai_shared.celery_app import create_celery_app
+from bookmarkai_shared.tracing import initialize_tracing
 
 # Load environment variables
 load_dotenv()
@@ -18,6 +19,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Initialize OpenTelemetry tracing
+initialize_tracing('vector-service')
 
 # Create Celery app with shared configuration
 app = create_celery_app('vector_service')

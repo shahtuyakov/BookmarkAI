@@ -18,6 +18,7 @@ from .db import (
     BudgetExceededError
 )
 from .content_preflight import ContentPreflightService, ContentValidationError
+from bookmarkai_shared.tracing import trace_celery_task
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ def calculate_cost(provider: str, model: str, tokens: Dict[str, int]) -> Dict[st
     reject_on_worker_lost=True,
 )
 @task_metrics(worker_type='llm')
+@trace_celery_task('summarize_content')
 def summarize_content(
     self: Task,
     share_id: str,

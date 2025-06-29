@@ -2,6 +2,10 @@
 Celery application instance for Whisper transcription service.
 """
 from bookmarkai_shared.celery_app import create_celery_app
+from bookmarkai_shared.tracing import initialize_tracing
+
+# Initialize OpenTelemetry tracing
+initialize_tracing('whisper-service')
 
 # Create the Celery app
 app = create_celery_app('whisper_service')

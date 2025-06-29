@@ -3,6 +3,7 @@ import { ConfigService } from '../../config/services/config.service';
 import { MLMetricsService } from './services/ml-metrics.service';
 import * as amqplib from 'amqplib';
 import { v4 as uuidv4 } from 'uuid';
+import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 
 export interface MLTaskPayload {
   version: '1.0';
@@ -14,6 +15,7 @@ export interface MLTaskPayload {
     timestamp: number;
     retryCount: number;
     traceparent?: string;
+    tracestate?: string;
   };
 }
 
@@ -202,7 +204,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
           replyCode: msg.fields.replyCode,
           replyText: msg.fields.replyText,
         });
-        this.metricsService.incrementTasksSent('unknown', 'returned');
+        this.metricsService.incrementTasksSent('unknown', 'failure');
       });
 
       // Set up publisher confirms handlers
@@ -401,7 +403,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
             error: error.message,
           });
           this.retryQueue.delete(id);
-          this.metricsService.incrementTasksSent(message.task.taskType, 'dlq');
+          this.metricsService.incrementTasksSent(message.task.taskType, 'failure');
           // TODO: Implement actual DLQ publishing
         } else {
           // Calculate next retry time with exponential backoff
@@ -465,14 +467,15 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         reject(new Error(`Publisher confirm timeout after ${timeout}ms`));
       }, timeout);
 
-      this.channel!.waitForConfirms((err) => {
-        clearTimeout(timer);
-        if (err) {
-          reject(err);
-        } else {
+      this.channel!.waitForConfirms()
+        .then(() => {
+          clearTimeout(timer);
           resolve();
-        }
-      });
+        })
+        .catch((err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
     });
   }
 
@@ -653,6 +656,40 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
   }
 
   private async publishTask(task: MLTaskPayload, overrideTaskName?: string): Promise<void> {
+    // Get current trace context
+    const tracer = trace.getTracer('ml-producer');
+    const span = tracer.startSpan('ml.publish_task', {
+      kind: SpanKind.PRODUCER,
+      attributes: {
+        'messaging.system': 'rabbitmq',
+        'messaging.destination': this.exchangeName,
+        'messaging.destination_kind': 'topic',
+        'messaging.operation': 'publish',
+        'ml.task_type': task.taskType,
+        'ml.share_id': task.shareId,
+      },
+    });
+
+    // Set a timeout for span completion
+    const spanTimeout = setTimeout(() => {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'Span timeout - operation took too long' });
+      span.end();
+    }, 30000); // 30 second timeout for publishing
+
+    // Inject current trace context with defensive checks
+    const currentSpan = trace.getActiveSpan();
+    if (currentSpan && task.metadata) {
+      const spanContext = currentSpan.spanContext();
+      if (spanContext && spanContext.traceId && spanContext.spanId) {
+        task.metadata.traceparent = `00-${spanContext.traceId}-${spanContext.spanId}-01`;
+        
+        // Also add tracestate if present
+        if (spanContext.traceState) {
+          task.metadata.tracestate = spanContext.traceState.serialize();
+        }
+      }
+    }
+
     // Determine routing key based on task type and backend
     let routingKey = `ml.${task.taskType.split('_')[0]}`;
     if (task.taskType === 'transcribe_whisper' && 
@@ -684,8 +721,13 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
     }
 
     try {
+      span.setAttribute('messaging.rabbitmq.routing_key', routingKey);
       await this.publishTaskInternal(task, celeryTaskName, routingKey);
+      span.setStatus({ code: SpanStatusCode.OK });
     } catch (error) {
+      span.recordException(error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      
       // Add to retry queue if it's a temporary failure
       if (this.shouldRetryMessage(error)) {
         const retryId = `${task.shareId}-${task.taskType}-${task.metadata.correlationId}`;
@@ -698,10 +740,13 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
           nextRetryTime: Date.now() + this.messageRetryBaseDelay,
         });
         this.logger.warn(`Added message to retry queue: ${retryId}`);
-        this.metricsService.incrementTasksSent(task.taskType, 'queued_for_retry');
+        this.metricsService.incrementTasksSent(task.taskType, 'failure');
       } else {
         throw error;
       }
+    } finally {
+      clearTimeout(spanTimeout);
+      span.end();
     }
   }
 
@@ -770,7 +815,8 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
           contentType: 'application/json',
           contentEncoding: 'utf-8',
           headers: {
-            'traceparent': task.metadata.traceparent,
+            ...(task.metadata.traceparent && { 'traceparent': task.metadata.traceparent }),
+            ...(task.metadata.tracestate && { 'tracestate': task.metadata.tracestate }),
           },
         }
       );

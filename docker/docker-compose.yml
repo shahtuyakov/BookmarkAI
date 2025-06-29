@@ -193,6 +193,20 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
 
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+      - METRICS_STORAGE_TYPE=prometheus
+    ports:
+      - '16686:16686'  # Jaeger UI
+      - '4318:4318'    # OTLP HTTP
+      - '4317:4317'    # OTLP gRPC
+    networks:
+      - bookmarkai-network
+
 volumes:
   postgres-data:
   redis-data:
@@ -203,3 +217,7 @@ volumes:
   prometheus-data:
   vault-data:
   rabbitmq-data:
+
+networks:
+  bookmarkai-network:
+    driver: bridge
