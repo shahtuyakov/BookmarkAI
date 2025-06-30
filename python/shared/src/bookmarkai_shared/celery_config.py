@@ -158,6 +158,13 @@ def get_celery_config() -> Dict[str, Any]:
                 queue_arguments=queue_arguments,
                 durable=True,
             ),
+            Queue(
+                'ml.summarize_video_combined',
+                ml_exchange,
+                routing_key='ml.summarize_video_combined',
+                queue_arguments=queue_arguments,
+                durable=True,
+            ),
         ),
         
         # Routing
@@ -167,6 +174,7 @@ def get_celery_config() -> Dict[str, Any]:
             'whisper.tasks.transcribe_api': {'queue': 'ml.transcribe'},
             'whisper.tasks.transcribe_local': {'queue': 'ml.transcribe_local'},
             'vector_service.tasks.generate_embeddings': {'queue': 'ml.embed'},
+            'summarize_video_combined': {'queue': 'ml.summarize_video_combined'},
         },
         
         # Task behavior

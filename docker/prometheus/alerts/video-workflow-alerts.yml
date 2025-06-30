@@ -1,0 +1,101 @@
+groups:
+  - name: video_workflow_alerts
+    interval: 30s
+    rules:
+      # Alert for high number of videos stuck in transcribing state
+      - alert: VideosStuckTranscribing
+        expr: video_workflow_state_current{state="video_transcribing"} > 50
+        for: 10m
+        labels:
+          severity: warning
+          component: video_workflow
+          team: ml
+        annotations:
+          summary: "High number of videos stuck in transcribing state"
+          description: "{{ $value }} videos have been in transcribing state for over 10 minutes"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/video-workflow#stuck-transcribing"
+          
+      # Alert for videos stuck for over 30 minutes
+      - alert: VideoWorkflowStuck30Min
+        expr: rate(video_workflow_stuck_total{duration_minutes="31-60"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: video_workflow
+          team: ml
+        annotations:
+          summary: "Videos stuck in workflow for 30-60 minutes"
+          description: "Videos are getting stuck in {{ $labels.state }} state for 30-60 minutes"
+          
+      # Alert for videos stuck for over 1 hour (critical)
+      - alert: VideoWorkflowStuckCritical
+        expr: rate(video_workflow_stuck_total{duration_minutes=~"61-120|121-240|240\\+"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: video_workflow
+          team: ml
+          pagerduty: true
+        annotations:
+          summary: "Videos stuck in workflow for over 1 hour"
+          description: "CRITICAL: Videos are stuck in {{ $labels.state }} state for {{ $labels.duration_minutes }} minutes"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/video-workflow#stuck-critical"
+          
+      # Alert for high failure rate
+      - alert: VideoWorkflowHighFailureRate
+        expr: |
+          (
+            rate(video_workflow_transitions_total{to_state="failed_transcription"}[15m]) /
+            rate(video_workflow_transitions_total{to_state=~"video_transcribing|video_summarizing|completed"}[15m])
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: video_workflow
+          team: ml
+        annotations:
+          summary: "High video workflow failure rate"
+          description: "Video workflow failure rate is {{ $value | humanizePercentage }} over the last 15 minutes"
+          
+      # Alert for no workflow completions
+      - alert: NoVideoWorkflowCompletions
+        expr: rate(video_workflow_transitions_total{to_state="completed"}[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+          component: video_workflow
+          team: ml
+        annotations:
+          summary: "No video workflows completing"
+          description: "No video workflows have completed in the last 30 minutes"
+          
+      # Alert for transcription queue backup
+      - alert: TranscriptionQueueBackup
+        expr: video_workflow_state_current{state="video_pending"} > 100
+        for: 15m
+        labels:
+          severity: warning
+          component: video_workflow
+          team: ml
+        annotations:
+          summary: "Large backlog of videos pending enhancement"
+          description: "{{ $value }} videos are waiting to be enhanced"
+          
+      # Alert for ML worker issues (no state changes)
+      - alert: VideoWorkflowMLWorkerDown
+        expr: |
+          (
+            sum(rate(video_workflow_transitions_total[5m])) == 0
+            and
+            sum(video_workflow_state_current{state=~"video_transcribing|video_summarizing"}) > 0
+          )
+        for: 10m
+        labels:
+          severity: critical
+          component: ml_worker
+          team: ml
+          pagerduty: true
+        annotations:
+          summary: "ML workers may be down - no workflow progress"
+          description: "No workflow state transitions detected while {{ $value }} videos are in processing states"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/ml-workers#health-check"

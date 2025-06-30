@@ -394,6 +394,139 @@
       "customModelFlag": "--model <model-name>"
     }
   },
+  "performance": {
+    "parallelCommands": [
+      ["workflow.quality.lint", "workflow.quality.typecheck", "workflow.testing.all"],
+      ["workflow.docker.dockerPs", "workflow.debug.rabbitmqQueues"],
+      ["workflow.ml.healthCheck", "workflow.ml.metrics"],
+      ["serviceCommands.packages.api-gateway.test", "serviceCommands.packages.sdk.typecheck"],
+      ["workflow.docker.logs.api", "workflow.docker.logs.llm", "workflow.docker.logs.whisper"]
+    ],
+    "cacheDuration": {
+      "gitStatus": 300,
+      "dockerPs": 60,
+      "lsFiles": 180,
+      "nodeModules": 600,
+      "envFiles": 120
+    },
+    "quickModes": {
+      "fast": {
+        "description": "Optimized for speed - may skip some validations",
+        "settings": {
+          "parallelExecution": true,
+          "useCache": true,
+          "skipNonCritical": true
+        }
+      },
+      "thorough": {
+        "description": "Complete analysis - slower but comprehensive",
+        "settings": {
+          "parallelExecution": false,
+          "useCache": false,
+          "deepAnalysis": true
+        }
+      }
+    }
+  },
+  "errorRecovery": {
+    "portConflict": {
+      "steps": ["workflow.debug.killPort", "workflow.development.api"],
+      "description": "Kill conflicting process and restart API"
+    },
+    "dockerDown": {
+      "steps": ["workflow.docker.stopAll", "workflow.docker.startAll", "workflow.docker.logs.api"],
+      "description": "Restart all Docker services and check logs"
+    },
+    "testFailure": {
+      "steps": ["workflow.quality.lint", "workflow.quality.typecheck", "workflow.testing.contracts"],
+      "description": "Run quality checks before retesting"
+    },
+    "mlServiceDown": {
+      "steps": ["workflow.docker.stopML", "workflow.docker.startML", "workflow.ml.healthCheck"],
+      "description": "Restart ML services and verify health"
+    },
+    "databaseConnection": {
+      "steps": ["workflow.docker.dockerPs", "workflow.database.migrate", "workflow.database.connect"],
+      "description": "Check Docker, run migrations, test connection"
+    },
+    "redisConnection": {
+      "steps": ["workflow.docker.dockerPs", "workflow.debug.redisFlush"],
+      "description": "Check Docker and flush Redis if needed"
+    }
+  },
+  "batchOperations": {
+    "updateAllPythonDeps": {
+      "description": "Update all Python service dependencies",
+      "commands": [
+        "cd python/llm-service && pip install -U -r requirements.txt",
+        "cd python/whisper-service && pip install -U -r requirements.txt",
+        "cd python/vector-service && pip install -U -r requirements.txt",
+        "cd python/caption-service && pip install -U -r requirements.txt"
+      ]
+    },
+    "rebuildAllServices": {
+      "description": "Rebuild all services from scratch",
+      "commands": [
+        "pnpm -w run clean:all",
+        "pnpm install",
+        "pnpm -w run build:all",
+        "docker-compose -f docker/docker-compose.yml build --no-cache"
+      ]
+    },
+    "testAllML": {
+      "description": "Run all ML service tests",
+      "commands": [
+        "workflow.ml.testWhisper",
+        "workflow.ml.testVector",
+        "workflow.ml.vectorIntegration",
+        "workflow.testing.mlPipeline"
+      ]
+    },
+    "setupNewDev": {
+      "description": "Complete setup for new developer",
+      "commands": [
+        "workflow.setup.installAll",
+        "workflow.setup.enableHooks",
+        "workflow.environment.commands.setupDev",
+        "workflow.database.migrate",
+        "workflow.docker.startAll"
+      ]
+    }
+  },
+  "aliases": {
+    "qa": {
+      "description": "Run all quality assurance checks",
+      "commands": ["workflow.quality.lint", "workflow.quality.typecheck", "workflow.testing.all"]
+    },
+    "startup": {
+      "description": "Start development environment",
+      "commands": ["workflow.docker.startAll", "workflow.development.api", "workflow.docker.logs.api"]
+    },
+    "ml-restart": {
+      "description": "Restart ML services",
+      "commands": ["workflow.docker.stopML", "workflow.docker.startML", "workflow.ml.healthCheck"]
+    },
+    "db-reset": {
+      "description": "Reset database to clean state",
+      "commands": ["workflow.database.generate", "workflow.database.migrate"]
+    },
+    "logs-all": {
+      "description": "View all service logs",
+      "commands": ["workflow.docker.logs.api", "workflow.docker.logs.llm", "workflow.docker.logs.whisper", "workflow.docker.logs.vector"]
+    },
+    "health-check": {
+      "description": "Check all services health",
+      "commands": ["workflow.docker.dockerPs", "workflow.ml.healthCheck", "workflow.debug.rabbitmqQueues"]
+    },
+    "quick-test": {
+      "description": "Fast test suite for quick feedback",
+      "commands": ["workflow.quality.lint", "workflow.testing.contracts"]
+    },
+    "mobile-dev": {
+      "description": "Start mobile development",
+      "commands": ["workflow.development.mobile.metro", "workflow.development.mobile.ios"]
+    }
+  },
   "customTriggers": {
     "supermode": {
       "pattern": "activate super",

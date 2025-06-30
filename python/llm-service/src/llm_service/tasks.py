@@ -411,3 +411,197 @@ def summarize_content_local(
         "Local LLM summarization not yet implemented. "
         "This will support Ollama and other local models in a future update."
     )
+
+
+@app.task(
+    name='summarize_video_combined',
+    base=Singleton,
+    lock_expiry=600,  # 10 minutes
+    bind=True,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+@task_metrics(worker_type='llm')
+@trace_celery_task('summarize_video_combined')
+def summarize_video_combined(
+    self: Task,
+    task_data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Generate combined summary from video transcript, caption, and hashtags.
+    Also generates a single high-quality embedding for the video.
+    
+    Args:
+        task_data: Dictionary containing:
+            - shareId: UUID of the share
+            - payload: Dict with transcript, caption, hashtags, platform
+            - options: Dict with generateEmbedding flag
+    
+    Returns:
+        Dictionary with summary, embedding, and processing metadata
+    """
+    start_time = time.time()
+    
+    # Extract inputs
+    share_id = task_data['shareId']
+    payload = task_data['payload']
+    options = task_data.get('options', {})
+    
+    transcript = payload.get('transcript', '')
+    caption = payload.get('caption', '')
+    hashtags = payload.get('hashtags', [])
+    platform = payload.get('platform', 'unknown')
+    
+    logger.info(f"Processing combined video summary for share {share_id} from {platform}")
+    
+    try:
+        # Initialize LLM client
+        provider = LLMProvider.OPENAI  # Use OpenAI for combined summaries
+        llm_client = LLMClient(provider=provider)
+        
+        # Build comprehensive prompt
+        hashtag_text = ' '.join([f"#{tag}" for tag in hashtags]) if hashtags else ''
+        
+        prompt = f"""Analyze this {platform} video content:
+
+Caption: {caption}
+Hashtags: {hashtag_text}
+Spoken Content (Transcript): {transcript}
+
+Create a 2-3 sentence summary that:
+1. Captures the main topic and key message
+2. Integrates context from both written and spoken content
+3. Uses natural language optimized for semantic search
+
+Focus on what the video is about, not just what was said. Include relevant context from the caption and hashtags to provide a complete understanding."""
+
+        # Estimate tokens for budget check
+        estimated_tokens = llm_client.estimate_tokens(
+            text=prompt,
+            model='gpt-4o-mini'  # Use efficient model for summaries
+        )
+        
+        # Check budget
+        cost_estimate = calculate_cost(provider.value, 'gpt-4o-mini', estimated_tokens)
+        budget_check = check_budget_limits(
+            provider=provider.value,
+            estimated_cost=cost_estimate['total_cost']
+        )
+        
+        if not budget_check['within_limits']:
+            if METRICS_ENABLED:
+                track_budget_exceeded(budget_check['reason'], 'llm')
+            raise BudgetExceededError(budget_check['reason'])
+        
+        # Generate summary
+        model_start = time.time()
+        summary_result = llm_client.generate_summary(
+            prompt=prompt,
+            model='gpt-4o-mini',
+            max_tokens=200  # Concise summaries
+        )
+        model_latency = time.time() - model_start
+        
+        # Track model latency
+        if METRICS_ENABLED:
+            track_model_latency(model_latency, summary_result['model'], 'video_combined')
+        
+        # Generate embedding if requested
+        embedding = None
+        embedding_cost = {'total_cost': 0}
+        
+        if options.get('generateEmbedding', True):
+            from vector_service.embedding_client import EmbeddingClient
+            
+            embedding_client = EmbeddingClient(provider='openai')
+            embedding_result = embedding_client.generate_embedding(
+                text=summary_result['summary'],
+                model=options.get('embeddingModel', 'text-embedding-3-small')
+            )
+            
+            embedding = embedding_result['embedding']
+            # Track embedding cost (approx $0.00002 per 1K tokens for ada-002)
+            embedding_tokens = len(summary_result['summary'].split()) * 1.3  # Rough estimate
+            embedding_cost = {
+                'total_cost': (embedding_tokens / 1000) * 0.00002
+            }
+        
+        # Calculate total processing time
+        processing_ms = int((time.time() - start_time) * 1000)
+        
+        # Calculate actual costs
+        actual_tokens = summary_result.get('tokens_used', estimated_tokens)
+        summary_cost = calculate_cost(provider.value, summary_result['model'], actual_tokens)
+        total_cost = summary_cost['total_cost'] + embedding_cost['total_cost']
+        
+        # Track costs in database
+        track_llm_cost(
+            share_id=share_id,
+            model_name=summary_result['model'],
+            provider=provider.value,
+            input_tokens=actual_tokens['input'],
+            output_tokens=actual_tokens['output'],
+            input_cost_usd=summary_cost['input_cost'],
+            output_cost_usd=summary_cost['output_cost'],
+            backend='api',
+            processing_time_ms=processing_ms
+        )
+        
+        # Track metrics
+        if METRICS_ENABLED:
+            track_ml_cost(total_cost, 'video_combined', summary_result['model'], 'llm')
+            track_tokens(actual_tokens['total'], 'video_combined', summary_result['model'], 'total')
+        
+        # Save combined result to database
+        from .db import save_ml_result
+        
+        db_result = save_ml_result(
+            share_id=share_id,
+            task_type='summarize_video_combined',
+            result_data={
+                'summary': summary_result['summary'],
+                'embedding': embedding,
+                'has_embedding': embedding is not None,
+                'transcript_length': len(transcript),
+                'caption_length': len(caption),
+                'hashtag_count': len(hashtags)
+            },
+            model_version=f"{summary_result['model']}_video_combined_v1",
+            processing_time_ms=processing_ms
+        )
+        
+        logger.info(
+            f"Successfully created combined summary for share {share_id} in {processing_ms}ms. "
+            f"Cost: ${total_cost:.6f}"
+        )
+        
+        return {
+            'success': True,
+            'share_id': share_id,
+            'ml_result_id': db_result['id'],
+            'summary': summary_result['summary'],
+            'embedding': embedding,
+            'processing_ms': processing_ms,
+            'tokens_used': actual_tokens,
+            'cost_usd': total_cost,
+            'task_type': 'summarize_video_combined'
+        }
+        
+    except BudgetExceededError:
+        raise  # Re-raise budget errors
+    except ContentValidationError as e:
+        logger.warning(f"Content validation failed for share {share_id}: {e}")
+        return {
+            'success': False,
+            'share_id': share_id,
+            'error': str(e),
+            'error_type': 'validation_error'
+        }
+    except Exception as e:
+        logger.error(f"Error in combined video summary for share {share_id}: {e}", exc_info=True)
+        return {
+            'success': False,
+            'share_id': share_id,
+            'error': str(e),
+            'error_type': 'processing_error'
+        }

@@ -6,15 +6,20 @@ import { DrizzleService } from '../../database/services/drizzle.service';
 import { SharesController } from './controllers/shares.controller';
 import { MetricsController } from './controllers/metrics.controller';
 import { SearchController } from './controllers/search.controller';
+import { WorkflowController } from './controllers/workflow.controller';
 import { SharesService } from './services/shares.service';
 import { IdempotencyService } from './services/idempotency.service';
 import { MetricsService } from './services/metrics.service';
 import { SearchService } from './services/search.service';
+import { WorkflowService } from './services/workflow.service';
+import { WorkflowMetricsService } from './services/workflow-metrics.service';
+import { VideoWorkflowService } from './services/video-workflow.service';
 import { SharesRateLimitMiddleware } from './middlewares/rate-limit.middleware';
 import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ErrorService } from './services/error.service';
 import { ShareProcessor } from './queue/share-processor';
 import { SearchRepository } from './repositories/search.repository';
+import { SharesRepository } from './repositories/shares.repository';
 import { FetchersModule } from './fetchers/fetchers.module';
 import { MLModule } from '../ml/ml.module';
 import * as Redis from 'ioredis';
@@ -59,13 +64,17 @@ import * as Redis from 'ioredis';
       }),
     }),
   ],
-  controllers: [SharesController, MetricsController, SearchController],
+  controllers: [SharesController, MetricsController, SearchController, WorkflowController],
   providers: [
     SharesService,
     IdempotencyService,
     MetricsService,
     SearchService,
+    WorkflowService,
+    WorkflowMetricsService,
+    VideoWorkflowService,
     SearchRepository,
+    SharesRepository,
     DrizzleService,
     ErrorService,
     ShareProcessor, // Register the processor here
@@ -82,10 +91,13 @@ import * as Redis from 'ioredis';
   ],
   exports: [
     SharesService,
+    SharesRepository,
+    WorkflowService,
+    WorkflowMetricsService,
     IdempotencyService,
     ErrorService,
     SearchService,
-    BullModule, // Export BullModule so other modules can access the queue
+    // BullModule and ShareProcessor moved to ShareQueueModule
   ],
 })
 export class SharesModule {

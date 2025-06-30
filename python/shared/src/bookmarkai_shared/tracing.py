@@ -120,8 +120,11 @@ def create_span_from_context(
     tracer = get_tracer()
     
     # Create span with parent context
-    with context.attach(ctx):
+    token = context.attach(ctx)
+    try:
         span = tracer.start_span(name, kind=kind)
+    finally:
+        context.detach(token)
     
     return span
 

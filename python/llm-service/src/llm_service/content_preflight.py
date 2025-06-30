@@ -118,6 +118,10 @@ class ContentPreflightService:
             errors.append("Tweet content exceeds typical length")
         elif content_type == 'article' and word_count < 100:
             errors.append("Article content seems too short")
+        elif content_type in ['video_combined', 'video', 'transcript'] and word_count < 5:
+            errors.append("Video content seems too short")
+        elif content_type in ['caption', 'tiktok'] and word_count < 3:
+            errors.append("Caption content seems too short")
             
         # Check for empty or repetitive content
         unique_words = set(text.lower().split())

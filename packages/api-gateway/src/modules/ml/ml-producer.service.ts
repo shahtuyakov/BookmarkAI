@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export interface MLTaskPayload {
   version: '1.0';
-  taskType: 'summarize_llm' | 'transcribe_whisper' | 'embed_vectors';
+  taskType: 'summarize_llm' | 'transcribe_whisper' | 'embed_vectors' | 'summarize_video_combined';
   shareId: string;
   payload: Record<string, any>;
   metadata: {
@@ -491,7 +491,7 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
     await this.publishTask(task, 'vector_service.tasks.generate_embeddings_batch');
   }
 
-  private async publishTask(task: MLTaskPayload, overrideTaskName?: string): Promise<void> {
+  public async publishTask(task: MLTaskPayload, overrideTaskName?: string): Promise<void> {
     const startTime = Date.now();
     
     try {
@@ -511,12 +511,17 @@ export class MLProducerService implements OnModuleInit, OnModuleDestroy {
         task.payload.options?.backend === 'local') {
       routingKey = 'ml.summarize_local';
     }
+    // Route video combined summary to the main summarize queue
+    if (task.taskType === 'summarize_video_combined') {
+      routingKey = 'ml.summarize';
+    }
     
     // Map task types to Celery task names
     const taskNameMap = {
       'summarize_llm': 'llm_service.tasks.summarize_content',
       'transcribe_whisper': 'whisper.tasks.transcribe_api',
-      'embed_vectors': 'vector_service.tasks.generate_embeddings'
+      'embed_vectors': 'vector_service.tasks.generate_embeddings',
+      'summarize_video_combined': 'llm_service.tasks.summarize_video_combined'
     };
     
     // Use override task name if provided (for batch tasks)
