@@ -39,9 +39,12 @@ export interface FetchResponse {
   
   media?: {
     type: 'video' | 'image' | 'audio' | 'none';
-    url?: string;          // For Task 2.7 to download
+    url?: string;          // For Task 2.7 to download (local file path or URL)
+    originalUrl?: string;  // Original extracted URL for reference
     thumbnailUrl?: string;
     duration?: number;
+    fileSize?: number;     // File size in bytes
+    isLocalFile?: boolean; // Flag to indicate local file vs URL
   };
   
   metadata: {

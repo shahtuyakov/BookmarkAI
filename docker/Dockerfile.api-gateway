@@ -1,0 +1,104 @@
+# Base image with Node.js
+FROM node:20-alpine AS base
+
+# Install system dependencies
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    ffmpeg \
+    curl \
+    bash
+
+# Install yt-dlp using virtual environment or direct download
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir yt-dlp && \
+    ln -s /opt/venv/bin/yt-dlp /usr/local/bin/yt-dlp
+
+# Verify yt-dlp installation
+RUN yt-dlp --version
+
+# Development stage
+FROM base AS development
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@10.11.0
+
+# Copy monorepo files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# .npmrc might not exist, so we'll skip it
+
+# Copy all packages structure (for workspace resolution)
+COPY packages/api-gateway/package.json ./packages/api-gateway/
+COPY packages/sdk/package.json ./packages/sdk/
+
+# Install dependencies (skip prepare scripts like husky)
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# Copy source code
+COPY packages/api-gateway ./packages/api-gateway
+COPY packages/sdk ./packages/sdk
+
+# Build the SDK first (api-gateway depends on it)
+WORKDIR /app/packages/sdk
+RUN pnpm run build
+
+# Build api-gateway
+WORKDIR /app/packages/api-gateway
+RUN pnpm run build
+
+# Expose port
+EXPOSE 3001
+
+# Start command for development
+CMD ["pnpm", "run", "start:dev"]
+
+# Production stage
+FROM base AS production
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@10.11.0
+
+# Copy monorepo files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# .npmrc might not exist, so we'll skip it
+
+# Copy package.json files
+COPY packages/api-gateway/package.json ./packages/api-gateway/
+COPY packages/sdk/package.json ./packages/sdk/
+
+# Install only production dependencies (skip prepare scripts)
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+
+# Copy built application from development stage
+COPY --from=development /app/packages/api-gateway/dist ./packages/api-gateway/dist
+COPY --from=development /app/packages/sdk/dist ./packages/sdk/dist
+
+# Copy necessary files
+COPY packages/api-gateway/src ./packages/api-gateway/src
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Set ownership
+RUN chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Set working directory
+WORKDIR /app/packages/api-gateway
+
+# Expose port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3001/health', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1))"
+
+# Start command for production
+CMD ["node", "dist/main.js"]

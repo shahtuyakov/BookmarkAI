@@ -5,7 +5,6 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, and, desc, sql } from 'drizzle-orm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { CreateShareDto } from '../dto/create-share.dto';
@@ -17,11 +16,10 @@ import { detectPlatform, Platform } from '../constants/platform.enum';
 import { ShareStatus } from '../constants/share-status.enum';
 import { ERROR_CODES } from '../constants/error-codes.constant';
 import { SHARE_QUEUE } from '../queue/share-queue.constants';
-import { shares } from '../../../db/schema/shares';
-import { DrizzleService } from '../../../database/services/drizzle.service';
 import { IdempotencyService } from './idempotency.service';
 import { ErrorService } from './error.service';
 import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
+import { SharesRepository } from '../repositories/shares.repository';
 
 /**
  * Service for managing share operations
@@ -31,7 +29,7 @@ export class SharesService {
   private readonly logger = new Logger(SharesService.name);
 
   constructor(
-    private readonly db: DrizzleService,
+    private readonly sharesRepository: SharesRepository,
     private readonly idempotencyService: IdempotencyService,
     @InjectQueue(SHARE_QUEUE.NAME) private readonly shareQueue: Queue,
     private readonly fetcherRegistry: ContentFetcherRegistry,
@@ -84,16 +82,13 @@ export class SharesService {
 
       // Create the share
       try {
-        const [newShare] = await this.db.database
-          .insert(shares)
-          .values({
-            userId,
-            url: createShareDto.url,
-            platform,
-            status: ShareStatus.PENDING,
-            idempotencyKey,
-          })
-          .returning();
+        const newShare = await this.sharesRepository.create({
+          userId,
+          url: createShareDto.url,
+          platform,
+          status: ShareStatus.PENDING,
+          idempotencyKey,
+        });
 
         // Get rate limit configuration for the platform
         const rateLimitConfig = this.fetcherRegistry.getRateLimitConfig(platform);
@@ -148,11 +143,10 @@ export class SharesService {
         if (error.code === '23505') {
           if (error.constraint === 'idx_shares_url_user_id') {
             // Handle duplicate URL for same user
-            const existingShares = await this.db.database
-              .select()
-              .from(shares)
-              .where(and(eq(shares.userId, userId), eq(shares.url, createShareDto.url)))
-              .limit(1);
+            const existingShares = await this.sharesRepository.findByUrlAndUserId(
+              createShareDto.url,
+              userId,
+            );
 
             if (existingShares.length > 0) {
               const existingShare = existingShares[0];
@@ -227,58 +221,27 @@ export class SharesService {
       const limit = query.limit || 20;
 
       // Build filters
-      let filters = eq(shares.userId, userId);
+      const filters: any = {
+        userId,
+      };
 
-      // Parse cursor if provided
-      if (query.cursor) {
-        try {
-          // Cursor format: {timestamp}_{id}
-          const [timestamp, id] = query.cursor.split('_');
-          const cursorDate = new Date(timestamp);
-
-          if (isNaN(cursorDate.getTime())) {
-            throw new Error('Invalid cursor timestamp');
-          }
-
-          // Filter for items older than the cursor
-          const cursorCondition = sql`(${shares.createdAt}, ${shares.id}) < (${cursorDate}, ${id})`;
-
-          // Add cursor filter to the existing filters
-          filters = and(filters, cursorCondition);
-        } catch (error) {
-          this.logger.warn(`Invalid cursor format: ${query.cursor}`);
-          // Invalid cursor, ignore it
-        }
-      }
-
-      // Add platform filter if specified
       if (query.platform) {
-        filters = and(filters, eq(shares.platform, query.platform));
+        filters.platform = query.platform;
       }
 
-      // Add status filter if specified
       if (query.status) {
-        filters = and(filters, eq(shares.status, query.status));
+        filters.status = query.status;
       }
 
-      // Query shares
-      const results = await this.db.database
-        .select()
-        .from(shares)
-        .where(filters)
-        .orderBy(desc(shares.createdAt), desc(shares.id))
-        .limit(limit + 1); // Fetch one extra to determine if there are more
+      // Query shares using repository
+      const result = await this.sharesRepository.findWithFilters(filters, {
+        limit,
+        cursor: query.cursor,
+        orderBy: 'createdAt',
+        orderDirection: 'desc',
+      });
 
-      // Check if there are more items
-      const hasMore = results.length > limit;
-      const items = results.slice(0, limit); // Remove the extra item
-
-      // Generate cursor for next page if there are more items
-      let nextCursor = undefined;
-      if (hasMore && items.length > 0) {
-        const lastItem = items[items.length - 1];
-        nextCursor = `${lastItem.createdAt.toISOString()}_${lastItem.id}`;
-      }
+      const { items, hasMore, cursor: nextCursor } = result;
 
       // Map to DTOs
       const shareDtos: ShareDto[] = items.map(item => ({
@@ -316,11 +279,7 @@ export class SharesService {
    */
   async getShareById(id: string, userId: string): Promise<ApiResponse<ShareDto>> {
     try {
-      const [share] = await this.db.database
-        .select()
-        .from(shares)
-        .where(and(eq(shares.id, id), eq(shares.userId, userId)))
-        .limit(1);
+      const share = await this.sharesRepository.findByIdAndUserId(id, userId);
 
       if (!share) {
         ErrorService.throwError(ERROR_CODES.SHARE_NOT_FOUND);

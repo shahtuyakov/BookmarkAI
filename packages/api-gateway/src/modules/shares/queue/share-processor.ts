@@ -10,6 +10,12 @@ import { ShareStatus } from '../constants/share-status.enum';
 import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
 import { FetcherError } from '../fetchers/interfaces/fetcher-error.interface';
 import { Platform } from '../constants/platform.enum';
+import { Inject } from '@nestjs/common';
+import { MLProducerService } from '../../ml/ml-producer.service';
+import { WorkflowService } from '../services/workflow.service';
+import { VideoWorkflowState } from '../../../shares/types/workflow.types';
+import { FetchResponse } from '../fetchers/interfaces/content-fetcher.interface';
+import { SharesRepository } from '../repositories/shares.repository';
 
 /**
  * Processor for share background tasks
@@ -24,9 +30,171 @@ export class ShareProcessor {
     private readonly db: DrizzleService,
     private readonly configService: ConfigService,
     private readonly fetcherRegistry: ContentFetcherRegistry,
+    @Inject('MLProducerService') private readonly mlProducer: MLProducerService,
+    private readonly workflowService: WorkflowService,
+    private readonly sharesRepository: SharesRepository,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
+  }
+
+  /**
+   * Check if content is a video that requires enhancement workflow
+   */
+  private isVideoContent(fetchResult: FetchResponse): boolean {
+    return fetchResult.media?.type === 'video' && 
+           fetchResult.media?.url != null;
+  }
+
+  /**
+   * Check if platform requires video enhancement
+   */
+  private requiresEnhancement(platform: string): boolean {
+    // Start with TikTok only, expand later
+    const enhancementPlatforms = ['tiktok', 'youtube'];
+    return enhancementPlatforms.includes(platform.toLowerCase());
+  }
+
+  /**
+   * Check if video enhancement feature is enabled
+   */
+  private isVideoEnhancementEnabled(userId: string): boolean {
+    // TODO: Integrate with feature flag service
+    // For now, return true for development
+    const videoEnhancementV2 = this.configService.get('VIDEO_ENHANCEMENT_V2_ENABLED', false);
+    return videoEnhancementV2;
+  }
+
+  /**
+   * Process video content with enhanced two-track workflow
+   */
+  private async processVideoEnhancement(share: any, fetchResult: FetchResponse): Promise<void> {
+    this.logger.log(`Processing video enhancement for share ${share.id}`);
+    
+    // FAST TRACK: Generate immediate caption embedding
+    if (fetchResult.content?.text) {
+      try {
+        // Queue basic embedding from caption/hashtags for immediate searchability
+        await this.mlProducer.publishEmbeddingTask(
+          share.id,
+          {
+            text: fetchResult.content.text,
+            type: 'caption',
+            metadata: {
+              title: share.title || fetchResult.content.text?.substring(0, 100),
+              url: share.url,
+              author: fetchResult.metadata?.author,
+              platform: share.platform,
+              isBasicEmbedding: true, // Flag to identify this as fast-track
+            }
+          },
+          {
+            embeddingType: 'content',
+          }
+        );
+        this.logger.log(`Queued fast-track embedding for share ${share.id}`);
+      } catch (error) {
+        this.logger.error(`Failed to queue fast-track embedding: ${error.message}`);
+      }
+    }
+    
+    // ENHANCEMENT TRACK: Queue only transcription for videos
+    if (fetchResult.media?.url && fetchResult.media.type === 'video') {
+      try {
+        // Update workflow state to indicate video is being transcribed
+        await this.sharesRepository.updateWorkflowState(
+          share.id, 
+          VideoWorkflowState.TRANSCRIBING,
+          { enhancementStartedAt: new Date() }
+        );
+        
+        // Queue transcription task ONLY
+        await this.mlProducer.publishTranscriptionTask(
+          share.id,
+          fetchResult.media.url
+        );
+        this.logger.log(`Queued transcription for video enhancement: ${share.id}`);
+        
+        // Note: ML Result Listener will handle the rest of the workflow
+        // after transcription completes
+      } catch (error) {
+        this.logger.error(`Failed to start video enhancement: ${error.message}`);
+        await this.sharesRepository.updateWorkflowState(
+          share.id,
+          VideoWorkflowState.FAILED_TRANSCRIPTION
+        );
+      }
+    }
+    
+    // Queue media download if needed
+    if (fetchResult.media?.url) {
+      await this.queueMediaDownload(share.id, fetchResult.media);
+    }
+  }
+
+  /**
+   * Process non-video content with standard parallel workflow
+   */
+  private async processStandardContent(share: any, fetchResult: FetchResponse): Promise<void> {
+    // Queue ML tasks if content text is available
+    if (fetchResult.content?.text) {
+      try {
+        // Queue summarization task
+        await this.mlProducer.publishSummarizationTask(
+          share.id,
+          {
+            text: fetchResult.content.text,
+            title: share.title || fetchResult.content.text?.substring(0, 100),
+            url: share.url,
+            contentType: share.platform,
+          },
+          {
+            style: 'brief',
+            maxLength: 500,
+          }
+        );
+        this.logger.log(`Queued summarization task for share ${share.id}`);
+        
+        // Queue embedding task
+        await this.mlProducer.publishEmbeddingTask(
+          share.id,
+          {
+            text: fetchResult.content.text,
+            type: this.mapPlatformToContentType(share.platform as Platform),
+            metadata: {
+              title: share.title || fetchResult.content.text?.substring(0, 100),
+              url: share.url,
+              author: fetchResult.metadata?.author,
+              platform: share.platform,
+            }
+          },
+          {
+            embeddingType: 'content',
+          }
+        );
+        this.logger.log(`Queued embedding task for share ${share.id}`);
+      } catch (mlError) {
+        this.logger.error(`Failed to queue ML task for share ${share.id}: ${mlError.message}`);
+      }
+    }
+    
+    // For standard content, still queue transcription if video exists
+    if (fetchResult.media?.url && fetchResult.media.type === 'video') {
+      try {
+        await this.mlProducer.publishTranscriptionTask(
+          share.id,
+          fetchResult.media.url
+        );
+        this.logger.log(`Queued transcription task for share ${share.id}`);
+      } catch (mlError) {
+        this.logger.error(`Failed to queue transcription task: ${mlError.message}`);
+      }
+    }
+    
+    // Queue media download if needed
+    if (fetchResult.media?.url) {
+      await this.queueMediaDownload(share.id, fetchResult.media);
+    }
   }
 
   /**
@@ -74,9 +242,15 @@ export class ShareProcessor {
         // Store the fetched metadata (Task 2.8 will implement this)
         await this.storeMetadata(job.data.shareId, fetchResult);
         
-        // Queue media download if needed (Task 2.7 will implement this)
-        if (fetchResult.media?.url) {
-          await this.queueMediaDownload(job.data.shareId, fetchResult.media);
+        // Determine processing path based on content type and feature flags
+        if (this.isVideoEnhancementEnabled(share.userId) && 
+            this.isVideoContent(fetchResult) && 
+            this.requiresEnhancement(share.platform)) {
+          // VIDEO ENHANCEMENT WORKFLOW (Two-track)
+          await this.processVideoEnhancement(share, fetchResult);
+        } else {
+          // STANDARD WORKFLOW (Existing parallel processing)
+          await this.processStandardContent(share, fetchResult);
         }
         
         // Update status to "done"
@@ -178,6 +352,24 @@ export class ShareProcessor {
    */
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Map platform to content type for embeddings
+   */
+  private mapPlatformToContentType(platform: Platform): 'caption' | 'transcript' | 'article' | 'comment' | 'tweet' {
+    switch (platform) {
+      case Platform.TIKTOK:
+        return 'caption';
+      case Platform.TWITTER:
+        return 'tweet';
+      case Platform.REDDIT:
+        return 'comment';
+      case Platform.YOUTUBE:
+        return 'transcript';
+      default:
+        return 'article';
+    }
   }
 
   /**

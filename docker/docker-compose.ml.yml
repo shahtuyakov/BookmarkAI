@@ -1,0 +1,243 @@
+# Define reusable environment configuration
+x-shared-env: &shared-env
+  env_file:
+    - ../env/base.env
+    - ../env/development/shared.env
+
+services:
+  # LLM Summarization Worker
+  llm-worker:
+    build:
+      context: ../python
+      dockerfile: llm-service/Dockerfile
+    container_name: bookmarkai-llm-worker
+    <<: *shared-env
+    env_file:
+      - ../env/base.env
+      - ../env/development/shared.env
+      - ../env/development/python-services.env
+    ports:
+      - '9091:9091'  # Prometheus metrics endpoint
+    environment:
+      # Override specific values that need to reference other containers
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      MQ_HOST: rabbitmq
+      # Construct URLs using the loaded env variables
+      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      DATABASE_URL: postgresql://bookmarkai:bookmarkai_password@postgres:5432/bookmarkai_dev
+      REDIS_URL: redis://redis:6379/0
+      # Postgres individual vars for compatibility
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: bookmarkai_dev
+      POSTGRES_USER: bookmarkai
+      POSTGRES_PASSWORD: bookmarkai_password
+      # OpenAI configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ML_OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
+      # Service-specific settings
+      WORKER_TYPE: llm
+      SERVICE_NAME: llm-service
+      PROMETHEUS_METRICS_PORT: 9091
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_llm
+    # RabbitMQ is now in main docker-compose.yml
+    external_links:
+      - ml-rabbitmq:rabbitmq
+    volumes:
+      - ../python/llm-service:/app
+      - ../python/shared:/shared:ro
+    command: >
+      celery -A llm_service.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=ml.summarize
+      --without-gossip
+      --without-heartbeat
+      --prefetch-multiplier=8
+      --max-tasks-per-child=50
+    networks:
+      - bookmarkai-ml
+      - bookmarkai-main  # To access postgres and redis
+    restart: unless-stopped
+
+  # Whisper Transcription Worker
+  whisper-worker:
+    build:
+      context: ../python
+      dockerfile: whisper-service/Dockerfile
+    container_name: bookmarkai-whisper-worker
+    <<: *shared-env
+    env_file:
+      - ../env/base.env
+      - ../env/development/shared.env
+      - ../env/development/python-services.env
+    ports:
+      - '9092:9092'  # Prometheus metrics endpoint
+    environment:
+      # Override specific values that need to reference other containers
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      MQ_HOST: rabbitmq
+      # Construct URLs using the loaded env variables
+      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      DATABASE_URL: postgresql://bookmarkai:bookmarkai_password@postgres:5432/bookmarkai_dev
+      REDIS_URL: redis://redis:6379/0
+      # Postgres individual vars for compatibility
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: bookmarkai_dev
+      POSTGRES_USER: bookmarkai
+      POSTGRES_PASSWORD: bookmarkai_password
+      # OpenAI configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ML_OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
+      # Service-specific settings
+      WORKER_TYPE: whisper
+      SERVICE_NAME: whisper-service
+      PROMETHEUS_METRICS_PORT: 9092
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_whisper
+      
+      # Silence detection
+      WHISPER_SILENCE_THRESHOLD_DB: ${WHISPER_SILENCE_THRESHOLD_DB:--40.0}
+      
+      # AWS/S3 configuration
+      AWS_DEFAULT_REGION: us-east-1
+      S3_MEDIA_BUCKET: bookmarkai-media-development
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_USE_PATH_STYLE: true
+      # AWS credentials for boto3 (prevents profile lookup)
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      
+      # Logging
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+    external_links:
+      - ml-rabbitmq:rabbitmq
+    volumes:
+      - ../python/whisper-service:/app/whisper-service
+      - ../python/shared:/shared:ro
+      - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}  # Mount video directory
+    command: >
+      celery -A whisper_service.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=ml.transcribe
+      --without-gossip
+      --without-heartbeat
+      --prefetch-multiplier=8
+      --max-tasks-per-child=50
+    networks:
+      - bookmarkai-ml
+      - bookmarkai-main  # To access postgres and redis
+    restart: unless-stopped
+
+  # Vector Embedding Worker
+  vector-worker:
+    build:
+      context: ../python
+      dockerfile: vector-service/Dockerfile
+    container_name: bookmarkai-vector-worker
+    <<: *shared-env
+    env_file:
+      - ../env/base.env
+      - ../env/development/shared.env
+      - ../env/development/python-services.env
+    ports:
+      - '9093:9093'  # Prometheus metrics endpoint
+    environment:
+      # Override specific values that need to reference other containers
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      MQ_HOST: rabbitmq
+      # Construct URLs using the loaded env variables
+      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      DATABASE_URL: postgresql://bookmarkai:bookmarkai_password@postgres:5432/bookmarkai_dev
+      REDIS_URL: redis://redis:6379/0
+      # Postgres individual vars for compatibility
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: bookmarkai_dev
+      POSTGRES_USER: bookmarkai
+      POSTGRES_PASSWORD: bookmarkai_password
+      # OpenAI configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ML_OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
+      # Service-specific settings
+      WORKER_TYPE: vector
+      SERVICE_NAME: vector-service
+      PROMETHEUS_METRICS_PORT: 9093
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_vector
+      # Model selection thresholds
+      VECTOR_SMALL_THRESHOLD: ${VECTOR_SMALL_THRESHOLD:-1000}
+      VECTOR_LARGE_THRESHOLD: ${VECTOR_LARGE_THRESHOLD:-5000}
+      VECTOR_DEFAULT_MODEL: ${ML_EMBEDDING_MODEL:-text-embedding-3-small}
+      # Batch processing
+      VECTOR_BATCH_SIZE: ${VECTOR_BATCH_SIZE:-100}
+      VECTOR_BUDGET_STRICT_MODE: ${VECTOR_BUDGET_STRICT_MODE:-false}
+      
+      # AWS/S3 configuration
+      AWS_DEFAULT_REGION: us-east-1
+      S3_MEDIA_BUCKET: bookmarkai-media-development
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_USE_PATH_STYLE: true
+      # AWS credentials for boto3 (prevents profile lookup)
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      
+      # Logging
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+    external_links:
+      - ml-rabbitmq:rabbitmq
+    volumes:
+      - ../python/vector-service:/app
+      - ../python/shared:/shared:ro
+      - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}  # Mount video directory
+    command: >
+      celery -A vector_service.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=ml.embed
+      --without-gossip
+      --without-heartbeat
+      --prefetch-multiplier=8
+      --max-tasks-per-child=50
+    networks:
+      - bookmarkai-ml
+      - bookmarkai-main  # To access postgres and redis
+    restart: unless-stopped
+
+  # Flower for Celery monitoring (optional, for development)
+  flower:
+    image: mher/flower:2.0
+    container_name: bookmarkai-flower
+    environment:
+      CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
+      FLOWER_PORT: 5555
+      FLOWER_BASIC_AUTH: admin:bookmarkai123  # Change in production
+    ports:
+      - '5555:5555'
+    external_links:
+      - ml-rabbitmq:rabbitmq
+    networks:
+      - bookmarkai-ml
+    profiles:
+      - monitoring
+
+# No named volumes needed - using bind mounts to local filesystem
+
+networks:
+  bookmarkai-ml:
+    driver: bridge
+  bookmarkai-main:
+    external: true
+    name: docker_default  # This connects to the main docker-compose network

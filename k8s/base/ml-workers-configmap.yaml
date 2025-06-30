@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ml-workers-config
+  namespace: bookmarkai-ml
+data:
+  # Celery Configuration
+  CELERY_BROKER_URL: "amqp://bookmarkai:bookmarkai@rabbitmq.bookmarkai.svc.cluster.local:5672/bookmarkai"
+  CELERY_RESULT_BACKEND: "redis://redis.bookmarkai.svc.cluster.local:6379/0"
+  CELERY_TASK_SERIALIZER: "json"
+  CELERY_RESULT_SERIALIZER: "json"
+  CELERY_ACCEPT_CONTENT: "json"
+  CELERY_TIMEZONE: "UTC"
+  CELERY_ENABLE_UTC: "true"
+  
+  # Worker Configuration
+  WORKER_PREFETCH_MULTIPLIER: "8"
+  WORKER_MAX_TASKS_PER_CHILD: "50"
+  WORKER_DISABLE_RATE_LIMITS: "true"
+  WORKER_SEND_TASK_EVENTS: "true"
+  WORKER_TASK_TRACK_STARTED: "true"
+  
+  # Database Configuration
+  DB_HOST: "postgres.bookmarkai.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_NAME: "bookmarkai"
+  DB_USER: "bookmarkai"
+  
+  # Redis Configuration
+  REDIS_HOST: "redis.bookmarkai.svc.cluster.local"
+  REDIS_PORT: "6379"
+  
+  # S3 Configuration
+  S3_ENDPOINT_URL: "http://minio.bookmarkai.svc.cluster.local:9000"
+  S3_USE_SSL: "false"
+  S3_REGION: "us-east-1"
+  
+  # OpenTelemetry Configuration
+  OTEL_SERVICE_NAME: "bookmarkai-ml"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector.bookmarkai.svc.cluster.local:4318"
+  ENABLE_TRACING: "true"
+  
+  # Contract Validation
+  ENABLE_CONTRACT_VALIDATION: "true"
+  
+  # Monitoring
+  PROMETHEUS_MULTIPROC_DIR: "/tmp/prometheus_multiproc"

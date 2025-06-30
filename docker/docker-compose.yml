@@ -1,24 +1,61 @@
+# Define reusable environment configuration
+x-shared-env: &shared-env
+  env_file:
+    - ../env/base.env
+    - ../env/${ENVIRONMENT:-development}/shared.env
+
+# Define common healthcheck settings
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
 services:
+  # RabbitMQ for Celery message broker
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ml-rabbitmq
+    <<: *shared-env
+    ports:
+      - '${MQ_PORT:-5672}:5672'    # AMQP port
+      - '${MQ_MANAGEMENT_PORT:-15672}:15672'  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${MQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${MQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${MQ_VHOST}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
   # PostgreSQL with pgvector extension
   postgres:
     image: ankane/pgvector:latest
+    <<: *shared-env
     environment:
-      POSTGRES_USER: bookmarkai
-      POSTGRES_PASSWORD: bookmarkai_password
-      POSTGRES_DB: bookmarkai_dev
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
-      - '5433:5432'
+      - '${DB_PORT:-5433}:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-scripts/postgres:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U bookmarkai']
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER} -d ${DB_NAME}']
       interval: 10s
       timeout: 5s
       retries: 5
 
   seed:
     image: node:20
+    <<: *shared-env
     depends_on:
       postgres:
         condition: service_healthy
@@ -28,9 +65,10 @@ services:
       - .:/app
     working_dir: /app
     environment:
-      - NODE_ENV=development
-      - DB_HOST=postgres
-      - REDIS_HOST=redis
+      NODE_ENV: development
+      DB_HOST: postgres
+      CACHE_HOST: redis
+      REDIS_HOST: redis
     command: >
       sh -c "npm install -g pnpm && 
            pnpm install && 
@@ -40,7 +78,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - '6379:6379'
+      - '${CACHE_PORT:-6379}:6379'
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
@@ -116,6 +154,7 @@ services:
     depends_on:
       - loki
       - tempo
+      - prometheus
 
   # Loki for log aggregation
   loki:
@@ -146,7 +185,27 @@ services:
       - '9090:9090'
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../docs/prometheus-alerts-ml.yml:/etc/prometheus/alerts/ml-alerts.yml:ro
       - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+      - METRICS_STORAGE_TYPE=prometheus
+    ports:
+      - '16686:16686'  # Jaeger UI
+      - '4318:4318'    # OTLP HTTP
+      - '4317:4317'    # OTLP gRPC
+    networks:
+      - bookmarkai-network
 
 volumes:
   postgres-data:
@@ -157,3 +216,8 @@ volumes:
   grafana-data:
   prometheus-data:
   vault-data:
+  rabbitmq-data:
+
+networks:
+  bookmarkai-network:
+    driver: bridge

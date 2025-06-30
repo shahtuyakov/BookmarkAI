@@ -1,0 +1,15 @@
+# Base Docker Compose configuration with shared environment setup
+# This file defines the common environment configuration pattern
+
+# Define reusable environment configuration
+x-shared-env: &shared-env
+  env_file:
+    - ../env/base.env
+    - ../env/${ENVIRONMENT:-development}/shared.env
+
+# Define common healthcheck settings
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s

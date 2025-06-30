@@ -1,10 +1,13 @@
 import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SharesModule } from './modules/shares/shares.module';
+import { MLModule } from './modules/ml/ml.module';
+import { MLResultsModule } from './modules/ml-results/ml-results.module';
 import { RateLimitMiddleware } from './modules/auth/middlewares/rate-limit.middleware';
 import { ConfigService } from './config/services/config.service';
 
@@ -16,6 +19,7 @@ import { ConfigService } from './config/services/config.service';
     // Core infrastructure modules
     ConfigModule,
     DatabaseModule,
+    ScheduleModule.forRoot(),
 
     // Register BullMQ for queue management
     BullModule.forRootAsync({
@@ -33,6 +37,8 @@ import { ConfigService } from './config/services/config.service';
     HealthModule,
     AuthModule,
     SharesModule,
+    MLModule,
+    // MLResultsModule, // Temporarily disabled due to circular dependency
   ],
 })
 export class AppModule {

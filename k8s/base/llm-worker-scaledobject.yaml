@@ -1,0 +1,56 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: llm-worker-scaler
+  namespace: bookmarkai-ml
+spec:
+  scaleTargetRef:
+    name: llm-worker
+  pollingInterval: 30  # Check queue every 30 seconds
+  cooldownPeriod: 300  # Wait 5 minutes before scaling down
+  idleReplicaCount: 0  # Scale to 0 when no messages
+  minReplicaCount: 1   # Minimum 1 replica
+  maxReplicaCount: 10  # Maximum 10 replicas
+  triggers:
+  - type: rabbitmq
+    metadata:
+      protocol: amqp
+      queueName: ml.summarize
+      mode: QueueLength  # Scale based on queue length
+      value: "5"  # Target 5 messages per replica
+      activationValue: "1"  # Activate scaling when 1+ messages
+    authenticationRef:
+      name: rabbitmq-trigger-auth
+  # Additional trigger based on queue processing rate
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus.bookmarkai.svc.cluster.local:9090
+      metricName: celery_task_received_total
+      query: |
+        sum(rate(celery_task_received_total{queue="ml.summarize"}[5m]))
+      threshold: "0.5"  # Scale up if receiving more than 0.5 tasks/second
+      activationThreshold: "0.1"
+  # CPU-based scaling as secondary trigger
+  - type: cpu
+    metricType: Utilization
+    metadata:
+      value: "70"  # Scale up at 70% CPU
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      policies:
+      - type: Percent
+        value: 50  # Scale down by 50% at a time
+        periodSeconds: 60
+      - type: Pods
+        value: 1   # Remove maximum 1 pod at a time
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 30  # Quick scale up
+      policies:
+      - type: Percent
+        value: 100  # Double the replicas
+        periodSeconds: 30
+      - type: Pods
+        value: 2    # Add maximum 2 pods at a time
+        periodSeconds: 30

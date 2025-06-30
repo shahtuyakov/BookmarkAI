@@ -1,8 +1,12 @@
 {
-  "enableAllProjectMcpServers": false,
   "permissions": {
     "allow": [
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "mcp__zen__planner"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": false
 }
