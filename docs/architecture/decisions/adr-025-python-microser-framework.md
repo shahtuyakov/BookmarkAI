@@ -255,6 +255,12 @@ Based on production experience with similar architectures and our implementation
 31. **Docker Compose Environment Variable Issues** (June 30, 2025): Variable substitution in `env_file` paths can fail; hardcoded values in docker-compose.yml more reliable for critical configuration
 32. **RabbitMQ Authentication Resolution** (June 30, 2025): Fixed authentication failures by ensuring proper environment variable loading in Docker containers; all workers now successfully connect
 33. **End-to-End Pipeline Verification**: Complete video processing workflow validated with TikTok video test case - all 3 workers processing tasks successfully
+34. **Content Validation Thresholds** (June 30, 2025): Video/transcript minimum of 5 words too low for meaningful content; should increase to 10-20 words minimum
+35. **Workflow State Enum Consistency**: Multiple workflow state enums (WorkflowState vs VideoWorkflowState) risk mismatches; unification needed
+36. **Token Estimation Accuracy**: Rough word-count multiplier (1.3x) insufficient for accurate cost tracking; proper tokenizer needed
+37. **Error Recovery Patterns**: Missing retry logic for failed ML tasks; exponential backoff strategy recommended
+38. **Feature Flag Integration**: Hardcoded feature flags insufficient for production; proper feature flag service needed for gradual rollouts
+39. **Workflow Timeout Optimization**: 30-minute stale cleanup may be too long; consider shorter timeouts for better user experience
 
 ---
 
@@ -315,6 +321,16 @@ Based on production experience with similar architectures and our implementation
 | ✅ Done | Grafana dashboards & alerts | Completed |
 | 🟡 Low | KEDA autoscaling configuration | Week 3 |
 | ✅ Done | Vector search API endpoints | Completed June 30 |
+
+### Production Readiness Improvements (from Code Review)
+| Priority | Issue | Recommendation | Impact |
+|----------|-------|----------------|--------|
+| 🔴 High | Workflow state enum inconsistency | Unify WorkflowState enums | Prevents state mismatches |
+| 🔴 High | Missing ML task retry logic | Add exponential backoff | Improves reliability |
+| 🟠 Medium | Content validation too lenient | Increase to 10-20 word minimum | Better content quality |
+| 🟠 Medium | Hardcoded feature flags | Implement feature flag service | Safe rollouts |
+| 🟠 Medium | Rough token estimation | Use proper tokenizer | Accurate cost tracking |
+| 🟡 Low | Long workflow timeout | Reduce from 30 minutes | Better UX |
 
 ### Deferred (Post-MVP)
 - GPU infrastructure and node configuration
@@ -460,6 +476,53 @@ CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
 3. **Cost Tracking Validation**: End-to-end cost tracking working correctly across all services
 4. **Performance Metrics**: Processing times well within acceptable ranges for user experience
 
+### 8.3 Code Review Findings (June 30, 2025)
+
+**Strengths Identified**:
+1. **Well-architected video enhancement workflow**: Two-track approach (fast caption embedding + enhanced transcription workflow) optimizes user experience
+2. **Proper error handling**: Good use of try-catch blocks with specific error types (BudgetExceededError, ContentValidationError)
+3. **Comprehensive metrics**: Excellent cost tracking, latency monitoring, and workflow state metrics
+4. **Clean separation of concerns**: Video vs standard content processing paths are clearly separated
+5. **Database schema evolution**: Proper indexes added for workflowState queries
+
+**Areas for Improvement**:
+1. **Content validation thresholds** in `content_preflight.py`:
+   - Video/transcript minimum of 5 words too low (could be just "Hi there")
+   - Recommendation: 10-20 words minimum for meaningful video content
+   - Caption minimum of 3 words is reasonable
+
+2. **Tracing context management** in `tracing.py`:
+   - Good fix using `context.detach(token)` pattern
+   - Consider wrapping in context manager for cleaner usage
+
+3. **Feature flag hardcoding** in `share-processor.ts`:
+   - Missing user-specific feature flag logic
+   - Need proper feature flag service integration before production
+
+**Potential Issues Identified**:
+1. **Workflow state inconsistency**:
+   - `WorkflowService` uses `WorkflowState` enum
+   - `VideoWorkflowState` enum in types file has different values
+   - Risk of state mismatches - requires unification
+
+2. **Missing error recovery in video workflow**:
+   - No automatic retry mechanism if transcription fails
+   - Need exponential backoff retry strategy
+
+3. **Cost estimation accuracy**:
+   ```python
+   embedding_tokens = len(summary_result['summary'].split()) * 1.3  # Rough estimate
+   ```
+   - Token estimation is very rough
+   - Should use proper tokenizer for accurate cost tracking
+
+**Implementation Recommendations**:
+1. **Unify workflow state enums**: Merge WorkflowState and VideoWorkflowState or clearly document their relationship
+2. **Add retry logic**: Implement exponential backoff for failed ML tasks
+3. **Feature flag service**: Implement proper feature flag service before production
+4. **State transition validation**: Add workflow state transition validation to prevent invalid state changes
+5. **Workflow timeout handling**: Consider reducing 30-minute stale cleanup - might be too long for stuck transcriptions
+
 ---
 
 ## 9 — Contract Governance
@@ -564,4 +627,10 @@ We will **deploy RabbitMQ quorum cluster with Celery 5.5 workers using an API-fi
 3. **Cost tracking from day one**: Enable data-driven decisions about when to switch to local models
 4. **Infrastructure ready for local models**: Queue structure and task routing support future local model additions
 
-This approach allows us to launch quickly while maintaining flexibility to add local models when the economics justify the additional complexity.
+**Production Status (June 30, 2025)**:
+- ✅ **Core Infrastructure**: All ML workers operational with successful end-to-end processing
+- ✅ **Authentication**: RabbitMQ authentication issues resolved
+- ✅ **Cost Tracking**: Validated at $0.0073 per video
+- ⚠️ **Code Review Findings**: Several improvements identified for production hardening
+
+This approach allows us to launch quickly while maintaining flexibility to add local models when the economics justify the additional complexity. The code review findings should be addressed in priority order before full production deployment.
