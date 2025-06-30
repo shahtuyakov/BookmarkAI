@@ -1,8 +1,8 @@
-# ADR-027: Asynchronous Media Download Queue Implementation
+# ADR-027: Asynchronous Media Download Implementation
 
 **Status**: Proposed  
 **Date**: 2025-01-30  
-**Decision makers**: Backend Team, Infrastructure Team  
+**Decision makers**: Backend Team  
 **Related ADRs**: ADR-024 (Video Enhancement Workflow), ADR-025 (pgvector Integration)
 
 ## Context
@@ -60,299 +60,322 @@ async fetchContent(request: FetchRequest): Promise<FetchResponse> {
 
 ## Decision
 
-Implement an asynchronous media download queue using BullMQ to decouple media downloads from the API request flow.
+Implement a simple PostgreSQL-based asynchronous download system to decouple media downloads from the API request flow. Start with the simplest solution that solves the immediate problem, with the option to migrate to a more complex queue system (like BullMQ) if and when actual scale demands it.
 
 ### Proposed Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   API Gateway   │────▶│  Media Queue    │────▶│ Download Workers│
-│                 │     │   (BullMQ)      │     │  (Scalable)    │
+│   API Gateway   │────▶│   PostgreSQL    │◀────│ Download Workers│
+│  (non-blocking) │     │  (shares table) │     │  (3-5 processes)│
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                                                │
-        ▼                                                ▼
-┌─────────────────┐                            ┌─────────────────┐
-│   Database      │◀───────────────────────────│  Storage (S3)   │
-│ (Quick Update)  │                            │                 │
-└─────────────────┘                            └─────────────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │  Storage (S3)   │
+                                                └─────────────────┘
 ```
 
 ### Implementation Design
 
-#### 1. Queue Structure
-```typescript
-// Queue definition
-export const MEDIA_DOWNLOAD_QUEUE = {
-  NAME: 'media-download',
-  JOBS: {
-    DOWNLOAD_VIDEO: 'download-video',
-    DOWNLOAD_IMAGE: 'download-image',
-    DOWNLOAD_DOCUMENT: 'download-document',
-  },
-  PRIORITIES: {
-    PREMIUM: 1,
-    STANDARD: 10,
-    BULK: 20,
-  }
-};
-
-// Job interface
-interface MediaDownloadJob {
-  shareId: string;
-  userId: string;
-  url: string;
-  mediaType: 'video' | 'image' | 'document';
-  platform: Platform;
-  metadata?: {
-    expectedSize?: number;
-    expectedDuration?: number;
-    priority?: number;
-  };
-  retryCount?: number;
-}
-```
-
-#### 2. Modified Share Processing Flow
-```typescript
-// share-processor.ts - New implementation
-private async queueMediaDownload(shareId: string, media: any): Promise<void> {
-  const job: MediaDownloadJob = {
-    shareId,
-    userId: this.share.userId,
-    url: media.url,
-    mediaType: media.type,
-    platform: this.share.platform,
-    metadata: {
-      expectedSize: media.fileSize,
-      expectedDuration: media.duration,
-      priority: this.getUserPriority(this.share.userId),
-    }
-  };
-
-  await this.mediaQueue.add(
-    MEDIA_DOWNLOAD_QUEUE.JOBS.DOWNLOAD_VIDEO,
-    job,
-    {
-      priority: job.metadata.priority,
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 5000,
-      },
-      removeOnComplete: true,
-      removeOnFail: false,
-    }
-  );
-
-  // Update share to indicate download is queued
-  await this.sharesRepository.updateMediaStatus(shareId, 'download_queued');
-}
-```
-
-#### 3. Download Worker Implementation
-```typescript
-@Processor(MEDIA_DOWNLOAD_QUEUE.NAME)
-export class MediaDownloadProcessor {
-  constructor(
-    private readonly ytDlpService: YtDlpService,
-    private readonly s3Storage: S3StorageService,
-    private readonly sharesRepository: SharesRepository,
-    private readonly metricsService: MetricsService,
-  ) {}
-
-  @Process({
-    name: MEDIA_DOWNLOAD_QUEUE.JOBS.DOWNLOAD_VIDEO,
-    concurrency: 10, // Configurable based on resources
-  })
-  async downloadVideo(job: Job<MediaDownloadJob>) {
-    const { shareId, url, userId } = job.data;
-    
-    try {
-      // Update status
-      await this.sharesRepository.updateMediaStatus(shareId, 'downloading');
-      
-      // Download with progress tracking
-      const result = await this.ytDlpService.extractVideoInfo(url, true);
-      
-      // Report progress
-      await job.updateProgress(80);
-      
-      // Store in S3/local
-      const storageUrl = await this.storeMedia(result, job.data);
-      
-      // Update database
-      await this.sharesRepository.updateShare(shareId, {
-        mediaUrl: storageUrl,
-        mediaStatus: 'completed',
-        mediaMetadata: {
-          size: result.fileSize,
-          duration: result.duration,
-          downloadedAt: new Date(),
-        }
-      });
-      
-      // Emit event for further processing
-      await this.eventBus.emit('media.downloaded', {
-        shareId,
-        userId,
-        mediaUrl: storageUrl,
-      });
-      
-      return { success: true, storageUrl };
-      
-    } catch (error) {
-      await this.handleDownloadError(shareId, error, job);
-      throw error; // Re-throw for Bull retry
-    }
-  }
-
-  private async handleDownloadError(
-    shareId: string, 
-    error: Error, 
-    job: Job
-  ) {
-    const isLastAttempt = job.attemptsMade >= job.opts.attempts;
-    
-    if (isLastAttempt) {
-      await this.sharesRepository.updateMediaStatus(shareId, 'failed');
-      await this.notifyUserOfFailure(job.data.userId, shareId);
-    } else {
-      await this.sharesRepository.updateMediaStatus(shareId, 'retry_pending');
-    }
-    
-    // Log metrics
-    this.metricsService.recordDownloadFailure(error.message);
-  }
-}
-```
-
-#### 4. Queue Configuration
-```typescript
-// bull.config.ts
-export const mediaDownloadQueueConfig = {
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 5000,
-    },
-    removeOnComplete: true,
-    removeOnFail: false,
-  },
-  rateLimiter: {
-    max: 100,        // Max 100 jobs
-    duration: 60000, // per minute
-  },
-  settings: {
-    stalledInterval: 30000,
-    maxStalledCount: 2,
-  },
-};
-```
-
-### Database Schema Changes
+#### 1. Database Schema Changes
 
 ```sql
--- Add media status tracking
-ALTER TABLE shares ADD COLUMN media_status VARCHAR(50) DEFAULT 'pending';
-ALTER TABLE shares ADD COLUMN media_download_attempts INT DEFAULT 0;
-ALTER TABLE shares ADD COLUMN media_last_error TEXT;
-ALTER TABLE shares ADD COLUMN media_metadata JSONB;
+-- Add download status tracking to existing shares table
+ALTER TABLE shares ADD COLUMN download_status VARCHAR(20) DEFAULT 'pending';
+ALTER TABLE shares ADD COLUMN download_attempts INT DEFAULT 0;
+ALTER TABLE shares ADD COLUMN download_error TEXT;
+ALTER TABLE shares ADD COLUMN download_started_at TIMESTAMP;
+ALTER TABLE shares ADD COLUMN download_completed_at TIMESTAMP;
 
--- Add index for queue queries
-CREATE INDEX idx_shares_media_status ON shares(media_status);
+-- Add index for efficient queue queries
+CREATE INDEX idx_shares_download_queue ON shares(download_status, created_at) 
+WHERE download_status IN ('pending', 'retry');
+
+-- Index for monitoring
+CREATE INDEX idx_shares_download_status ON shares(download_status);
 ```
+
+#### 2. Simple Download Worker
+
+```typescript
+// download-worker.service.ts
+@Injectable()
+export class DownloadWorkerService {
+  private readonly logger = new Logger(DownloadWorkerService.name);
+  private isRunning = true;
+
+  constructor(
+    private readonly db: DrizzleService,
+    private readonly ytDlpService: YtDlpService,
+  ) {}
+
+  async start() {
+    this.logger.log('Starting download worker');
+    
+    while (this.isRunning) {
+      try {
+        // Use PostgreSQL's row-level locking to grab next job
+        const share = await this.getNextDownload();
+        
+        if (share) {
+          await this.processDownload(share);
+        } else {
+          // No work available, wait before checking again
+          await this.sleep(5000);
+        }
+      } catch (error) {
+        this.logger.error(`Worker error: ${error.message}`);
+        await this.sleep(5000);
+      }
+    }
+  }
+
+  private async getNextDownload() {
+    // PostgreSQL's FOR UPDATE SKIP LOCKED ensures no two workers
+    // process the same download
+    const result = await this.db.database.execute(sql`
+      UPDATE shares 
+      SET download_status = 'processing',
+          download_started_at = NOW()
+      WHERE id = (
+        SELECT id FROM shares 
+        WHERE download_status IN ('pending', 'retry')
+          AND download_attempts < 3
+        ORDER BY 
+          CASE WHEN download_status = 'retry' THEN 0 ELSE 1 END,
+          created_at
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
+
+    return result.rows[0];
+  }
+
+  private async processDownload(share: any) {
+    try {
+      this.logger.log(`Processing download for share ${share.id}`);
+      
+      // Use existing YtDlpService
+      const result = await this.ytDlpService.extractVideoInfo(share.url, true);
+      
+      if (result && result.storageUrl) {
+        // Success - update share with media URL
+        await this.db.database
+          .update(shares)
+          .set({
+            mediaUrl: result.storageUrl,
+            mediaType: 'video',
+            download_status: 'completed',
+            download_completed_at: new Date(),
+            platformData: {
+              ...share.platformData,
+              downloadMetadata: {
+                size: result.fileSize,
+                duration: result.duration,
+                storageType: result.storageType,
+              }
+            }
+          })
+          .where(eq(shares.id, share.id));
+          
+        this.logger.log(`Download completed for share ${share.id}`);
+      } else {
+        throw new Error('Download failed - no storage URL returned');
+      }
+      
+    } catch (error) {
+      await this.handleDownloadError(share, error);
+    }
+  }
+
+  private async handleDownloadError(share: any, error: Error) {
+    const attempts = share.download_attempts + 1;
+    const shouldRetry = attempts < 3;
+    
+    await this.db.database
+      .update(shares)
+      .set({
+        download_status: shouldRetry ? 'retry' : 'failed',
+        download_attempts: attempts,
+        download_error: error.message,
+      })
+      .where(eq(shares.id, share.id));
+      
+    this.logger.error(
+      `Download failed for share ${share.id} (attempt ${attempts}): ${error.message}`
+    );
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  stop() {
+    this.isRunning = false;
+  }
+}
+```
+
+#### 3. Modified Share Processing Flow
+
+```typescript
+// share-processor.ts - Updated queueMediaDownload
+private async queueMediaDownload(shareId: string, media: any): Promise<void> {
+  // Simply mark the share as needing download
+  // Workers will pick it up automatically
+  await this.db.database
+    .update(shares)
+    .set({
+      download_status: 'pending',
+      // Store the original media URL for workers to use
+      platformData: {
+        ...this.share.platformData,
+        originalMediaUrl: media.url,
+      }
+    })
+    .where(eq(shares.id, shareId));
+    
+  this.logger.log(`Queued download for share ${shareId}`);
+}
+```
+
+#### 4. Worker Management
+
+```typescript
+// main.ts - Start workers alongside API
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  
+  // Start download workers based on environment
+  const workerCount = parseInt(process.env.DOWNLOAD_WORKERS || '3', 10);
+  
+  for (let i = 0; i < workerCount; i++) {
+    const worker = app.get(DownloadWorkerService);
+    worker.start().catch(err => {
+      console.error(`Worker ${i} crashed:`, err);
+    });
+  }
+  
+  await app.listen(3000);
+}
+
+// Alternative: Run workers as separate processes
+// download-worker.ts
+async function runWorker() {
+  const app = await NestFactory.createApplicationContext(WorkerModule);
+  const worker = app.get(DownloadWorkerService);
+  await worker.start();
+}
+
+if (require.main === module) {
+  runWorker();
+}
+```
+
 
 ## Consequences
 
 ### Positive
 
-1. **Scalability**
-   - Can handle 100x more concurrent download requests
-   - Download workers scale independently from API
-   - Queue absorbs traffic spikes
+1. **Immediate Benefits**
+   - API response time: 30s → <500ms
+   - Non-blocking operation with minimal changes
+   - Can handle 50-100 concurrent downloads
+   - No new infrastructure required
 
-2. **Performance**
-   - API response time: 30s → 200ms
-   - Non-blocking operation
-   - Better resource utilization
+2. **Simplicity**
+   - Uses existing PostgreSQL database
+   - Leverages native row-level locking
+   - No additional dependencies
+   - Easy to debug and monitor
 
 3. **Reliability**
-   - Automatic retry with exponential backoff
-   - Failure isolation
-   - Progress tracking
+   - Built-in retry mechanism
+   - Graceful failure handling
+   - No data loss on crashes
+   - Simple recovery procedures
 
-4. **User Experience**
-   - Instant feedback on share creation
-   - Background download status updates
-   - No timeout errors
-
-5. **Operational Benefits**
-   - Separate monitoring for downloads
-   - Rate limiting capabilities
-   - Priority queue support
+4. **Cost Effective**
+   - No Redis/BullMQ infrastructure costs
+   - Uses existing database connections
+   - Minimal operational overhead
+   - Easy to maintain
 
 ### Negative
 
-1. **Complexity**
-   - Additional queue infrastructure
-   - More moving parts to monitor
-   - State management across systems
+1. **Limited Scale**
+   - Max ~100 concurrent downloads
+   - Database polling overhead
+   - No advanced queue features
+   - Manual priority implementation
 
-2. **Eventual Consistency**
-   - Media not immediately available
-   - Need UI to handle "downloading" state
-   - WebSocket/polling for status updates
+2. **Basic Features**
+   - No built-in rate limiting
+   - Simple retry logic only
+   - No job progress tracking
+   - Limited monitoring capabilities
 
-3. **Storage Considerations**
-   - Queue persistence requires Redis memory
-   - Failed job retention for debugging
+3. **Future Migration**
+   - Will need to migrate if scale increases 10x
+   - Database schema will need updates
+   - Worker code will need refactoring
 
 ## Implementation Plan
 
-### Phase 1: Queue Infrastructure (1 week)
-- [ ] Set up BullMQ with Redis
-- [ ] Create queue definitions and job interfaces
-- [ ] Implement basic download worker
-- [ ] Add monitoring dashboard
+### Phase 1: Database & Worker Setup (2-3 days)
+- [ ] Add download status columns to shares table
+- [ ] Create database indexes for queue queries
+- [ ] Implement DownloadWorkerService
+- [ ] Test worker with mock downloads
 
-### Phase 2: Integration (1 week)
-- [ ] Modify share processor to use queue
-- [ ] Update database schema
-- [ ] Implement status tracking
-- [ ] Add retry logic
+### Phase 2: Integration (2 days)
+- [ ] Update share processor to mark downloads as pending
+- [ ] Add worker startup to application bootstrap
+- [ ] Test end-to-end flow with real downloads
+- [ ] Add basic error handling
 
-### Phase 3: Optimization (1 week)
-- [ ] Add rate limiting
-- [ ] Implement priority queues
-- [ ] Add progress tracking
-- [ ] Performance tuning
+### Phase 3: Monitoring & Deployment (2 days)
+- [ ] Add simple metrics endpoint for queue depth
+- [ ] Create basic monitoring queries
+- [ ] Deploy with 3 workers to start
+- [ ] Monitor performance and adjust
 
-### Phase 4: Migration (1 week)
-- [ ] Feature flag for gradual rollout
-- [ ] Migrate existing synchronous downloads
-- [ ] Monitor and fix edge cases
-- [ ] Full production deployment
+### Total: ~1 week (vs 4 weeks for complex solution)
 
 ## Monitoring Strategy
 
-```typescript
-// Key metrics to track
-interface MediaQueueMetrics {
-  queueDepth: number;
-  processingRate: number;
-  successRate: number;
-  averageDownloadTime: number;
-  failuresByType: Record<string, number>;
-  workerUtilization: number;
-}
+```sql
+-- Simple monitoring queries
+-- Queue depth
+SELECT download_status, COUNT(*) 
+FROM shares 
+WHERE download_status != 'completed'
+GROUP BY download_status;
 
-// Alerts
-- Queue depth > 10,000
-- Success rate < 90%
-- Worker utilization > 80%
-- Average download time > 60s
+-- Average download time
+SELECT AVG(
+  EXTRACT(EPOCH FROM (download_completed_at - download_started_at))
+) as avg_seconds
+FROM shares
+WHERE download_status = 'completed'
+  AND download_completed_at > NOW() - INTERVAL '1 hour';
+
+-- Failure rate
+SELECT 
+  COUNT(CASE WHEN download_status = 'failed' THEN 1 END)::float / 
+  COUNT(*)::float * 100 as failure_rate
+FROM shares
+WHERE created_at > NOW() - INTERVAL '1 hour';
 ```
+
+### Simple Grafana Dashboard
+- Queue depth by status
+- Downloads per minute
+- Average download time
+- Failure rate percentage
 
 ## Security Considerations
 
@@ -370,19 +393,47 @@ interface MediaQueueMetrics {
    - Verify user owns share before download
    - Signed URLs for private content
 
+## Migration Path to Complex Queue System
+
+If/when we need more scale, we can migrate to BullMQ:
+
+1. **Triggers for Migration**
+   - Consistent queue depth > 1000
+   - Database polling causing performance issues
+   - Need for advanced features (priorities, rate limiting)
+   - Multiple queue types needed
+
+2. **Migration Strategy**
+   - Keep same worker interface
+   - Add adapter pattern for queue operations
+   - Gradually move from PostgreSQL to Redis
+   - Maintain backward compatibility
+
+3. **Code Structure Prepared for Migration**
+   ```typescript
+   interface QueueAdapter {
+     getNextJob(): Promise<DownloadJob>;
+     updateJobStatus(id: string, status: string): Promise<void>;
+   }
+   
+   // Easy to swap implementations
+   class PostgresQueueAdapter implements QueueAdapter { }
+   class BullMQAdapter implements QueueAdapter { }
+   ```
+
 ## Alternatives Considered
 
-1. **Webhooks from External Service**
-   - Pros: Completely offloaded
-   - Cons: Vendor lock-in, costs
+1. **BullMQ + Redis (Original Proposal)**
+   - Pros: Industry standard, feature-rich, scales to millions
+   - Cons: Over-engineered for current needs, additional infrastructure
 
-2. **Lambda/Serverless Functions**
-   - Pros: Auto-scaling
-   - Cons: Cold starts, 15-min timeout
+2. **AWS SQS**
+   - Pros: Managed service, infinite scale
+   - Cons: Vendor lock-in, costs, complexity
 
-3. **Synchronous with Larger Thread Pool**
-   - Pros: Simpler architecture
-   - Cons: Still blocks, doesn't scale
+3. **Keep Synchronous**
+   - Pros: No changes needed
+   - Cons: Blocking API threads is unsustainable
 
 ## Related Decisions
 
@@ -390,8 +441,19 @@ interface MediaQueueMetrics {
 - ADR-025: pgvector Integration - Media metadata used for embeddings
 - ADR-026: (Future) CDN Integration for media delivery
 
+## Summary
+
+This ADR proposes a pragmatic solution that:
+- Solves the immediate problem (blocking API threads)
+- Uses existing infrastructure (PostgreSQL)
+- Can be implemented in ~1 week
+- Provides a clear migration path when needed
+- Avoids premature optimization
+
+The key insight is that PostgreSQL's `FOR UPDATE SKIP LOCKED` gives us a free, reliable queue that's perfect for our current scale. When we're consistently processing 1000+ downloads per hour, we can revisit and migrate to a dedicated queue system.
+
 ## References
 
-- [BullMQ Documentation](https://docs.bullmq.io/)
-- [NestJS Bull Integration](https://docs.nestjs.com/techniques/queues)
+- [PostgreSQL Row-Level Locking](https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-ROWS)
+- [SKIP LOCKED for Queue Processing](https://www.2ndquadrant.com/en/blog/what-is-select-skip-locked-for-in-postgresql-9-5/)
 - [YouTube-DL Architecture](https://github.com/yt-dlp/yt-dlp)
