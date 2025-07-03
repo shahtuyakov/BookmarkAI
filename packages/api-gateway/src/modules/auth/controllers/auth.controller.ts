@@ -198,11 +198,13 @@ export class AuthController {
                   response['raw'].req.headers.accept.includes('text/html');
     
     if (isWeb) {
+      // Get JWT expiration from config (in minutes, default 15)
+      const jwtExpirationMinutes = this.configService.get('AUTH_JWT_EXPIRATION', 15);
       response.cookie('access_token', token, {
         httpOnly: true,
         secure: this.isProduction, // Only secure in production
         sameSite: 'lax',
-        maxAge: 15 * 60 * 1000, // 15 minutes in milliseconds
+        maxAge: jwtExpirationMinutes * 60 * 1000, // Convert minutes to milliseconds
       });
     }
   }

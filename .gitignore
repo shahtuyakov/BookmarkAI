@@ -38,9 +38,11 @@ coverage
 !.vscode/settings.json
 
 # Claude Code
-.claude/memory/
-.claude/cache/
-.claude/settings.local.json
+.claude/*
+.claude/commands/*
+
+
+
 # Keep config and prompts for team sharing
 !.claude/config.json
 !.claude/prompts/

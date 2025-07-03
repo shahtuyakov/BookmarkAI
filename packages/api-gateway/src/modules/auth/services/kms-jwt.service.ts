@@ -90,8 +90,12 @@ export class KmsJwtService implements OnModuleInit {
     const jti = uuidv4();
     const iat = Math.floor(Date.now() / 1000);
     
-    // Create access token (15 minutes)
-    const accessTokenExpiry = iat + 15 * 60;
+    // Get JWT expiration from config (in minutes, default 15)
+    const jwtExpirationMinutes = this.configService.get('AUTH_JWT_EXPIRATION', 15);
+    const jwtExpirationSeconds = jwtExpirationMinutes * 60;
+    
+    // Create access token
+    const accessTokenExpiry = iat + jwtExpirationSeconds;
     const accessTokenPayload: JwtPayload = {
       sub: userId,
       email,
@@ -118,7 +122,7 @@ export class KmsJwtService implements OnModuleInit {
     return {
       accessToken,
       refreshToken,
-      expiresIn: 15 * 60, // 15 minutes in seconds
+      expiresIn: jwtExpirationSeconds,
     };
   }
   
