@@ -8,7 +8,7 @@ import { SHARE_QUEUE } from './share-queue.constants';
 import { eq } from 'drizzle-orm';
 import { ShareStatus } from '../constants/share-status.enum';
 import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
-import { FetcherError } from '../fetchers/interfaces/fetcher-error.interface';
+import { FetcherError, FetcherErrorCode, RetryableFetcherError } from '../fetchers/interfaces/fetcher-error.interface';
 import { Platform } from '../constants/platform.enum';
 import { Inject } from '@nestjs/common';
 import { MLProducerService } from '../../ml/ml-producer.service';
@@ -16,6 +16,8 @@ import { WorkflowService } from '../services/workflow.service';
 import { VideoWorkflowState } from '../../../shares/types/workflow.types';
 import { FetchResponse } from '../fetchers/interfaces/content-fetcher.interface';
 import { SharesRepository } from '../repositories/shares.repository';
+import { WorkerRateLimiterService } from '../services/worker-rate-limiter.service';
+import { RateLimitError } from '../../../common/rate-limiter';
 
 /**
  * Processor for share background tasks
@@ -33,6 +35,7 @@ export class ShareProcessor {
     @Inject('MLProducerService') private readonly mlProducer: MLProducerService,
     private readonly workflowService: WorkflowService,
     private readonly sharesRepository: SharesRepository,
+    private readonly rateLimiter: WorkerRateLimiterService,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
@@ -258,6 +261,26 @@ export class ShareProcessor {
       try {
         await this.updateShareStatus(job.data.shareId, ShareStatus.FETCHING);
         
+        // Check rate limit before making external API call
+        try {
+          await this.rateLimiter.checkPlatformLimit({
+            platform: share.platform.toLowerCase(),
+            userId: share.userId,
+          });
+        } catch (rateLimitError) {
+          if (rateLimitError instanceof RateLimitError) {
+            // Convert to RetryableFetcherError for consistent error handling
+            throw new RetryableFetcherError(
+              `Rate limit exceeded for ${share.platform}`,
+              FetcherErrorCode.RATE_LIMIT_EXCEEDED,
+              share.platform as Platform,
+              rateLimitError.retryAfter,
+              { originalError: rateLimitError }
+            );
+          }
+          throw rateLimitError;
+        }
+        
         const fetcher = this.fetcherRegistry.getFetcher(share.platform as Platform);
         const fetchResult = await fetcher.fetchContent({
           url: share.url,
@@ -299,6 +322,27 @@ export class ShareProcessor {
               error: fetchError.message,
               errorCode: fetchError.code
             };
+          }
+          
+          // Handle rate limit errors with smart requeue
+          if (fetchError.code === FetcherErrorCode.RATE_LIMIT_EXCEEDED && 
+              fetchError instanceof RetryableFetcherError) {
+            const delay = await this.rateLimiter.getRequeueDelay(
+              new RateLimitError(
+                fetchError.message,
+                share.platform.toLowerCase(),
+                fetchError.retryAfterSeconds,
+                Date.now() + (fetchError.retryAfterSeconds * 1000)
+              ),
+              job
+            );
+            
+            this.logger.warn(
+              `Rate limit hit for ${share.platform}, requeuing with delay: ${delay}ms`
+            );
+            
+            // Update the job's delay for next retry
+            job.opts.delay = delay;
           }
         }
         

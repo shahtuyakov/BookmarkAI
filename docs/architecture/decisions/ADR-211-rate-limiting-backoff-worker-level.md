@@ -5,6 +5,25 @@
 **Decision makers**: Backend Team, Infrastructure Team  
 **Related ADRs**: ADR-005 (BullMQ Worker Design), ADR-021 (Content Fetcher Interface), ADR-025 (Python ML Microservice Framework)
 
+## Implementation Summary (MVP)
+
+**Implemented on**: 2025-01-04  
+**Phases completed**: Phase 1 (Core Infrastructure) ✅, Phase 2 (ShareProcessor Integration) ✅
+
+### What's Working:
+- Distributed rate limiter with Redis backing (sliding window & token bucket algorithms)
+- ShareProcessor checks rate limits before external API calls
+- Smart requeue with exponential backoff and jitter
+- Circuit breaker pattern for Redis failures
+- Prometheus metrics for monitoring
+- YAML configuration with hot reload
+
+### Known Limitations:
+- **Global rate limiting only** - all users share same limit pool (scaling issue)
+- No per-user fairness (first 100 shares win, rest queue)
+- Single API key per platform (no pooling)
+- ML service integration pending (Phase 3)
+
 ## Context
 
 BookmarkAI's worker processes interact with various external APIs and services, each with their own rate limits and quotas. Currently, rate limiting is well-implemented at the API gateway level for incoming requests, but worker-level rate limiting for outbound requests to external services is missing or incomplete.
@@ -251,34 +270,49 @@ Key metrics to track:
 - Back-off delay distribution
 - Failed jobs due to rate limits
 
+## Implementation Status
+
+**Last Updated**: 2025-01-04
+
+### ⚠️ MVP Limitation: Global Rate Limiting
+
+The current implementation uses **global platform-wide rate limits**, which works for MVP but has scaling issues:
+- With 10k users: First 100 shares process, remaining 9,900 queue behind rate limit
+- All users share the same rate limit pool (e.g., 100 TikTok requests/min total)
+
+**Production requirements** (not implemented):
+- Per-user rate limiting for fairness
+- API key pooling for higher throughput
+- Priority queues based on user tiers
+
 ## Implementation TODO List
 
-### Phase 1: Core Infrastructure
-- [ ] **1.1** Create `DistributedRateLimiter` service class in `packages/api-gateway/src/common/services/`
-  - [ ] Implement sliding window counter using Redis sorted sets
-  - [ ] Add token bucket algorithm for burst capacity
-  - [ ] Create methods: `checkLimit()`, `recordUsage()`, `getBackoffDelay()`
-- [ ] **1.2** Define rate limit configuration schema
-  - [ ] Create `config/rate-limits.yaml` with initial conservative limits
-  - [ ] Add configuration loader service
-  - [ ] Implement hot-reload capability for config changes
-- [ ] **1.3** Set up Redis data structures
-  - [ ] Design key naming convention: `rl:{service}:{type}:{window}`
-  - [ ] Implement cleanup job for expired keys
-  - [ ] Add Redis connection pooling configuration
+### Phase 1: Core Infrastructure ✅ COMPLETED
+- [x] **1.1** Create `DistributedRateLimiter` service class in `packages/api-gateway/src/common/rate-limiter/`
+  - [x] Implement sliding window counter using Redis sorted sets (LUA script)
+  - [x] Add token bucket algorithm for burst capacity (with cost support)
+  - [x] Create methods: `checkLimit()`, `recordUsage()`, `getBackoffDelay()`
+- [x] **1.2** Define rate limit configuration schema
+  - [x] Create `config/rate-limits.yaml` with initial conservative limits
+  - [x] Add configuration loader service with hot-reload capability
+  - [x] Implement environment variable support (CACHE_HOST, CACHE_PORT)
+- [x] **1.3** Set up Redis data structures
+  - [x] Design key naming convention: `rl:{sw|tb}:{service}:{identifier}`
+  - [x] Implement TTL for automatic key expiration
+  - [x] Add Redis connection with circuit breaker pattern
 
-### Phase 2: ShareProcessor Integration
-- [ ] **2.1** Create `WorkerRateLimiter` wrapper service
-  - [ ] Inject into ShareProcessor
-  - [ ] Add platform-specific rate limit checks
-  - [ ] Implement error classification (rate limit vs other errors)
-- [ ] **2.2** Enhance BullMQ job handling
-  - [ ] Add custom `RateLimitError` class
-  - [ ] Implement smart requeue with calculated delays
-  - [ ] Add job priority adjustment based on rate limit status
-- [ ] **2.3** Update fetcher implementations
-  - [ ] Wrap external API calls with rate limit checks
-  - [ ] Parse rate limit headers from responses
+### Phase 2: ShareProcessor Integration ✅ COMPLETED
+- [x] **2.1** Create `WorkerRateLimiter` wrapper service
+  - [x] Inject into ShareProcessor
+  - [x] Add platform-specific rate limit checks before fetcher calls
+  - [x] Implement error classification (RateLimitError → RetryableFetcherError)
+- [x] **2.2** Enhance BullMQ job handling
+  - [x] Add custom `RateLimitError` class with retry information
+  - [x] Implement smart requeue with calculated delays (with jitter)
+  - [x] Convert rate limit errors to platform-consistent errors
+- [x] **2.3** Update error handling (partial)
+  - [x] Wrap external API calls with rate limit checks
+  - [x] Parse rate limit headers helper (in WorkerRateLimiter)
   - [ ] Update rate limit state based on API responses
 
 ### Phase 3: ML Service Integration
@@ -342,6 +376,36 @@ Key metrics to track:
 - [ ] **M.2** Dry-run mode (log only, don't block)
 - [ ] **M.3** Rollout plan: Internal → Beta → Production
 - [ ] **M.4** Rollback procedure documentation
+
+## Future Enhancements for Production Scale
+
+### User-Based Rate Limiting
+- [ ] **U.1** Implement per-user rate limits
+  - [ ] Modify key structure: `rl:{service}:{userId}:{identifier}`
+  - [ ] Add user fairness algorithm
+  - [ ] Prevent single user from blocking others
+- [ ] **U.2** Tiered rate limits by user plan
+  - [ ] Premium users: Higher limits
+  - [ ] Free users: Conservative limits
+  - [ ] Enterprise: Custom limits
+
+### API Key Pooling
+- [ ] **P.1** Multiple API key management
+  - [ ] Round-robin key selection
+  - [ ] Key health monitoring
+  - [ ] Automatic key rotation on rate limit
+- [ ] **P.2** Dynamic key allocation
+  - [ ] Allocate keys based on load
+  - [ ] Reserve keys for premium users
+
+### Queue Optimization
+- [ ] **Q.1** Platform-specific queue priorities
+  - [ ] Separate queues per platform
+  - [ ] Priority based on user tier
+  - [ ] Backpressure handling
+- [ ] **Q.2** Smart job distribution
+  - [ ] Distribute jobs across available capacity
+  - [ ] Predictive scheduling based on rate limit reset times
 
 ## References
 
