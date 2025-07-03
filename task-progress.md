@@ -1,7 +1,7 @@
 # BookmarkAI Task Map - Implementation Status
 
-*Last Updated: December 2024*  
-*Legend: ~~Strikethrough~~ = Complete | **Bold** = In Progress | Normal = Not Started*
+*Last Updated: January 30, 2025*  
+*Legend: ~~Strikethrough~~ = Complete | **Bold** = In Progress | Normal = Not Started | 🚫 = Deferred*
 
 ## Phase 0: Local Dev Environment (Week 0) - **100% COMPLETE**
 
@@ -46,7 +46,7 @@
 | ~~2.4~~ | ~~Create X/Twitter stub fetcher~~ | Backend | 2 days | 2.1 | ✅ COMPLETE |
 | ~~2.5~~ | ~~Set up Python microservice framework~~ | ML | 3 days | 0.7 | ✅ COMPLETE (2025-06-28) |
 | ~~2.6~~ | ~~Develop caption extraction service~~ | ML | 4 days | 2.5 | ✅ COMPLETE |
-| **2.7** | **Implement media download & storage** | Backend | 3 days | 2.2-2.4 | ⚡ PARTIAL - Logs URL only |
+| **2.7** | **Implement media download & storage** | Backend | 3 days | 2.2-2.4 | 🚫 DEFERRED - ADR-027 (conflict with video workflow) |
 | ~~2.8~~ | ~~Create metadata storage schema~~ | Backend | 2 days | 2.1 | ✅ COMPLETE |
 | ~~2.9~~ | ~~Set up worker status tracking~~ | Backend | 2 days | 2.7, 2.8 | ✅ COMPLETE |
 | ~~2.10~~ | ~~Connect fetchers to orchestration worker~~ | Backend | 3 days | 2.1-2.9 | ✅ COMPLETE |
@@ -165,7 +165,7 @@
 
 ## Active Work Areas
 
-⚡ **Media Storage**: Partial implementation for file download and S3 storage
+🚫 **Media Storage**: Deferred - Async download conflicts with video workflow (see ADR-027)
 ⚡ **Rate Limiting**: Worker-level rate limiting needed
 ⚡ **YouTube Support**: Implementation complete but has connectivity issues
 ⚡ **Tracing**: End-to-end distributed tracing partially implemented

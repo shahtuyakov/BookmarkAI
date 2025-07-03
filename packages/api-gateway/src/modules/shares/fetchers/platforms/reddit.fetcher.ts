@@ -73,13 +73,17 @@ export class RedditFetcher extends BaseContentFetcher {
         );
       }
 
+      // Extract media information first to determine if text-only
+      const media = this.extractMedia(postData);
+      const isTextOnly = media.type === 'none';
+      
       // Build standardized response
       const result: FetchResponse = {
         content: {
           text: postData.title || '',
           description: postData.selftext || undefined,
         },
-        media: this.extractMedia(postData),
+        media,
         metadata: {
           author: postData.author,
           publishedAt: postData.created_utc ? new Date(postData.created_utc * 1000) : undefined,
@@ -91,6 +95,8 @@ export class RedditFetcher extends BaseContentFetcher {
           hasNativeCaptions: false,
           requiresAuth: false,
           language: this.detectLanguage(postData),
+          // Add hint for text-only Reddit posts
+          isRedditTextOnly: isTextOnly && !!postData.selftext,
         },
       };
 
@@ -216,6 +222,7 @@ export class RedditFetcher extends BaseContentFetcher {
       type: 'none',
     };
   }
+
 
   /**
    * Attempt to detect language from post data

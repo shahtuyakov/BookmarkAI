@@ -149,8 +149,11 @@ export class YtDlpService {
       const videoId = this.generateVideoId(url);
       const outputTemplate = path.join(this.downloadDir, `${videoId}.%(ext)s`);
       
+      // Determine format specification based on platform
+      const formatSpec = this.getFormatSpecForPlatform(url);
+      
       const args = downloadVideo ? [
-        '--format', 'best[height<=720]/best',  // Limit quality to 720p for efficiency
+        '--format', formatSpec,                 // Platform-specific format
         '--output', outputTemplate,             // Save to specific location
         '--write-info-json',                   // Also write metadata JSON
         '--no-playlist',                       // Don't download playlists
@@ -509,7 +512,28 @@ export class YtDlpService {
       );
       
       if (videoFile) {
-        return path.join(this.downloadDir, videoFile);
+        const originalPath = path.join(this.downloadDir, videoFile);
+        
+        // Check if file has format metadata in name (e.g., .fhls-1609.mp4)
+        const formatPattern = /\.(f[a-z]+-\d+)\.(mp4|webm|mkv)$/;
+        if (formatPattern.test(videoFile)) {
+          // Clean up the filename by removing format metadata
+          const cleanName = videoFile.replace(formatPattern, '.$2');
+          const cleanPath = path.join(this.downloadDir, cleanName);
+          
+          try {
+            // Rename to clean filename
+            fs.renameSync(originalPath, cleanPath);
+            this.logger.log(`Renamed video file from ${videoFile} to ${cleanName}`);
+            return cleanPath;
+          } catch (renameError) {
+            this.logger.warn(`Failed to rename video file: ${renameError.message}`);
+            // Return original path if rename fails
+            return originalPath;
+          }
+        }
+        
+        return originalPath;
       }
     } catch (error) {
       this.logger.error(`Error finding downloaded file: ${error.message}`);
@@ -596,6 +620,20 @@ export class YtDlpService {
     
     // Ensure it's not empty after sanitization
     return sanitized || 'Unknown';
+  }
+
+  /**
+   * Get platform-specific format specification
+   */
+  private getFormatSpecForPlatform(url: string): string {
+    // Reddit videos often use DASH format which requires special handling
+    if (url.includes('reddit.com') || url.includes('redd.it') || url.includes('v.redd.it')) {
+      // For Reddit: Try to get best video + audio, fallback to best available
+      return 'bestvideo[height<=720]+bestaudio/best[height<=720]/best';
+    }
+    
+    // TikTok and other platforms work fine with standard format
+    return 'best[height<=720]/best';
   }
 
   /**

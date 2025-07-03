@@ -99,17 +99,19 @@ export class MLResultListenerProcessor {
     this.logger.log(`Processing transcription completion for share ${shareId}`);
 
     try {
-      // Get original caption and hashtags from metadata
-      const [shareMetadata] = await this.db.database
+      // Get original caption and hashtags from metadata or shares
+      const [shareData] = await this.db.database
         .select({
-          platformData: metadata.platformData,
+          title: shares.title,
+          description: shares.description,
+          platformData: shares.platformData,
         })
-        .from(metadata)
-        .where(eq(metadata.shareId, shareId))
+        .from(shares)
+        .where(eq(shares.id, shareId))
         .limit(1);
 
-      if (!shareMetadata) {
-        this.logger.warn(`No metadata found for share ${shareId}`);
+      if (!shareData) {
+        this.logger.warn(`No share data found for share ${shareId}`);
         return;
       }
 
@@ -122,6 +124,23 @@ export class MLResultListenerProcessor {
         })
         .where(eq(shares.id, shareId));
 
+      // Prepare caption/text based on platform
+      let caption = '';
+      let hashtags: string[] = [];
+      
+      if (job.data.sharePlatform === 'reddit') {
+        // For Reddit, combine title and selftext (description)
+        caption = shareData.title || '';
+        if (shareData.description) {
+          caption = `${caption}\n\n${shareData.description}`;
+        }
+        this.logger.log(`Processing Reddit video with combined title and selftext for share ${shareId}`);
+      } else {
+        // For other platforms (TikTok, YouTube), use platformData
+        caption = (shareData.platformData as any)?.caption || '';
+        hashtags = (shareData.platformData as any)?.hashtags || [];
+      }
+
       // Queue combined summary task
       await this.mlProducer.publishTask({
         version: '1.0',
@@ -129,8 +148,8 @@ export class MLResultListenerProcessor {
         shareId: shareId,
         payload: {
           transcript: transcriptionResult.transcript,
-          caption: (shareMetadata.platformData as any)?.caption || '',
-          hashtags: (shareMetadata.platformData as any)?.hashtags || [],
+          caption: caption,
+          hashtags: hashtags,
           platform: job.data.sharePlatform,
           title: job.data.shareTitle,
           url: job.data.shareUrl,
@@ -188,22 +207,38 @@ export class MLResultListenerProcessor {
       for (const share of stuckShares) {
         this.logger.warn(`Share ${share.id} stuck in transcribing state for over 30 minutes`);
         
-        // Get caption from metadata for fallback
-        const [shareMetadata] = await this.db.database
+        // Get share data for fallback
+        const [shareData] = await this.db.database
           .select({
-            platformData: metadata.platformData,
+            platform: shares.platform,
+            title: shares.title,
+            description: shares.description,
+            platformData: shares.platformData,
           })
-          .from(metadata)
-          .where(eq(metadata.shareId, share.id))
+          .from(shares)
+          .where(eq(shares.id, share.id))
           .limit(1);
 
-        if ((shareMetadata?.platformData as any)?.caption) {
+        let fallbackText = '';
+        
+        if (shareData?.platform === 'reddit') {
+          // For Reddit, use title and selftext
+          fallbackText = shareData.title || '';
+          if (shareData.description) {
+            fallbackText = `${fallbackText}\n\n${shareData.description}`;
+          }
+        } else if ((shareData?.platformData as any)?.caption) {
+          // For other platforms, use caption from platformData
+          fallbackText = (shareData.platformData as any).caption;
+        }
+
+        if (fallbackText) {
           // Queue caption-only summary as fallback
           await this.mlProducer.publishSummarizationTask(
             share.id,
             {
-              text: (shareMetadata.platformData as any).caption,
-              title: ((shareMetadata.platformData as any).caption || '').substring(0, 100),
+              text: fallbackText,
+              title: fallbackText.substring(0, 100),
               url: share.url,
               contentType: 'caption_fallback',
             },

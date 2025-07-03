@@ -50,7 +50,7 @@ export class ShareProcessor {
    * Check if platform requires video enhancement
    */
   private requiresEnhancement(platform: string): boolean {
-    // Start with TikTok only, expand later
+    // Platforms that support video enhancement workflow
     const enhancementPlatforms = ['tiktok', 'youtube'];
     return enhancementPlatforms.includes(platform.toLowerCase());
   }
@@ -74,11 +74,13 @@ export class ShareProcessor {
     // FAST TRACK: Generate immediate caption embedding
     if (fetchResult.content?.text) {
       try {
+        let fastTrackText = fetchResult.content.text;
+        
         // Queue basic embedding from caption/hashtags for immediate searchability
         await this.mlProducer.publishEmbeddingTask(
           share.id,
           {
-            text: fetchResult.content.text,
+            text: fastTrackText,
             type: 'caption',
             metadata: {
               title: share.title || fetchResult.content.text?.substring(0, 100),
@@ -100,29 +102,38 @@ export class ShareProcessor {
     
     // ENHANCEMENT TRACK: Queue only transcription for videos
     if (fetchResult.media?.url && fetchResult.media.type === 'video') {
-      try {
-        // Update workflow state to indicate video is being transcribed
-        await this.sharesRepository.updateWorkflowState(
-          share.id, 
-          VideoWorkflowState.TRANSCRIBING,
-          { enhancementStartedAt: new Date() }
-        );
-        
-        // Queue transcription task ONLY
-        await this.mlProducer.publishTranscriptionTask(
-          share.id,
-          fetchResult.media.url
-        );
-        this.logger.log(`Queued transcription for video enhancement: ${share.id}`);
-        
-        // Note: ML Result Listener will handle the rest of the workflow
-        // after transcription completes
-      } catch (error) {
-        this.logger.error(`Failed to start video enhancement: ${error.message}`);
-        await this.sharesRepository.updateWorkflowState(
-          share.id,
-          VideoWorkflowState.FAILED_TRANSCRIPTION
-        );
+      // Only queue transcription if we have a valid local/S3 URL (not external)
+      const isValidMediaUrl = !fetchResult.media.url.startsWith('http://') && 
+                             !fetchResult.media.url.startsWith('https://');
+      
+      if (isValidMediaUrl) {
+        try {
+          // Update workflow state to indicate video is being transcribed
+          await this.sharesRepository.updateWorkflowState(
+            share.id, 
+            VideoWorkflowState.TRANSCRIBING,
+            { enhancementStartedAt: new Date() }
+          );
+          
+          // Queue transcription task ONLY
+          await this.mlProducer.publishTranscriptionTask(
+            share.id,
+            fetchResult.media.url
+          );
+          this.logger.log(`Queued transcription for video enhancement: ${share.id}`);
+          
+          // Note: ML Result Listener will handle the rest of the workflow
+          // after transcription completes
+        } catch (error) {
+          this.logger.error(`Failed to start video enhancement: ${error.message}`);
+          await this.sharesRepository.updateWorkflowState(
+            share.id,
+            VideoWorkflowState.FAILED_TRANSCRIPTION
+          );
+        }
+      } else {
+        this.logger.warn(`Skipping transcription for ${share.id} - invalid media URL: ${fetchResult.media.url}`);
+        // Don't update workflow state - leave it as is since we couldn't process the video
       }
     }
     
@@ -139,11 +150,26 @@ export class ShareProcessor {
     // Queue ML tasks if content text is available
     if (fetchResult.content?.text) {
       try {
+        // Special handling for Reddit text-only posts
+        const isRedditTextOnly = share.platform === Platform.REDDIT && 
+                                fetchResult.hints?.isRedditTextOnly === true;
+        
+        // Prepare content text for ML processing
+        let contentForML: string;
+        if (isRedditTextOnly && fetchResult.content.description) {
+          // For Reddit text-only posts, combine title and selftext
+          contentForML = `${fetchResult.content.text}\n\n${fetchResult.content.description}`;
+          this.logger.log(`Processing Reddit text-only post ${share.id} with combined title and selftext`);
+        } else {
+          // For other content, use the primary text
+          contentForML = fetchResult.content.text;
+        }
+        
         // Queue summarization task
         await this.mlProducer.publishSummarizationTask(
           share.id,
           {
-            text: fetchResult.content.text,
+            text: contentForML,
             title: share.title || fetchResult.content.text?.substring(0, 100),
             url: share.url,
             contentType: share.platform,
@@ -159,7 +185,7 @@ export class ShareProcessor {
         await this.mlProducer.publishEmbeddingTask(
           share.id,
           {
-            text: fetchResult.content.text,
+            text: contentForML,
             type: this.mapPlatformToContentType(share.platform as Platform),
             metadata: {
               title: share.title || fetchResult.content.text?.substring(0, 100),
