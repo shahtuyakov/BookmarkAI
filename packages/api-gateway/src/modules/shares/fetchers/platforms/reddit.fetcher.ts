@@ -10,6 +10,7 @@ import {
   FetcherError,
   FetcherErrorCode,
 } from '../interfaces/fetcher-error.interface';
+import { sanitizeContent } from '../../utils/content-sanitizer';
 
 /**
  * Reddit content fetcher using JSON endpoints
@@ -80,12 +81,12 @@ export class RedditFetcher extends BaseContentFetcher {
       // Build standardized response
       const result: FetchResponse = {
         content: {
-          text: postData.title || '',
-          description: postData.selftext || undefined,
+          text: sanitizeContent(postData.title || ''),
+          description: postData.selftext ? sanitizeContent(postData.selftext) : undefined,
         },
         media,
         metadata: {
-          author: postData.author,
+          author: sanitizeContent(postData.author),
           publishedAt: postData.created_utc ? new Date(postData.created_utc * 1000) : undefined,
           platform: Platform.REDDIT,
           platformId: postData.id,
