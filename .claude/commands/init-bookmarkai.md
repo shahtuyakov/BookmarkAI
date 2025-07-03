@@ -4,7 +4,7 @@ Steps:
 1. Load and analyze .claude/config.json for project-specific settings
 2. Review CLAUDE.md for project context and guidelines
 3. Check .claude/prompts/ for power prompt patterns
-4. Scan recent ADRs for architectural decisions
+4. Scan recent ADRs for architectural decisions in parallel.
 5. Set up mental models for:
    - ast-grep as primary search tool
    - Parallel command execution patterns
