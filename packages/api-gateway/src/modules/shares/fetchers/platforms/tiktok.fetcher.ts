@@ -12,6 +12,7 @@ import {
   RetryableFetcherError,
 } from '../interfaces/fetcher-error.interface';
 import { YtDlpService } from '../../services/ytdlp.service';
+import { sanitizeContent } from '../../utils/content-sanitizer';
 
 /**
  * TikTok content fetcher using oEmbed API
@@ -120,8 +121,8 @@ export class TikTokFetcher extends BaseContentFetcher {
       // Build standardized response
       const result: FetchResponse = {
         content: {
-          text: data.title || '',
-          description: data.author_name ? `Video by @${data.author_name}` : undefined,
+          text: sanitizeContent(data.title || ''),
+          description: data.author_name ? sanitizeContent(`Video by @${data.author_name}`) : undefined,
         },
         media: {
           type: 'video',
@@ -133,7 +134,7 @@ export class TikTokFetcher extends BaseContentFetcher {
           isLocalFile: storageType === 'local',   // Flag to indicate local file vs URL
         },
         metadata: {
-          author: data.author_name,
+          author: sanitizeContent(data.author_name),
           platform: Platform.TIKTOK,
           // Extract video ID from embed HTML if available
           platformId: this.extractVideoId(data.html),

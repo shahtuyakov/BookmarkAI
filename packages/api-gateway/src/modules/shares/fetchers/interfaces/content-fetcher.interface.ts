@@ -60,6 +60,7 @@ export interface FetchResponse {
     hasNativeCaptions?: boolean;  // For Phase 3 ML pipeline
     language?: string;
     requiresAuth?: boolean;
+    isRedditTextOnly?: boolean;   // Reddit text-only posts (no media)
   };
 }
 

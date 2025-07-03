@@ -35,7 +35,7 @@ services:
       POSTGRES_USER: bookmarkai
       POSTGRES_PASSWORD: bookmarkai_password
       # OpenAI configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
       ML_OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
       # Service-specific settings
       WORKER_TYPE: llm
@@ -60,6 +60,7 @@ services:
     networks:
       - bookmarkai-ml
       - bookmarkai-main  # To access postgres and redis
+      - bookmarkai-network  # To access jaeger for tracing
     restart: unless-stopped
 
   # Whisper Transcription Worker
@@ -92,7 +93,7 @@ services:
       POSTGRES_USER: bookmarkai
       POSTGRES_PASSWORD: bookmarkai_password
       # OpenAI configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
       ML_OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
       # Service-specific settings
       WORKER_TYPE: whisper
@@ -135,6 +136,7 @@ services:
     networks:
       - bookmarkai-ml
       - bookmarkai-main  # To access postgres and redis
+      - bookmarkai-network  # To access jaeger for tracing
     restart: unless-stopped
 
   # Vector Embedding Worker
@@ -167,7 +169,7 @@ services:
       POSTGRES_USER: bookmarkai
       POSTGRES_PASSWORD: bookmarkai_password
       # OpenAI configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
       ML_OPENAI_API_KEY: ${ML_OPENAI_API_KEY}
       # Service-specific settings
       WORKER_TYPE: vector
@@ -214,6 +216,7 @@ services:
     networks:
       - bookmarkai-ml
       - bookmarkai-main  # To access postgres and redis
+      - bookmarkai-network  # To access jaeger for tracing
     restart: unless-stopped
 
   # Flower for Celery monitoring (optional, for development)
@@ -241,3 +244,6 @@ networks:
   bookmarkai-main:
     external: true
     name: docker_default  # This connects to the main docker-compose network
+  bookmarkai-network:
+    external: true
+    name: docker_bookmarkai-network  # This connects to the network where Jaeger runs
