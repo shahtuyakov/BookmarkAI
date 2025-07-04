@@ -288,6 +288,15 @@ export class ShareProcessor {
           userId: share.userId,
         });
         
+        // Update rate limit state based on API response headers
+        if (fetchResult.responseHeaders) {
+          await this.rateLimiter.updateFromResponse(
+            share.platform.toLowerCase(),
+            fetchResult.responseHeaders,
+            share.userId
+          );
+        }
+        
         // Store the fetched metadata (Task 2.8 will implement this)
         await this.storeMetadata(job.data.shareId, fetchResult);
         

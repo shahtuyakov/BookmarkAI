@@ -99,6 +99,7 @@ export class RedditFetcher extends BaseContentFetcher {
           // Add hint for text-only Reddit posts
           isRedditTextOnly: isTextOnly && !!postData.selftext,
         },
+        responseHeaders: response.headers,
       };
 
       this.logMetrics('fetch_success', { 

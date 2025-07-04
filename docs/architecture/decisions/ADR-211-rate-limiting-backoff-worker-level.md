@@ -310,10 +310,13 @@ The current implementation uses **global platform-wide rate limits**, which work
   - [x] Add custom `RateLimitError` class with retry information
   - [x] Implement smart requeue with calculated delays (with jitter)
   - [x] Convert rate limit errors to platform-consistent errors
-- [x] **2.3** Update error handling (partial)
+- [x] **2.3** Update error handling ✅ COMPLETED
   - [x] Wrap external API calls with rate limit checks
   - [x] Parse rate limit headers helper (in WorkerRateLimiter)
-  - [ ] Update rate limit state based on API responses
+  - [x] Update rate limit state based on API responses
+    - Extended FetchResponse interface to include responseHeaders
+    - Updated all fetchers (Reddit, TikTok, Generic) to pass through headers
+    - ShareProcessor now calls updateFromResponse after successful fetches
 
 ### Phase 3: ML Service Integration
 - [ ] **3.1** Create Python rate limiter package in `python/shared/`

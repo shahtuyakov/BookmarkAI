@@ -13,9 +13,11 @@ export class RateLimitConfigService {
   private watchEnabled: boolean;
 
   constructor(private readonly configService: ConfigService) {
+    // Look for config file in project root, not relative to api-gateway
+    const projectRoot = join(__dirname, '..', '..', '..', '..', '..', '..');
     this.configPath = this.configService.get(
       'RATE_LIMIT_CONFIG_PATH',
-      join(process.cwd(), 'config', 'rate-limits.yaml'),
+      join(projectRoot, 'config', 'rate-limits.yaml'),
     );
     this.watchEnabled = this.configService.get('RATE_LIMIT_CONFIG_WATCH', true);
   }

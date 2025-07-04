@@ -48,6 +48,20 @@ BookmarkAI/
   - Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError)
   - Structure files: exported component, subcomponents, helpers, static content, types
 
+### Language-Specific Style
+**TypeScript:**
+  - Indent: 2 spaces
+  - Quotes: single quotes
+  - Semicolons: required
+  - Trailing comma: always
+  - Function style: arrow functions preferred
+  
+**Python:**
+  - Indent: 4 spaces
+  - Quotes: double quotes
+  - Max line length: 88 characters
+  - Formatter: black
+
 ## Tool Usage Priority
   1. **ast-grep (`sg`)**: Use for ALL syntax-aware searches. Examples:
      - `sg --lang typescript 'class $NAME'` - Find all classes
@@ -56,6 +70,19 @@ BookmarkAI/
   2. **Task tool**: Use for complex searches across multiple files
   3. **TodoWrite/TodoRead**: Use frequently for task tracking
   4. **Grep/Glob**: Use only for simple text searches or file patterns
+
+### Search Configuration
+**Priority search paths** (check these first):
+  - `packages/api-gateway/src/`
+  - `packages/mobile/bookmarkaimobile/src/`
+  - `python/*/src/`
+  - `docs/architecture/decisions/`
+  - `env/`
+
+**Always exclude from searches:**
+  - `**/node_modules/**`, `**/dist/**`, `**/build/**`
+  - `**/__pycache__/**`, `**/venv/**`
+  - `**/.env*`, `**/.next/**`, `**/coverage/**`
   
 ## Development Workflow
   1. **Before making changes**:
@@ -153,3 +180,40 @@ BookmarkAI/
   - RUN lint/test commands before completion
   - CHECK ADRs for architectural decisions
   - USE ast-grep for code searches
+
+## Quick Command Reference
+### Setup
+  - Install all: `pnpm install`
+  - iOS setup: `cd packages/mobile/bookmarkaimobile/ios && pod install`
+  - Enable hooks: `npx husky install`
+
+### Development
+  - API: `pnpm -w run dev:api`
+  - Extension: `pnpm -w run dev:extension`
+  - SDK: `pnpm -w run dev:sdk`
+  - Mobile Metro: `pnpm -w run mobile:metro`
+  - Mobile iOS: `pnpm -w run mobile:ios`
+  - Mobile Android: `pnpm -w run mobile:android`
+
+### Database
+  - Generate: `pnpm -w run db:generate`
+  - Migrate: `pnpm -w run db:migrate`
+  - Push schema: `pnpm -w run db:push`
+  - Seed: `pnpm -w run db:seed`
+
+### Testing
+  - All tests: `pnpm test`
+  - API tests: `pnpm test:api`
+  - Mobile tests: `pnpm test:mobile`
+  - E2E tests: `pnpm test:e2e`
+
+### Code Quality
+  - Lint: `pnpm lint`
+  - Format: `pnpm format`
+  - Type check: `pnpm typecheck`
+
+## Known Gotchas & Danger Zones
+- **packages/api-gateway/src/legacy/**: Contains fragile code - modify with extreme caution
+- **python/whisper-service/**: Memory intensive - monitor resource usage
+- **infrastructure/**: Changes directly affect production deployment
+- **.env files**: Never commit or expose - always use example files
