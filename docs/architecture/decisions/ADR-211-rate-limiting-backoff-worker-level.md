@@ -319,10 +319,24 @@ The current implementation uses **global platform-wide rate limits**, which work
     - ShareProcessor now calls updateFromResponse after successful fetches
 
 ### Phase 3: ML Service Integration
-- [ ] **3.1** Create Python rate limiter package in `python/shared/`
-  - [ ] Port DistributedRateLimiter logic to Python
-  - [ ] Add async Redis client integration
-  - [ ] Create decorators for rate-limited methods
+- [x] **3.1** Create Python rate limiter package in `python/shared/` ✅ COMPLETED
+  - [x] Port DistributedRateLimiter logic to Python
+    - Created distributed_rate_limiter.py with Redis-based implementation
+    - Supports both sliding window and token bucket algorithms
+    - Compatible with Node.js implementation for cross-service rate limiting
+    - Fixed sliding window bug where cost parameter wasn't properly handled
+  - [x] Add async Redis client integration
+    - Uses redis.asyncio for async operations
+    - Includes circuit breaker pattern for Redis failures
+  - [x] Create decorators for rate-limited methods
+    - @rate_limit decorator for easy function decoration
+    - RateLimitedClient base class for API clients
+    - Support for both sync and async functions
+  - [x] Add production-ready features:
+    - Prometheus metrics for monitoring (rate_limit_checks_total, usage_ratio, backoff_seconds)
+    - Circuit breaker status tracking
+    - Redis operation timing metrics
+    - Audit logging for rate limit decisions
 - [ ] **3.2** Integrate with LLM service
   - [ ] Add token counting for OpenAI/Anthropic
   - [ ] Implement request/token dual limits
