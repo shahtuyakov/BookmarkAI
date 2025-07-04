@@ -22,6 +22,7 @@ import { SearchRepository } from './repositories/search.repository';
 import { SharesRepository } from './repositories/shares.repository';
 import { FetchersModule } from './fetchers/fetchers.module';
 import { MLModule } from '../ml/ml.module';
+import { WorkerRateLimiterService } from './services/worker-rate-limiter.service';
 import * as Redis from 'ioredis';
 
 /**
@@ -44,8 +45,8 @@ import * as Redis from 'ioredis';
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
         redis: {
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
+          host: configService.get('CACHE_HOST', 'localhost'),
+          port: configService.get('CACHE_PORT', 6379),
         },
         defaultJobOptions: {
           attempts: 3,
@@ -78,13 +79,14 @@ import * as Redis from 'ioredis';
     DrizzleService,
     ErrorService,
     ShareProcessor, // Register the processor here
+    WorkerRateLimiterService, // Rate limiting for external API calls
     {
       provide: Redis.Redis,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         return new Redis.Redis({
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
+          host: configService.get('CACHE_HOST', 'localhost'),
+          port: configService.get('CACHE_PORT', 6379),
         });
       },
     },

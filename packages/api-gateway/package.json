@@ -55,6 +55,7 @@
     "@opentelemetry/sdk-trace-base": "2.0.1",
     "@opentelemetry/semantic-conventions": "1.29.0",
     "@types/amqplib": "0.10.7",
+    "@types/opossum": "8.1.8",
     "amqplib": "0.10.8",
     "argon2": "^0.40.3",
     "axios": "^1.9.0",
@@ -67,6 +68,7 @@
     "fastify": "^5.3.3",
     "ioredis": "^5.6.1",
     "nodemailer": "^6.10.1",
+    "opossum": "9.0.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.16.0",
@@ -75,6 +77,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "uuid": "^9.0.1",
+    "yaml": "2.8.0",
     "zod": "^3.25.56"
   },
   "devDependencies": {

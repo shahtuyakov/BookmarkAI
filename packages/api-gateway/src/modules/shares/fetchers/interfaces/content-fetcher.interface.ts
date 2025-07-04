@@ -62,6 +62,9 @@ export interface FetchResponse {
     requiresAuth?: boolean;
     isRedditTextOnly?: boolean;   // Reddit text-only posts (no media)
   };
+  
+  // HTTP response headers for rate limiting and operational needs
+  responseHeaders?: Record<string, any>;
 }
 
 /**
