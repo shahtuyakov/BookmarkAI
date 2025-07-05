@@ -15,6 +15,7 @@
 - Phase 3.2 (LLM Service Integration) ✅
 - Phase 3.3 (Whisper Service Integration) ✅
 - Phase 3.4 (Vector Service Integration) ✅
+- Phase 4 (Monitoring & Alerting) ✅
 
 ### What's Working:
 - Distributed rate limiter with Redis backing (sliding window & token bucket algorithms)
@@ -38,6 +39,12 @@
   - Dual rate limiting (requests + tokens)
   - Redis-based embedding cache (24h TTL)
   - Cost-optimized model selection
+- **Monitoring & Alerting**:
+  - Comprehensive Prometheus metrics (usage ratio, backoff delays, API quotas)
+  - Three Grafana dashboards (overview, per-service detail, cost projections)
+  - 10 alerting rules covering rate limits, costs, and performance
+  - Circuit breaker status monitoring
+  - Redis operation latency tracking
 
 ### Known Limitations:
 - **Global rate limiting only** - all users share same limit pool (scaling issue)
@@ -572,19 +579,19 @@ volumes:
   - [ ] Add fallback to local models on rate limit (future enhancement)
 
 ### Phase 4: Monitoring & Alerting
-- [ ] **4.1** Add Prometheus metrics
-  - [ ] `rate_limit_checks_total{service,result}`
-  - [ ] `rate_limit_usage_ratio{service}`
-  - [ ] `rate_limit_backoff_seconds{service}`
-  - [ ] `api_quota_remaining{service}`
-- [ ] **4.2** Create Grafana dashboards
-  - [ ] Rate limit overview dashboard
-  - [ ] Per-service usage dashboard
-  - [ ] Cost projection dashboard
-- [ ] **4.3** Set up alerts
-  - [ ] Alert on >80% rate limit usage
-  - [ ] Alert on sustained rate limiting
-  - [ ] Alert on unexpected 429 errors
+- [x] **4.1** Add Prometheus metrics
+  - [x] `rate_limit_checks_total{service,result}`
+  - [x] `rate_limit_usage_ratio{service}`
+  - [x] `rate_limit_backoff_seconds{service}`
+  - [x] `api_quota_remaining{service}`
+- [x] **4.2** Create Grafana dashboards
+  - [x] Rate limit overview dashboard
+  - [x] Per-service usage dashboard
+  - [x] Cost projection dashboard
+- [x] **4.3** Set up alerts
+  - [x] Alert on >80% rate limit usage
+  - [x] Alert on sustained rate limiting
+  - [x] Alert on unexpected 429 errors
 
 ### Phase 5: Advanced Features
 - [ ] **5.1** Implement adaptive back-off
