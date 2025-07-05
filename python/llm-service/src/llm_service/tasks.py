@@ -11,6 +11,7 @@ from celery import Task
 from celery_singleton import Singleton
 from .celery_app import app
 from .llm_client import LLMClient, LLMProvider
+from .rate_limited_client import RateLimitedLLMClient, RateLimitError as LLMRateLimitError
 from .db import (
     save_summarization_result,
     track_llm_cost,
@@ -164,9 +165,23 @@ def summarize_content(
             if was_truncated:
                 logger.info(f"Content truncated to fit token limit")
         
-        # Initialize LLM client
+        # Initialize LLM client with rate limiting
         provider = LLMProvider(options.get('provider', 'openai') if options else 'openai')
-        llm_client = LLMClient(provider=provider)
+        
+        # Check if rate limiting is enabled
+        enable_rate_limiting = os.environ.get('ENABLE_LLM_RATE_LIMITING', 'true').lower() == 'true'
+        
+        if enable_rate_limiting and provider == LLMProvider.OPENAI:
+            # Use rate-limited client for OpenAI
+            llm_client = RateLimitedLLMClient(
+                provider=provider,
+                enable_rate_limiting=True
+            )
+            logger.info(f"Using rate-limited client for {provider.value}")
+        else:
+            # Use regular client
+            llm_client = LLMClient(provider=provider)
+            logger.info(f"Using regular client for {provider.value}")
         
         # Prepare prompt based on content type
         prompt = _build_summarization_prompt(
@@ -308,6 +323,16 @@ def summarize_content(
     except ContentValidationError:
         # Re-raise validation errors without saving (they're expected)
         raise
+        
+    except LLMRateLimitError as e:
+        # Handle rate limit errors - these should be retried
+        logger.warning(f"Rate limit hit for share {share_id}: {e}")
+        # Re-raise to trigger Celery retry with backoff
+        retry_kwargs = {
+            'countdown': getattr(e, 'retry_after', 60),  # Use retry_after from error
+            'max_retries': 5,
+        }
+        raise self.retry(exc=e, **retry_kwargs)
         
     except Exception as e:
         logger.error(f"Failed to summarize content for share {share_id}: {e}")

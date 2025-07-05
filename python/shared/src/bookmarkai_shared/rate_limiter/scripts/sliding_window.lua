@@ -33,9 +33,16 @@ if current + cost > limit then
   }
 end
 
--- Add entries based on cost (one entry per unit of cost)
-for i = 1, cost do
-  redis.call('ZADD', key, now, identifier .. ':' .. now .. ':' .. i)
+-- Add entries based on cost
+-- For decimal costs, we add a single entry with the cost as part of the member name
+if cost == math.floor(cost) then
+  -- Integer cost: add multiple entries for backward compatibility
+  for i = 1, cost do
+    redis.call('ZADD', key, now, identifier .. ':' .. now .. ':' .. i)
+  end
+else
+  -- Decimal cost: add single entry with cost encoded
+  redis.call('ZADD', key, now, identifier .. ':' .. now .. ':cost:' .. cost)
 end
 
 -- Update TTL

@@ -7,8 +7,14 @@
 
 ## Implementation Summary (MVP)
 
-**Implemented on**: 2025-01-04  
-**Phases completed**: Phase 1 (Core Infrastructure) ✅, Phase 2 (ShareProcessor Integration) ✅
+**Implemented on**: 2025-01-04 - 2025-01-05  
+**Phases completed**: 
+- Phase 1 (Core Infrastructure) ✅
+- Phase 2 (ShareProcessor Integration) ✅  
+- Phase 3.1 (Python Rate Limiter) ✅
+- Phase 3.2 (LLM Service Integration) ✅
+- Phase 3.3 (Whisper Service Integration) ✅
+- Phase 3.4 (Vector Service Integration) ✅
 
 ### What's Working:
 - Distributed rate limiter with Redis backing (sliding window & token bucket algorithms)
@@ -17,12 +23,27 @@
 - Circuit breaker pattern for Redis failures
 - Prometheus metrics for monitoring
 - YAML configuration with hot reload
+- **LLM Service Rate Limiting**:
+  - Token counting with tiktoken for accurate OpenAI usage
+  - Dual rate limiting (RPM + TPM)
+  - API key pooling with health tracking
+  - Automatic key rotation on rate limits
+- **Whisper Service Rate Limiting**:
+  - Concurrent request limiting (semaphore-based)
+  - Duration-based rate limiting (minutes)
+  - Queue depth monitoring
+  - Multi-API key support with rotation
+- **Vector Service Rate Limiting**:
+  - Intelligent batch optimization (up to 2048 texts/request)
+  - Dual rate limiting (requests + tokens)
+  - Redis-based embedding cache (24h TTL)
+  - Cost-optimized model selection
 
 ### Known Limitations:
 - **Global rate limiting only** - all users share same limit pool (scaling issue)
 - No per-user fairness (first 100 shares win, rest queue)
-- Single API key per platform (no pooling)
-- ML service integration pending (Phase 3)
+- ~~Single API key per platform (no pooling)~~ → Fixed for all ML services
+- ~~Whisper & Vector service integration pending~~ → Completed
 
 ## Context
 
@@ -272,7 +293,7 @@ Key metrics to track:
 
 ## Implementation Status
 
-**Last Updated**: 2025-01-04
+**Last Updated**: 2025-01-05
 
 ### ⚠️ MVP Limitation: Global Rate Limiting
 
@@ -282,8 +303,174 @@ The current implementation uses **global platform-wide rate limits**, which work
 
 **Production requirements** (not implemented):
 - Per-user rate limiting for fairness
-- API key pooling for higher throughput
+- ~~API key pooling for higher throughput~~ ✅ Implemented for LLM service
 - Priority queues based on user tiers
+
+### LLM Service Integration Details (Completed 2025-01-05)
+
+#### Architecture Overview
+The LLM service now implements comprehensive rate limiting with the following architecture:
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Celery Task   │────▶│ RateLimitedLLM   │────▶│  OpenAI API     │
+│   (tasks.py)    │     │     Client       │     │                 │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │
+                               ├── Token Counter (tiktoken)
+                               ├── API Key Pool
+                               ├── Distributed Rate Limiter
+                               └── Prometheus Metrics
+```
+
+#### Key Components
+
+1. **Token Counter** (`token_counter.py`)
+   - Uses tiktoken for accurate OpenAI token counting
+   - Model-specific encoding support (cl100k_base, p50k_base, r50k_base)
+   - Safety margin feature (1.2x default) to prevent underestimation
+   - Supports all OpenAI models including GPT-4o and GPT-4o-mini
+
+2. **Rate Limited Client** (`rate_limited_client.py`)
+   - Dual rate limiting: Request (RPM) and Token (TPM) limits
+   - API key pooling with health tracking
+   - Async/sync bridge for Celery compatibility
+   - Automatic retry with different API keys
+   - Token deficit tracking for improved accuracy
+
+3. **API Key Pool Management**
+   - Multiple API key support (comma-separated in env vars)
+   - Round-robin selection with least-recently-used prioritization
+   - Health states: ACTIVE, RATE_LIMITED, ERROR, EXHAUSTED
+   - Automatic recovery after rate limit timeout
+   - Metrics for key rotation tracking
+
+4. **Integration Points**
+   - Modified `tasks.py` to use rate limited client when enabled
+   - Feature flag: `ENABLE_LLM_RATE_LIMITING` (default: true)
+   - Configuration via `/config/rate-limits.yaml`
+   - Prometheus metrics exposed on port 9091
+
+#### Configuration Example
+
+```yaml
+# /config/rate-limits.yaml
+services:
+  openai:
+    algorithm: token_bucket
+    limits:
+      - capacity: 500
+        refillRate: 8.33  # 500 requests per minute
+    costMapping:
+      gpt-4o: 5
+      gpt-4o-mini: 0.5
+      gpt-3.5-turbo: 1
+      gpt-4: 10
+      
+  openai_tokens:
+    algorithm: token_bucket
+    limits:
+      - capacity: 150000
+        refillRate: 2500  # 150k tokens per minute
+```
+
+#### Testing & Verification
+
+Comprehensive test suite created:
+- `test_rate_limiting.py`: Unit tests for all components
+- `test_load_rate_limit.py`: Load testing to verify limits
+- `test_via_api.py`: End-to-end API testing
+
+Metrics successfully verified:
+- Rate limit checks (request + token)
+- API key rotations
+- Token usage tracking
+- Circuit breaker status
+
+#### Environment Variables
+
+```bash
+# LLM Service Rate Limiting
+ENABLE_LLM_RATE_LIMITING=true  # Feature flag (default: true)
+ML_OPENAI_API_KEY=sk-xxx,sk-yyy,sk-zzz  # Comma-separated API keys
+OPENAI_API_KEY=sk-xxx  # Fallback if ML_OPENAI_API_KEY not set
+REDIS_URL=redis://redis:6379/0  # Redis connection for rate limiter
+```
+
+#### Docker Deployment
+
+The configuration file is mounted in `docker-compose.ml.yml`:
+```yaml
+volumes:
+  - ../config:/config:ro  # Makes rate-limits.yaml available
+```
+
+### Whisper Service Integration Details (Completed 2025-01-05)
+
+#### Architecture Overview
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Celery Task   │────▶│ RateLimitedWhis- │────▶│  OpenAI Whisper │
+│   (tasks.py)    │     │   perClient      │     │      API        │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │
+                               ├── Concurrent Request Limiter
+                               ├── Minute-based Rate Limiter
+                               ├── API Key Pool
+                               └── Queue Depth Monitoring
+```
+
+#### Key Features
+1. **Concurrent Request Management**
+   - Semaphore-based limiting (default: 5 concurrent)
+   - Real-time slot availability tracking
+   - Prevents API overload
+
+2. **Duration-Based Rate Limiting**
+   - Cost calculation per audio minute
+   - Integration with token bucket algorithm
+   - Minimum 1-minute billing granularity
+
+3. **API Key Pooling**
+   - Multiple API key support
+   - Health tracking per key
+   - Automatic rotation on rate limits
+
+### Vector Service Integration Details (Completed 2025-01-05)
+
+#### Architecture Overview
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Celery Task   │────▶│ RateLimitedEmbe- │────▶│ OpenAI Embed-   │
+│   (tasks.py)    │     │  ddingClient     │     │   dings API     │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │
+                               ├── Batch Optimizer
+                               ├── Dual Rate Limiter (RPM + TPM)
+                               ├── Embedding Cache
+                               └── API Key Pool
+```
+
+#### Key Features
+1. **Intelligent Batch Optimization**
+   - Automatic text batching (up to 2048 texts/request)
+   - Token-aware batch sizing
+   - Minimizes API calls while respecting limits
+
+2. **Dual Rate Limiting**
+   - Request-based (RPM) limiting
+   - Token-based (TPM) limiting
+   - Rollback mechanism for failed checks
+
+3. **Embedding Cache**
+   - Redis-backed with 24h TTL
+   - SHA256-based cache keys
+   - Batch operations for performance
+
+4. **Cost Optimization**
+   - Model selection based on content length
+   - Batch processing to reduce per-request overhead
+   - Cache hits eliminate redundant API calls
 
 ## Implementation TODO List
 
@@ -318,7 +505,7 @@ The current implementation uses **global platform-wide rate limits**, which work
     - Updated all fetchers (Reddit, TikTok, Generic) to pass through headers
     - ShareProcessor now calls updateFromResponse after successful fetches
 
-### Phase 3: ML Service Integration
+### Phase 3: ML Service Integration (IN PROGRESS)
 - [x] **3.1** Create Python rate limiter package in `python/shared/` ✅ COMPLETED
   - [x] Port DistributedRateLimiter logic to Python
     - Created distributed_rate_limiter.py with Redis-based implementation
@@ -337,18 +524,52 @@ The current implementation uses **global platform-wide rate limits**, which work
     - Circuit breaker status tracking
     - Redis operation timing metrics
     - Audit logging for rate limit decisions
-- [ ] **3.2** Integrate with LLM service
-  - [ ] Add token counting for OpenAI/Anthropic
-  - [ ] Implement request/token dual limits
-  - [ ] Add cost tracking integration
-- [ ] **3.3** Integrate with Whisper service
-  - [ ] Add concurrent request limiting
-  - [ ] Implement file size-based rate limiting
-  - [ ] Add queue depth monitoring
-- [ ] **3.4** Integrate with Vector service
-  - [ ] Add batch size optimization
-  - [ ] Implement embedding cache to reduce API calls
-  - [ ] Add fallback to local models on rate limit
+- [x] **3.2** Integrate with LLM service ✅ COMPLETED (2025-01-05)
+  - [x] Add token counting for OpenAI ~~Anthropic~~
+    - Created `token_counter.py` using tiktoken library
+    - Accurate token counting for all OpenAI models
+    - Safety margin (1.2x) for pre-estimation to prevent undercount
+  - [x] Implement request/token dual limits
+    - Created `rate_limited_client.py` with dual rate limiting
+    - Checks both request limit (RPM) and token limit (TPM)
+    - Rollback mechanism if token limit fails after request approved
+  - [x] Add cost tracking integration
+    - Model-specific cost multipliers in rate-limits.yaml
+    - Token deficit tracking for continuous accuracy improvement
+  - [x] API Key Pooling (MVP Enhancement)
+    - Support for multiple OpenAI API keys per worker
+    - Round-robin selection with health tracking
+    - Automatic key rotation on rate limit errors
+    - Key status tracking: ACTIVE, RATE_LIMITED, ERROR, EXHAUSTED
+  - [x] Sync/Async Bridge
+    - Celery-compatible synchronous wrapper
+    - Async implementation for efficient Redis operations
+  - [x] Comprehensive error handling
+    - Graceful fallback when rate limiting disabled
+    - Detailed error messages with retry information
+- [x] **3.3** Integrate with Whisper service ✅ COMPLETED (2025-01-05)
+  - [x] Add concurrent request limiting
+    - Created `rate_limited_client.py` with ConcurrentRequestLimiter
+    - Configurable max concurrent requests (default: 5)
+    - Semaphore-based slot management
+  - [x] Implement file size-based rate limiting
+    - Minute-based rate limiting (audio duration)
+    - Cost calculation based on duration (minimum 1 minute)
+    - Integration with whisper_minutes service config
+  - [x] Add queue depth monitoring
+    - Real-time queue depth tracking
+    - Metrics for concurrent requests and available slots
+    - API key health status monitoring
+- [x] **3.4** Integrate with Vector service ✅ COMPLETED (2025-01-05)
+  - [x] Add batch size optimization
+    - Created BatchOptimizer class for intelligent batching
+    - Respects OpenAI limits: 2048 texts per request, 8191 tokens per text
+    - Dynamic batch sizing based on token counts
+  - [x] Implement embedding cache to reduce API calls
+    - Redis-based caching with configurable TTL (default: 24h)
+    - SHA256 hash-based keys for text+model+dimensions
+    - Batch get/set operations for efficiency
+  - [ ] Add fallback to local models on rate limit (future enhancement)
 
 ### Phase 4: Monitoring & Alerting
 - [ ] **4.1** Add Prometheus metrics
@@ -393,6 +614,71 @@ The current implementation uses **global platform-wide rate limits**, which work
 - [ ] **M.2** Dry-run mode (log only, don't block)
 - [ ] **M.3** Rollout plan: Internal → Beta → Production
 - [ ] **M.4** Rollback procedure documentation
+
+### Post-Implementation Review (2025-01-06)
+
+After implementing rate limiting across all Python ML services, several critical issues were identified that required immediate fixes:
+
+#### Critical Issues Fixed
+
+1. **Thread Safety Problems**
+   - **Issue**: Using `asyncio.new_event_loop()` in sync wrappers caused thread safety issues
+   - **Fix**: Replaced with `asyncio.run()` for proper thread-safe execution in all services
+   - **Impact**: Prevents crashes under concurrent load
+
+2. **Missing Rollback Method**
+   - **Issue**: `vector_service/tasks.py` called non-existent `self.rate_limiter.rollback()`
+   - **Fix**: Implemented `rollback()` and `record_usage()` methods in DistributedRateLimiter
+   - **Impact**: Prevents crashes when embeddings fail after passing rate limit
+
+3. **Token Deficit Bug**
+   - **Issue**: Token deficit was overwritten instead of accumulated (using `=` instead of `+=`)
+   - **Fix**: Changed to proper accumulation with `+=`
+   - **Impact**: Ensures accurate rate limiting calculations
+
+4. **Encoding Error**
+   - **Issue**: GPT-4o models used non-existent 'o200k_base' encoding
+   - **Fix**: Updated to use 'cl100k_base' encoding
+   - **Impact**: Prevents token counting failures for GPT-4o models
+
+5. **Redis Connection Issues**
+   - **Issue**: Socket keepalive options caused "Error 22 connecting to redis:6379. Invalid argument"
+   - **Fix**: Removed problematic socket_keepalive_options, using standard timeouts instead
+   - **Impact**: Fixes connection failures on various systems
+
+#### Medium Priority Issues Fixed
+
+1. **Resource Management**
+   - Added proper cleanup methods and context manager support
+   - Prevents resource leaks in long-running services
+
+2. **Configuration Path Flexibility**
+   - Made config loader try multiple paths for both Docker and local environments
+   - Removed hardcoded `/config/rate-limits.yaml` defaults in Vector and Whisper services
+   - Supports development and production deployments seamlessly
+
+3. **Lua Script Type Handling**
+   - Fixed decimal cost handling in both Python and Lua scripts
+   - Supports fractional rate limiting costs
+
+4. **Shared Redis Connection Pool**
+   - Created `redis_manager.py` for shared connection pooling
+   - Reduces Redis connections across services
+   - Improves resource efficiency
+
+#### Implementation Files Updated
+
+**Core Libraries:**
+- `/python/shared/src/bookmarkai_shared/rate_limiter/distributed_rate_limiter.py` - Added rollback/record_usage methods
+- `/python/shared/src/bookmarkai_shared/rate_limiter/rate_limit_config.py` - Flexible config path resolution
+- `/python/shared/src/bookmarkai_shared/rate_limiter/redis_manager.py` - New shared connection pool
+- `/python/shared/src/bookmarkai_shared/rate_limiter/scripts/sliding_window.lua` - Decimal cost support
+
+**Service Updates:**
+- `/python/llm-service/src/llm_service/rate_limited_client.py` - Thread safety and token deficit fixes
+- `/python/llm-service/src/llm_service/token_counter.py` - Fixed GPT-4o encoding
+- `/python/vector-service/src/vector_service/rate_limited_client.py` - Thread safety fixes
+- `/python/whisper-service/src/whisper_service/rate_limited_client.py` - Thread safety fixes
 
 ## Future Enhancements for Production Scale
 

@@ -165,7 +165,7 @@ class DistributedRateLimiter:
             limit_config.window,  # ARGV[2] - window size in seconds
             limit_config.requests,  # ARGV[3] - request limit
             identifier,  # ARGV[4] - identifier
-            int(cost)  # ARGV[5] - cost
+            cost  # ARGV[5] - cost (preserve decimal)
         )
         
         allowed = bool(result[0])
@@ -330,3 +330,71 @@ class DistributedRateLimiter:
         self._circuit_breaker_reset_time = time.time() + 30
         MetricsCollector.set_circuit_breaker(True)
         logger.warning("Rate limiter circuit breaker opened for 30 seconds")
+    
+    async def record_usage(
+        self,
+        service: str,
+        identifier: str = 'default',
+        cost: float = 1.0
+    ):
+        """
+        Record usage without checking the limit.
+        Used for adjusting rate limits after the fact (e.g., negative cost for rollback).
+        
+        Args:
+            service: Service name
+            identifier: Unique identifier
+            cost: Cost to record (can be negative for rollback)
+        """
+        try:
+            config = self.config_loader.get_config(service)
+            if not config:
+                return
+            
+            if config.algorithm == Algorithm.SLIDING_WINDOW:
+                # For sliding window, add/remove entries
+                key = f"rl:sw:{service}:{identifier}"
+                now = int(time.time() * 1000)
+                
+                if cost > 0:
+                    # Add entries
+                    await self.redis.zadd(key, {f"{identifier}:{now}": now})
+                else:
+                    # Remove entries (rollback)
+                    # Remove the most recent entries
+                    entries = await self.redis.zrevrange(key, 0, int(abs(cost)) - 1)
+                    if entries:
+                        await self.redis.zrem(key, *entries)
+                        
+            else:  # TOKEN_BUCKET
+                # For token bucket, adjust token count
+                tokens_key = f"rl:tb:{service}:{identifier}:tokens"
+                await self.redis.incrbyfloat(tokens_key, -cost)  # Negative to consume, positive to refund
+                
+        except Exception as e:
+            logger.error(f"Error recording usage for {service}: {e}")
+    
+    async def rollback(
+        self,
+        service: str,
+        identifier: str = 'default',
+        cost: float = 1.0
+    ):
+        """
+        Rollback a previous rate limit consumption.
+        This is useful when a rate limit was consumed but the operation failed.
+        
+        Args:
+            service: Service name
+            identifier: Unique identifier  
+            cost: Cost to rollback (will be negated)
+        """
+        await self.record_usage(service, identifier, -abs(cost))
+    
+    async def close(self):
+        """Close Redis connections and clean up resources."""
+        try:
+            await self.redis.close()
+            logger.info("Rate limiter Redis connection closed")
+        except Exception as e:
+            logger.error(f"Error closing Redis connection: {e}")

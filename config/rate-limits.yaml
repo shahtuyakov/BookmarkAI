@@ -63,8 +63,21 @@ services:
       'gpt-4': 10
       'gpt-4-turbo': 10
       'gpt-3.5-turbo': 1
+      'gpt-4o': 5
+      'gpt-4o-mini': 0.5
       'text-embedding-ada-002': 0.1
       'whisper-1': 5
+    backoff:
+      type: adaptive
+      initialDelay: 2000
+      maxDelay: 300000
+      
+  # Separate token-based rate limiting for OpenAI
+  openai_tokens:
+    algorithm: token_bucket
+    limits:
+      - capacity: 150000
+        refillRate: 2500  # 150k TPM = ~2500 per second
     backoff:
       type: adaptive
       initialDelay: 2000
@@ -96,6 +109,19 @@ services:
       maxDelay: 60000
       multiplier: 2
       
+  whisper_minutes:
+    algorithm: token_bucket
+    limits:
+      - capacity: 50  # 50 minutes of audio capacity
+        refillRate: 0.833  # 50 minutes per hour (3000 minutes/day ÷ 24 hours ÷ 60)
+    costMapping:
+      default: 1  # 1 minute = 1 unit
+    backoff:
+      type: exponential
+      initialDelay: 5000
+      maxDelay: 300000
+      multiplier: 2
+      
   # Embedding Services
   embeddings:
     algorithm: token_bucket
@@ -106,6 +132,16 @@ services:
       'text-embedding-ada-002': 1
       'text-embedding-3-small': 0.5
       'text-embedding-3-large': 2
+    backoff:
+      type: linear
+      initialDelay: 1000
+      maxDelay: 30000
+      
+  embeddings_tokens:
+    algorithm: token_bucket
+    limits:
+      - capacity: 1000000  # 1M tokens per minute
+        refillRate: 16667   # ~16.7k tokens per second
     backoff:
       type: linear
       initialDelay: 1000

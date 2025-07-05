@@ -338,17 +338,7 @@ class AudioProcessor:
                 - reason: str - Explanation if audio is considered silent
         """
         try:
-            # Use ffmpeg to analyze audio statistics
-            stats = ffmpeg.probe(audio_path, 
-                cmd='ffprobe',
-                select_streams='a:0',
-                show_entries='frame_tags=lavfi.astats.Overall.Mean_volume,'
-                           'lavfi.astats.Overall.Max_volume',
-                v='quiet',
-                af='astats'
-            )
-            
-            # Alternative approach using volumedetect filter
+            # Use volumedetect filter for silence detection
             logger.info(f"Analyzing audio levels for silence detection")
             
             # Run volumedetect filter

@@ -8,6 +8,7 @@ from .rate_limit_config import RateLimitConfig, RateLimitConfigLoader
 from .exceptions import RateLimitError, RateLimiterUnavailableError
 from .decorators import rate_limit, RateLimitedClient
 from .metrics import MetricsCollector
+from .redis_manager import get_redis_client, get_redis_connection_pool, close_redis_pool
 
 __all__ = [
     'DistributedRateLimiter',
@@ -19,4 +20,7 @@ __all__ = [
     'rate_limit',
     'RateLimitedClient',
     'MetricsCollector',
+    'get_redis_client',
+    'get_redis_connection_pool',
+    'close_redis_pool',
 ]

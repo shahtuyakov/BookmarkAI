@@ -58,9 +58,26 @@ class RateLimitConfigLoader:
     
     def __init__(self, config_path: Optional[str] = None):
         if config_path is None:
-            # Look for config in project root
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', '..'))
-            config_path = os.path.join(project_root, 'config', 'rate-limits.yaml')
+            # Try multiple paths in order of preference
+            possible_paths = [
+                # Docker path
+                '/config/rate-limits.yaml',
+                # Environment variable path
+                os.environ.get('RATE_LIMITS_CONFIG_PATH', ''),
+                # Project root (from Python service perspective)
+                os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', '..', 'config', 'rate-limits.yaml'),
+                # Alternative project root
+                os.path.join(os.getcwd(), 'config', 'rate-limits.yaml'),
+            ]
+            
+            # Find first existing path
+            for path in possible_paths:
+                if path and os.path.exists(path):
+                    config_path = os.path.abspath(path)
+                    break
+            else:
+                # No config found, will use defaults
+                config_path = '/config/rate-limits.yaml'
         
         self.config_path = config_path
         self.configs: Dict[str, RateLimitConfig] = {}

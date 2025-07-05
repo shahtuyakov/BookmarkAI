@@ -35,9 +35,10 @@ class OpenAIClient(BaseLLMClient):
     """OpenAI API client for summarization."""
     
     def __init__(self):
-        self.api_key = os.environ.get('OPENAI_API_KEY')
+        # Check both OPENAI_API_KEY and ML_OPENAI_API_KEY
+        self.api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('ML_OPENAI_API_KEY')
         if not self.api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
+            raise ValueError("OPENAI_API_KEY or ML_OPENAI_API_KEY environment variable not set")
         
         try:
             import openai

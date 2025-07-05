@@ -48,6 +48,7 @@ services:
     volumes:
       - ../python/llm-service:/app
       - ../python/shared:/shared:ro
+      - ../config:/config:ro
     command: >
       celery -A llm_service.celery_app worker
       --loglevel=info
