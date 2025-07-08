@@ -274,30 +274,305 @@ sampling:
 4. **Network Overhead**: Additional trace data in message headers
 5. **Sampling Trade-offs**: Not all requests traced (sampling required for scale)
 
-### Implementation Plan
+## Detailed Implementation Plan
 
-1. **Phase 1**: Mobile SDK Integration (1 day)
-   - Add OpenTelemetry to React Native
-   - Implement trace injection in API calls
-   - Test trace propagation to API Gateway
+### Overview
 
-2. **Phase 2**: Message Queue Propagation (1 day)
-   - Implement RabbitMQ trace propagator
-   - Update Python services to extract trace context
-   - Test end-to-end trace continuity
+This plan implements comprehensive distributed tracing across BookmarkAI's entire stack, from mobile app through API Gateway, message queues, to ML services, with full observability via Grafana/Tempo.
 
-3. **Phase 3**: Monitoring Setup (1 day)
-   - Configure Tempo data source in Grafana
-   - Create end-to-end trace dashboards
-   - Set up trace-based alerts
-   - Document troubleshooting procedures
+### Implementation Timeline
 
-### Testing Strategy
+```
+Phase 1: Foundation (Message Queue)     [Critical Path]
+   |
+   v
+Phase 2: Python Services Integration    [Depends on Phase 1]
+   |
+   +-----> Phase 3: Mobile Integration  [Can start after Phase 1]
+   |
+   +-----> Phase 4: Monitoring Setup    [Can start in parallel]
+   |
+   v
+Phase 5: Testing & Validation          [Requires all previous]
+   |
+   v
+Phase 6: Rollout Strategy              [After validation]
+   |
+   v
+Phase 7: Documentation                 [Throughout + Final]
+```
 
-1. **Unit Tests**: Trace propagation logic
-2. **Integration Tests**: Cross-service trace continuity
-3. **Load Tests**: Performance impact measurement
-4. **Chaos Testing**: Trace behavior during failures
+---
+
+### PHASE 1: Message Queue Propagation Foundation
+
+**Objective**: Implement trace context propagation through RabbitMQ to maintain trace continuity between services.
+
+#### Tasks
+
+- [ ] **1.1 Create TypeScript Trace Propagator**
+  ```typescript
+  // packages/api-gateway/src/tracing/rabbitmq-propagator.ts
+  - Implement W3C Trace Context injection into AMQP headers
+  - Extract trace context from incoming messages  
+  - Handle backward compatibility for existing messages
+  - Add compression for large trace states
+  ```
+
+- [ ] **1.2 Update Shared Python Library**
+  ```python
+  # python/shared/src/bookmarkai_shared/tracing/propagator.py
+  - Create RabbitMQTraceContextExtractor class
+  - Implement extract_context() and inject_context() methods
+  - Add decorator for automatic trace extraction in Celery tasks
+  - Ensure compatibility with existing tracing setup
+  ```
+
+- [ ] **1.3 Feature Flag Implementation**
+  ```yaml
+  # All services configuration
+  ENABLE_TRACE_PROPAGATION: false  # Start disabled
+  TRACE_SAMPLING_RATE: 0.1        # 10% default
+  ```
+
+- [ ] **1.4 Unit Tests**
+  - Test trace header parsing/formatting
+  - Verify backward compatibility
+  - Test compression/decompression
+  - Validate W3C compliance
+
+---
+
+### PHASE 2: Python Service Integration
+
+**Objective**: Update all Python ML services to extract and continue traces from RabbitMQ messages.
+
+#### Tasks
+
+- [ ] **2.1 Update Celery Task Decorators**
+  ```python
+  # Each Python service: llm-service, whisper-service, vector-service
+  - Modify @app.task decorators to extract trace context
+  - Add service-specific attributes (model version, token count)
+  - Implement span creation for each processing step
+  - Add error handling with trace context
+  ```
+
+- [ ] **2.2 Service-Specific Instrumentation**
+
+  - [ ] **LLM Service**:
+    - Trace each LLM API call
+    - Add attributes: model, prompt_tokens, completion_tokens, cost
+    - Track retry attempts and backoff
+
+  - [ ] **Whisper Service**:
+    - Trace audio processing stages
+    - Add attributes: audio_duration, model_size, language
+    - Track chunking operations
+
+  - [ ] **Vector Service**:
+    - Trace embedding generation
+    - Add attributes: text_length, embedding_dimensions
+    - Track batch processing
+
+- [ ] **2.3 Integration Tests**
+  - Verify trace continuity API Gateway -> Python service
+  - Test error propagation with trace context
+  - Validate attribute collection
+
+---
+
+### PHASE 3: Mobile Application Integration
+
+**Objective**: Add OpenTelemetry to React Native app for end-to-end visibility from user interaction.
+
+#### Tasks
+
+- [ ] **3.1 SDK Setup**
+  ```javascript
+  // packages/mobile/bookmarkaimobile/src/tracing/setup.ts
+  - Install @opentelemetry/react-native
+  - Configure OTLP HTTP exporter
+  - Set up resource attributes (app version, platform)
+  - Implement batching for background export
+  ```
+
+- [ ] **3.2 API Client Instrumentation**
+  ```typescript
+  // packages/mobile/bookmarkaimobile/src/api/client.ts
+  - Create tracedFetch wrapper
+  - Inject trace headers into all API calls
+  - Add request/response attributes
+  - Handle network errors with trace context
+  ```
+
+- [ ] **3.3 User Session Correlation**
+  - Link traces to user sessions
+  - Add device attributes (model, OS version)
+  - Track app lifecycle events
+  - Monitor performance metrics
+
+- [ ] **3.4 Platform-Specific Configuration**
+  - iOS: Handle background trace export
+  - Android: Configure ProGuard rules
+  - Both: Manage battery optimization
+
+---
+
+### PHASE 4: Monitoring Infrastructure
+
+**Objective**: Create comprehensive observability dashboards and alerts using Tempo/Grafana.
+
+#### Tasks
+
+- [ ] **4.1 Tempo Configuration**
+  ```yaml
+  # docker/monitoring/tempo.yml
+  - Configure ingestion rate limits
+  - Set retention policies (7 days for MVP)
+  - Enable trace metrics generation
+  - Configure S3 backend for production
+  ```
+
+- [ ] **4.2 Grafana Dashboards**
+
+  - [ ] **Service Overview Dashboard**:
+    ```
+    +------------------+------------------+------------------+
+    | Request Rate     | Error Rate       | P95 Latency      |
+    | by Service       | by Service       | by Service       |
+    +------------------+------------------+------------------+
+    | Service Map      | Trace Timeline   | Top Errors       |
+    | (Interactive)    | (Gantt Chart)    | (Table)          |
+    +------------------+------------------+------------------+
+    ```
+
+  - [ ] **User Journey Dashboard**:
+    - Trace search by user ID
+    - Operation breakdown
+    - Platform comparison
+    - Error analysis
+
+- [ ] **4.3 Alerting Rules**
+  ```yaml
+  # Prometheus alerts
+  - P95 latency > 5s for any service
+  - Error rate > 5% for 5 minutes
+  - Trace breaks detected
+  - Sampling rate auto-adjustment
+  ```
+
+---
+
+### PHASE 5: Testing & Validation
+
+**Objective**: Ensure tracing works correctly with minimal performance impact.
+
+#### Tasks
+
+- [ ] **5.1 Unit Test Suite**
+  - Propagator logic tests
+  - Trace context validation
+  - Attribute verification
+  - Error scenarios
+
+- [ ] **5.2 Integration Tests**
+  ```bash
+  # End-to-end trace validation
+  - Mobile -> API Gateway -> RabbitMQ -> Python -> Response
+  - Verify trace ID consistency
+  - Check span relationships
+  - Validate timing accuracy
+  ```
+
+- [ ] **5.3 Load Testing**
+  ```yaml
+  # Performance validation
+  - Baseline: Latency without tracing
+  - With tracing: Must be < 1% overhead
+  - Memory usage comparison
+  - Network bandwidth impact
+  ```
+
+- [ ] **5.4 Chaos Testing**
+  - Service failures with trace continuity
+  - Network partitions
+  - Queue overload scenarios
+  - Collector unavailability
+
+---
+
+### PHASE 6: Rollout Strategy
+
+**Objective**: Safely deploy tracing to production with gradual rollout.
+
+#### Tasks
+
+- [ ] **6.1 Feature Flag Configuration**
+  ```javascript
+  // Progressive rollout
+  Week 1: 1% of requests (validation)
+  Week 1: 10% of requests (if stable)
+  Week 2: 50% of requests
+  Week 2: 100% of requests
+  ```
+
+- [ ] **6.2 Monitoring During Rollout**
+  - Real-time latency monitoring
+  - Error rate tracking
+  - Trace continuity validation
+  - Resource usage alerts
+
+- [ ] **6.3 Rollback Plan**
+  - Kill switch in each service
+  - Automatic rollback on regression
+  - Incident response runbook
+  - Communication plan
+
+---
+
+### PHASE 7: Documentation & Training
+
+**Objective**: Enable team to use and maintain the tracing system effectively.
+
+#### Deliverables
+
+- [ ] **7.1 Developer Guide**
+  - How to add tracing to new services
+  - Best practices for attributes
+  - Performance considerations
+  - Troubleshooting guide
+
+- [ ] **7.2 Operations Runbook**
+  - Common issues and solutions
+  - Dashboard navigation
+  - Alert response procedures
+  - Capacity planning
+
+- [ ] **7.3 Architecture Documentation**
+  - Trace flow diagrams
+  - Configuration reference
+  - Integration patterns
+  - Security considerations
+
+---
+
+### Success Criteria
+
+1. **Trace Continuity**: 100% of sampled requests have complete traces
+2. **Performance**: < 1% latency increase across all services
+3. **Visibility**: Full request flow visible in Grafana
+4. **Reliability**: No service disruptions during rollout
+5. **Adoption**: All developers can debug using traces
+
+### Risk Mitigation
+
+| Risk | Mitigation |
+|------|------------|
+| Performance degradation | Feature flags, gradual rollout, kill switch |
+| Storage explosion | Sampling rules, retention policies |
+| Integration complexity | Phased approach, extensive testing |
+| Team adoption | Training, documentation, support |
 
 ## Alternatives Considered
 
