@@ -13,8 +13,11 @@ import tiktoken
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 from pydantic import BaseModel, Field
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class EmbeddingModel(str, Enum):
@@ -176,55 +179,79 @@ class EmbeddingService:
     )
     def generate_embedding(self, request: EmbeddingRequest) -> EmbeddingResponse:
         """Generate embedding for a single text."""
-        # Select model
-        model = self.select_model(request.text, request.force_model)
-        config = MODEL_CONFIGS[model]
-        
-        # Count tokens
-        token_count = self.count_tokens(request.text, model)
-        if token_count > config.max_tokens:
-            raise ValueError(
-                f"Text exceeds maximum token limit ({token_count} > {config.max_tokens}). "
-                "Please chunk the text before embedding."
-            )
-        
-        # Estimate cost
-        cost = self.estimate_cost(token_count, model)
-        
-        # Generate embedding
-        logger.info(
-            f"Generating {request.embedding_type} embedding with {model.value} "
-            f"({token_count} tokens, ${cost:.6f})"
-        )
-        
-        try:
-            # Prepare API call parameters
-            api_params = {
-                "model": config.name,
-                "input": request.text,
-            }
+        # Create span for embedding generation
+        with tracer.start_as_current_span(
+            "embeddings.generate_single",
+            kind=trace.SpanKind.CLIENT
+        ) as span:
+            # Select model
+            model = self.select_model(request.text, request.force_model)
+            config = MODEL_CONFIGS[model]
             
-            # Add dimension reduction if specified
-            if request.dimensions and model in [EmbeddingModel.SMALL, EmbeddingModel.LARGE]:
-                api_params["dimensions"] = request.dimensions
+            # Count tokens
+            token_count = self.count_tokens(request.text, model)
+            if token_count > config.max_tokens:
+                raise ValueError(
+                    f"Text exceeds maximum token limit ({token_count} > {config.max_tokens}). "
+                    "Please chunk the text before embedding."
+                )
+            
+            # Estimate cost
+            cost = self.estimate_cost(token_count, model)
+            
+            # Set span attributes
+            span.set_attribute("embeddings.model", model.value)
+            span.set_attribute("embeddings.type", request.embedding_type)
+            span.set_attribute("embeddings.token_count", token_count)
+            span.set_attribute("embeddings.estimated_cost", cost)
+            span.set_attribute("embeddings.text_length", len(request.text))
+            if request.dimensions:
+                span.set_attribute("embeddings.requested_dimensions", request.dimensions)
+            
+            # Generate embedding
+            logger.info(
+                f"Generating {request.embedding_type} embedding with {model.value} "
+                f"({token_count} tokens, ${cost:.6f})"
+            )
+            
+            try:
+                # Prepare API call parameters
+                api_params = {
+                    "model": config.name,
+                    "input": request.text,
+                }
                 
-            response = self.client.embeddings.create(**api_params)
-            
-            embedding = response.data[0].embedding
-            actual_dimensions = len(embedding)
-            
-            return EmbeddingResponse(
-                embedding=embedding,
-                model=config.name,
-                dimensions=actual_dimensions,
-                token_count=token_count,
-                cost=cost,
-                embedding_type=request.embedding_type
-            )
-            
-        except Exception as e:
-            logger.error(f"Failed to generate embedding: {str(e)}")
-            raise
+                # Add dimension reduction if specified
+                if request.dimensions and model in [EmbeddingModel.SMALL, EmbeddingModel.LARGE]:
+                    api_params["dimensions"] = request.dimensions
+                    
+                response = self.client.embeddings.create(**api_params)
+                
+                embedding = response.data[0].embedding
+                actual_dimensions = len(embedding)
+                
+                # Add response attributes
+                span.set_attribute("embeddings.actual_dimensions", actual_dimensions)
+                span.set_attribute("embeddings.actual_cost", cost)
+                
+                # Set success status
+                span.set_status(Status(StatusCode.OK))
+                
+                return EmbeddingResponse(
+                    embedding=embedding,
+                    model=config.name,
+                    dimensions=actual_dimensions,
+                    token_count=token_count,
+                    cost=cost,
+                    embedding_type=request.embedding_type
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to generate embedding: {str(e)}")
+                # Record exception in span
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
     
     @retry(
         stop=stop_after_attempt(3),
@@ -233,61 +260,86 @@ class EmbeddingService:
     )
     def generate_batch_embeddings(self, batch: EmbeddingBatch) -> BatchEmbeddingResponse:
         """Generate embeddings for a batch of texts."""
-        if not batch.texts:
-            raise ValueError("Batch cannot be empty")
-        
-        # OpenAI supports up to 2048 inputs per request
-        if len(batch.texts) > 2048:
-            raise ValueError("Batch size exceeds maximum limit (2048)")
-        
-        # Select model based on the longest text
-        max_tokens = 0
-        total_tokens = 0
-        for text in batch.texts:
-            tokens = self.count_tokens(text, EmbeddingModel.SMALL)
-            total_tokens += tokens
-            max_tokens = max(max_tokens, tokens)
-        
-        # Use the longest text to determine model
-        longest_text = max(batch.texts, key=len)
-        model = self.select_model(longest_text, batch.force_model)
-        config = MODEL_CONFIGS[model]
-        
-        # Check if any text exceeds token limit
-        if max_tokens > config.max_tokens:
-            raise ValueError(
-                f"One or more texts exceed maximum token limit ({max_tokens} > {config.max_tokens})"
-            )
-        
-        # Estimate cost
-        total_cost = self.estimate_cost(total_tokens, model)
-        
-        logger.info(
-            f"Generating batch of {len(batch.texts)} {batch.embedding_type} embeddings "
-            f"with {model.value} ({total_tokens} total tokens, ${total_cost:.6f})"
-        )
-        
-        try:
-            response = self.client.embeddings.create(
-                model=config.name,
-                input=batch.texts
-            )
+        # Create span for batch embedding generation
+        with tracer.start_as_current_span(
+            "embeddings.generate_batch",
+            kind=trace.SpanKind.CLIENT
+        ) as span:
+            if not batch.texts:
+                raise ValueError("Batch cannot be empty")
             
-            embeddings = [item.embedding for item in response.data]
-            actual_dimensions = len(embeddings[0]) if embeddings else config.dimensions
+            # OpenAI supports up to 2048 inputs per request
+            if len(batch.texts) > 2048:
+                raise ValueError("Batch size exceeds maximum limit (2048)")
             
-            return BatchEmbeddingResponse(
-                embeddings=embeddings,
-                model=config.name,
-                dimensions=actual_dimensions,
-                total_tokens=total_tokens,
-                total_cost=total_cost,
-                embedding_type=batch.embedding_type
+            # Set batch size attribute
+            span.set_attribute("embeddings.batch_size", len(batch.texts))
+            span.set_attribute("embeddings.type", batch.embedding_type)
+            
+            # Select model based on the longest text
+            max_tokens = 0
+            total_tokens = 0
+            for text in batch.texts:
+                tokens = self.count_tokens(text, EmbeddingModel.SMALL)
+                total_tokens += tokens
+                max_tokens = max(max_tokens, tokens)
+            
+            # Use the longest text to determine model
+            longest_text = max(batch.texts, key=len)
+            model = self.select_model(longest_text, batch.force_model)
+            config = MODEL_CONFIGS[model]
+            
+            # Check if any text exceeds token limit
+            if max_tokens > config.max_tokens:
+                raise ValueError(
+                    f"One or more texts exceed maximum token limit ({max_tokens} > {config.max_tokens})"
+                )
+            
+            # Estimate cost
+            total_cost = self.estimate_cost(total_tokens, model)
+            
+            # Set span attributes
+            span.set_attribute("embeddings.model", model.value)
+            span.set_attribute("embeddings.total_tokens", total_tokens)
+            span.set_attribute("embeddings.max_tokens", max_tokens)
+            span.set_attribute("embeddings.estimated_cost", total_cost)
+            
+            logger.info(
+                f"Generating batch of {len(batch.texts)} {batch.embedding_type} embeddings "
+                f"with {model.value} ({total_tokens} total tokens, ${total_cost:.6f})"
             )
             
-        except Exception as e:
-            logger.error(f"Failed to generate batch embeddings: {str(e)}")
-            raise
+            try:
+                response = self.client.embeddings.create(
+                    model=config.name,
+                    input=batch.texts
+                )
+                
+                embeddings = [item.embedding for item in response.data]
+                actual_dimensions = len(embeddings[0]) if embeddings else config.dimensions
+                
+                # Add response attributes
+                span.set_attribute("embeddings.actual_dimensions", actual_dimensions)
+                span.set_attribute("embeddings.embeddings_count", len(embeddings))
+                
+                # Set success status
+                span.set_status(Status(StatusCode.OK))
+                
+                return BatchEmbeddingResponse(
+                    embeddings=embeddings,
+                    model=config.name,
+                    dimensions=actual_dimensions,
+                    total_tokens=total_tokens,
+                    total_cost=total_cost,
+                    embedding_type=batch.embedding_type
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to generate batch embeddings: {str(e)}")
+                # Record exception in span
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
     
     def create_composite_embedding(
         self,

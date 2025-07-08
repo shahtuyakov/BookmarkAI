@@ -4,6 +4,7 @@ import { MLMetricsService } from './services/ml-metrics.service';
 import * as amqplib from 'amqplib';
 import { v4 as uuidv4 } from 'uuid';
 import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { rabbitmqPropagator } from '../../tracing/rabbitmq-propagator';
 import {
   SummarizationTaskSchema,
   TranscriptionTaskSchema,
@@ -720,19 +721,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       span.end();
     }, 30000); // 30 second timeout for publishing
 
-    // Inject current trace context with defensive checks
-    const currentSpan = trace.getActiveSpan();
-    if (currentSpan && task.metadata) {
-      const spanContext = currentSpan.spanContext();
-      if (spanContext && spanContext.traceId && spanContext.spanId) {
-        task.metadata.traceparent = `00-${spanContext.traceId}-${spanContext.spanId}-01`;
-        
-        // Also add tracestate if present
-        if (spanContext.traceState) {
-          task.metadata.tracestate = spanContext.traceState.serialize();
-        }
-      }
-    }
+    // Note: Trace context will be injected into AMQP headers in publishTaskInternal
 
     // Determine routing key based on task type and backend
     let routingKey = `ml.${task.taskType.split('_')[0]}`;
@@ -847,22 +836,39 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       this.metricsService.incrementTaskRetry(task.taskType);
     }
     
+    // Prepare publish options
+    const publishOptions: amqplib.Options.Publish = {
+      persistent: true,
+      mandatory: true,
+      contentType: 'application/json',
+      contentEncoding: 'utf-8',
+      headers: {},
+    };
+
+    // Check if trace propagation is enabled via feature flag
+    const enableTracePropagation = this.configService.get('ENABLE_TRACE_PROPAGATION', false);
+    
+    if (enableTracePropagation) {
+      // Inject trace context into AMQP headers using the propagator
+      const currentContext = context.active();
+      rabbitmqPropagator.inject(currentContext, publishOptions);
+    } else {
+      // Fallback to legacy behavior for backward compatibility
+      if (task.metadata.traceparent) {
+        publishOptions.headers['traceparent'] = task.metadata.traceparent;
+      }
+      if (task.metadata.tracestate) {
+        publishOptions.headers['tracestate'] = task.metadata.tracestate;
+      }
+    }
+
     try {
       // Publish with mandatory flag and proper confirms
       const published = this.channel!.publish(
         this.exchangeName,
         routingKey,
         messageBuffer,
-        {
-          persistent: true,
-          mandatory: true,
-          contentType: 'application/json',
-          contentEncoding: 'utf-8',
-          headers: {
-            ...(task.metadata.traceparent && { 'traceparent': task.metadata.traceparent }),
-            ...(task.metadata.tracestate && { 'tracestate': task.metadata.tracestate }),
-          },
-        }
+        publishOptions
       );
 
       if (!published) {

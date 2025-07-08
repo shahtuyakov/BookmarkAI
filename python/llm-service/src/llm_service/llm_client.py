@@ -7,8 +7,11 @@ import logging
 from enum import Enum
 from typing import Dict, Any, Optional, List
 from abc import ABC, abstractmethod
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class LLMProvider(Enum):
@@ -55,45 +58,70 @@ class OpenAIClient(BaseLLMClient):
         """Generate summary using OpenAI."""
         model = model or "gpt-3.5-turbo"
         
-        try:
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that creates concise, informative summaries."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=max_tokens,
-                temperature=0.7
-            )
+        # Create span for LLM API call
+        with tracer.start_as_current_span(
+            "llm.openai.generate_summary",
+            kind=trace.SpanKind.CLIENT
+        ) as span:
+            # Set span attributes
+            span.set_attribute("llm.provider", "openai")
+            span.set_attribute("llm.model", model)
+            span.set_attribute("llm.max_tokens", max_tokens)
+            span.set_attribute("llm.temperature", 0.7)
+            span.set_attribute("llm.prompt_length", len(prompt))
             
-            summary = response.choices[0].message.content
-            
-            # Extract key points if the summary contains bullet points
-            key_points = []
-            if '•' in summary or '-' in summary:
-                lines = summary.split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if line.startswith(('•', '-', '*')):
-                        key_points.append(line.lstrip('•-* '))
-            
-            # Extract token usage details
-            tokens_used = {
-                'input': response.usage.prompt_tokens if response.usage else 0,
-                'output': response.usage.completion_tokens if response.usage else 0,
-                'total': response.usage.total_tokens if response.usage else 0
-            }
-            
-            return {
-                'summary': summary,
-                'key_points': key_points,
-                'model': model,
-                'tokens_used': tokens_used
-            }
-            
-        except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
-            raise
+            try:
+                response = self.client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that creates concise, informative summaries."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0.7
+                )
+                
+                summary = response.choices[0].message.content
+                
+                # Extract key points if the summary contains bullet points
+                key_points = []
+                if '•' in summary or '-' in summary:
+                    lines = summary.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith(('•', '-', '*')):
+                            key_points.append(line.lstrip('•-* '))
+                
+                # Extract token usage details
+                tokens_used = {
+                    'input': response.usage.prompt_tokens if response.usage else 0,
+                    'output': response.usage.completion_tokens if response.usage else 0,
+                    'total': response.usage.total_tokens if response.usage else 0
+                }
+                
+                # Add token and response attributes to span
+                span.set_attribute("llm.prompt_tokens", tokens_used['input'])
+                span.set_attribute("llm.completion_tokens", tokens_used['output'])
+                span.set_attribute("llm.total_tokens", tokens_used['total'])
+                span.set_attribute("llm.response_length", len(summary))
+                span.set_attribute("llm.key_points_count", len(key_points))
+                
+                # Set success status
+                span.set_status(Status(StatusCode.OK))
+                
+                return {
+                    'summary': summary,
+                    'key_points': key_points,
+                    'model': model,
+                    'tokens_used': tokens_used
+                }
+                
+            except Exception as e:
+                logger.error(f"OpenAI API error: {e}")
+                # Record exception in span
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
 
 
 class AnthropicClient(BaseLLMClient):
@@ -119,45 +147,70 @@ class AnthropicClient(BaseLLMClient):
         """Generate summary using Anthropic Claude."""
         model = model or "claude-3-sonnet-20240229"
         
-        try:
-            response = self.client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=0.7,
-                system="You are a helpful assistant that creates concise, informative summaries.",
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
+        # Create span for LLM API call
+        with tracer.start_as_current_span(
+            "llm.anthropic.generate_summary",
+            kind=trace.SpanKind.CLIENT
+        ) as span:
+            # Set span attributes
+            span.set_attribute("llm.provider", "anthropic")
+            span.set_attribute("llm.model", model)
+            span.set_attribute("llm.max_tokens", max_tokens)
+            span.set_attribute("llm.temperature", 0.7)
+            span.set_attribute("llm.prompt_length", len(prompt))
             
-            summary = response.content[0].text
-            
-            # Extract key points
-            key_points = []
-            if '•' in summary or '-' in summary:
-                lines = summary.split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if line.startswith(('•', '-', '*')):
-                        key_points.append(line.lstrip('•-* '))
-            
-            # Extract token usage details
-            tokens_used = {
-                'input': response.usage.input_tokens if hasattr(response, 'usage') else 0,
-                'output': response.usage.output_tokens if hasattr(response, 'usage') else 0,
-                'total': (response.usage.input_tokens + response.usage.output_tokens) if hasattr(response, 'usage') else 0
-            }
-            
-            return {
-                'summary': summary,
-                'key_points': key_points,
-                'model': model,
-                'tokens_used': tokens_used
-            }
-            
-        except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
-            raise
+            try:
+                response = self.client.messages.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=0.7,
+                    system="You are a helpful assistant that creates concise, informative summaries.",
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                
+                summary = response.content[0].text
+                
+                # Extract key points
+                key_points = []
+                if '•' in summary or '-' in summary:
+                    lines = summary.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith(('•', '-', '*')):
+                            key_points.append(line.lstrip('•-* '))
+                
+                # Extract token usage details
+                tokens_used = {
+                    'input': response.usage.input_tokens if hasattr(response, 'usage') else 0,
+                    'output': response.usage.output_tokens if hasattr(response, 'usage') else 0,
+                    'total': (response.usage.input_tokens + response.usage.output_tokens) if hasattr(response, 'usage') else 0
+                }
+                
+                # Add token and response attributes to span
+                span.set_attribute("llm.prompt_tokens", tokens_used['input'])
+                span.set_attribute("llm.completion_tokens", tokens_used['output'])
+                span.set_attribute("llm.total_tokens", tokens_used['total'])
+                span.set_attribute("llm.response_length", len(summary))
+                span.set_attribute("llm.key_points_count", len(key_points))
+                
+                # Set success status
+                span.set_status(Status(StatusCode.OK))
+                
+                return {
+                    'summary': summary,
+                    'key_points': key_points,
+                    'model': model,
+                    'tokens_used': tokens_used
+                }
+                
+            except Exception as e:
+                logger.error(f"Anthropic API error: {e}")
+                # Record exception in span
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
 
 
 class LLMClient:

@@ -20,6 +20,7 @@ from .db import (
 )
 from .content_preflight import ContentPreflightService, ContentValidationError
 from bookmarkai_shared.tracing import trace_celery_task
+from opentelemetry import trace
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +243,14 @@ def summarize_content(
         # Calculate actual cost
         actual_tokens = summary_result.get('tokens_used', estimated_tokens)
         actual_cost = calculate_cost(provider.value, summary_result['model'], actual_tokens)
+        
+        # Add cost and token attributes to current span
+        current_span = trace.get_current_span()
+        if current_span:
+            current_span.set_attribute("llm.cost.input_usd", actual_cost['input_cost'])
+            current_span.set_attribute("llm.cost.output_usd", actual_cost['output_cost'])
+            current_span.set_attribute("llm.cost.total_usd", actual_cost['total_cost'])
+            current_span.set_attribute("llm.processing_time_ms", processing_ms)
         
         # Track cost in database
         track_llm_cost(
