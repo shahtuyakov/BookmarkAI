@@ -13,8 +13,11 @@ from .audio_processor import AudioProcessor
 from .transcription import TranscriptionService, TranscriptionResult
 from .db import save_transcription_result, track_transcription_cost, check_budget_limits
 from .media_preflight import MediaPreflightService
+from bookmarkai_shared.tracing import trace_celery_task
+from opentelemetry import trace
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 # Import rate-limited transcription service
 try:
@@ -74,6 +77,7 @@ class BudgetExceededError(Exception):
     retry_kwargs={'max_retries': 3, 'countdown': 60}
 )
 @task_metrics(worker_type='whisper')
+@trace_celery_task('transcribe_api')
 def transcribe_api(
     self: Task,
     share_id: str,
@@ -168,27 +172,33 @@ def transcribe_api(
     
     try:
         # Phase 1: Download media
-        logger.info(f"Downloading media from: {media_url}")
-        video_path = audio_processor.download_media(media_url)
-        
-        # Only add to temp_files if it's a downloaded file, not a local file
-        if not os.path.isfile(media_url):
-            temp_files.append(video_path)
-        
-        # Validate downloaded file
-        local_validation = preflight_service.validate_local_file(video_path)
-        if not local_validation['valid']:
-            raise TranscriptionError(
-                f"Downloaded file validation failed: {local_validation['reason']}"
-            )
+        with tracer.start_as_current_span("whisper.phase1_download") as phase1_span:
+            phase1_span.set_attribute("whisper.media_url", media_url)
+            logger.info(f"Downloading media from: {media_url}")
+            video_path = audio_processor.download_media(media_url)
+            
+            # Only add to temp_files if it's a downloaded file, not a local file
+            if not os.path.isfile(media_url):
+                temp_files.append(video_path)
+            
+            # Validate downloaded file
+            local_validation = preflight_service.validate_local_file(video_path)
+            if not local_validation['valid']:
+                raise TranscriptionError(
+                    f"Downloaded file validation failed: {local_validation['reason']}"
+                )
+            phase1_span.set_attribute("whisper.file_size_mb", local_validation.get('file_size_mb', 0))
         
         # Phase 2: Extract and normalize audio
-        logger.info("Extracting audio from video")
-        audio_path, duration, file_size_mb = audio_processor.extract_audio(
-            video_path,
-            apply_normalization=options.get('normalize', True) if options else True
-        )
-        temp_files.append(audio_path)
+        with tracer.start_as_current_span("whisper.phase2_extract_audio") as phase2_span:
+            logger.info("Extracting audio from video")
+            audio_path, duration, file_size_mb = audio_processor.extract_audio(
+                video_path,
+                apply_normalization=options.get('normalize', True) if options else True
+            )
+            temp_files.append(audio_path)
+            phase2_span.set_attribute("whisper.audio_duration", duration)
+            phase2_span.set_attribute("whisper.audio_size_mb", file_size_mb)
         
         logger.info(
             f"Audio extracted: duration={duration:.1f}s, size={file_size_mb:.2f}MB"
@@ -209,9 +219,11 @@ def transcribe_api(
                 )
         
         # Phase 3: Validate audio
-        validation = audio_processor.validate_audio(audio_path)
-        if not validation['valid']:
-            raise TranscriptionError(f"Audio validation failed: {validation['reason']}")
+        with tracer.start_as_current_span("whisper.phase3_validate") as phase3_span:
+            validation = audio_processor.validate_audio(audio_path)
+            if not validation['valid']:
+                raise TranscriptionError(f"Audio validation failed: {validation['reason']}")
+            phase3_span.set_attribute("whisper.validation_passed", True)
         
         # Phase 3.5: Check for silence (optional based on configuration)
         if options and options.get('skip_silent', True):
@@ -258,75 +270,86 @@ def transcribe_api(
                 }
         
         # Phase 4: Check if chunking needed
-        needs_chunking = (
-            file_size_mb > AudioProcessor.MAX_FILE_SIZE_MB or 
-            duration > AudioProcessor.CHUNK_DURATION_SECONDS
-        )
-        
-        if needs_chunking:
-            logger.info("Audio requires chunking for API limits")
+        with tracer.start_as_current_span("whisper.phase4_process") as phase4_span:
+            needs_chunking = (
+                file_size_mb > AudioProcessor.MAX_FILE_SIZE_MB or 
+                duration > AudioProcessor.CHUNK_DURATION_SECONDS
+            )
+            phase4_span.set_attribute("whisper.needs_chunking", needs_chunking)
             
-            # Chunk the audio
-            chunks = audio_processor.chunk_audio(audio_path, duration)
-            temp_files.extend([chunk[0] for chunk in chunks])
-            
-            # Transcribe each chunk
-            chunk_results = []
-            for i, (chunk_path, start, end) in enumerate(chunks):
-                logger.info(f"Transcribing chunk {i+1}/{len(chunks)}: {start:.1f}s - {end:.1f}s")
+            if needs_chunking:
+                logger.info("Audio requires chunking for API limits")
                 
-                # Check for soft timeout
-                try:
-                    # Add identifier for rate limiting if supported
-                    transcribe_kwargs = {
-                        'audio_path': chunk_path,
-                        'duration_seconds': end - start,
-                        'language': options.get('language') if options else None,
-                        'prompt': options.get('prompt') if options else None
-                    }
-                    if hasattr(transcription_service, 'transcribe_api') and 'identifier' in transcription_service.transcribe_api.__code__.co_varnames:
-                        transcribe_kwargs['identifier'] = share_id
-                    
-                    chunk_result = transcription_service.transcribe_api(**transcribe_kwargs)
-                    chunk_results.append((chunk_result, start))
-                    
-                except SoftTimeLimitExceeded:
-                    logger.error("Soft time limit exceeded during chunk transcription")
-                    # Try to save partial results if we have any
-                    if chunk_results:
-                        final_result = transcription_service.merge_chunks(chunk_results)
-                        _save_partial_result(share_id, final_result, "partial_timeout")
-                    raise
+                # Chunk the audio
+                chunks = audio_processor.chunk_audio(audio_path, duration)
+                temp_files.extend([chunk[0] for chunk in chunks])
+                phase4_span.set_attribute("whisper.chunk_count", len(chunks))
                 
-            # Merge all chunk results
-            final_result = transcription_service.merge_chunks(chunk_results)
-            
-        else:
-            # Single transcription for short audio
-            logger.info("Transcribing complete audio file")
-            
-            # Track model latency
-            model_start = time.time()
-            # Add identifier for rate limiting if supported
-            transcribe_kwargs = {
-                'audio_path': audio_path,
-                'duration_seconds': duration,
-                'language': options.get('language') if options else None,
-                'prompt': options.get('prompt') if options else None
-            }
-            if hasattr(transcription_service, 'transcribe_api') and 'identifier' in transcription_service.transcribe_api.__code__.co_varnames:
-                transcribe_kwargs['identifier'] = share_id
-            
-            final_result = transcription_service.transcribe_api(**transcribe_kwargs)
-            model_latency = time.time() - model_start
-            
-            # Track model latency metric
-            if METRICS_ENABLED:
-                track_model_latency(model_latency, 'whisper-api', 'transcription')
+                # Transcribe each chunk
+                chunk_results = []
+                for i, (chunk_path, start, end) in enumerate(chunks):
+                    logger.info(f"Transcribing chunk {i+1}/{len(chunks)}: {start:.1f}s - {end:.1f}s")
+                    
+                    # Check for soft timeout
+                    try:
+                        # Add identifier for rate limiting if supported
+                        transcribe_kwargs = {
+                            'audio_path': chunk_path,
+                            'duration_seconds': end - start,
+                            'language': options.get('language') if options else None,
+                            'prompt': options.get('prompt') if options else None
+                        }
+                        if hasattr(transcription_service, 'transcribe_api') and 'identifier' in transcription_service.transcribe_api.__code__.co_varnames:
+                            transcribe_kwargs['identifier'] = share_id
+                        
+                        chunk_result = transcription_service.transcribe_api(**transcribe_kwargs)
+                        chunk_results.append((chunk_result, start))
+                        
+                    except SoftTimeLimitExceeded:
+                        logger.error("Soft time limit exceeded during chunk transcription")
+                        # Try to save partial results if we have any
+                        if chunk_results:
+                            final_result = transcription_service.merge_chunks(chunk_results)
+                            _save_partial_result(share_id, final_result, "partial_timeout")
+                        raise
+                    
+                # Merge all chunk results
+                final_result = transcription_service.merge_chunks(chunk_results)
+                
+            else:
+                # Single transcription for short audio
+                logger.info("Transcribing complete audio file")
+                
+                # Track model latency
+                model_start = time.time()
+                # Add identifier for rate limiting if supported
+                transcribe_kwargs = {
+                    'audio_path': audio_path,
+                    'duration_seconds': duration,
+                    'language': options.get('language') if options else None,
+                    'prompt': options.get('prompt') if options else None
+                }
+                if hasattr(transcription_service, 'transcribe_api') and 'identifier' in transcription_service.transcribe_api.__code__.co_varnames:
+                    transcribe_kwargs['identifier'] = share_id
+                
+                final_result = transcription_service.transcribe_api(**transcribe_kwargs)
+                model_latency = time.time() - model_start
+                
+                # Track model latency metric
+                if METRICS_ENABLED:
+                    track_model_latency(model_latency, 'whisper-api', 'transcription')
         
         # Phase 5: Save results to database
         logger.info("Saving transcription results to database")
         db_result = save_transcription_result(share_id, final_result)
+        
+        # Add cost and result attributes to current span
+        current_span = trace.get_current_span()
+        if current_span:
+            current_span.set_attribute("whisper.cost_usd", final_result.billing_usd)
+            current_span.set_attribute("whisper.transcript_length", len(final_result.text))
+            current_span.set_attribute("whisper.language", final_result.language)
+            current_span.set_attribute("whisper.backend", final_result.backend)
         
         # Track costs separately for analytics
         track_transcription_cost(

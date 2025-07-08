@@ -42,8 +42,11 @@ from .metrics import (
     vector_cost_by_model,
     update_budget_metrics
 )
+from bookmarkai_shared.tracing import trace_celery_task
+from opentelemetry import trace
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 # Import rate-limited embedding service
 try:
@@ -100,6 +103,7 @@ def get_services():
     default_retry_delay=60,
 )
 @task_metrics(worker_type='vector')
+@trace_celery_task('generate_embeddings')
 def generate_embeddings(
     self: Task,
     share_id: str,
@@ -313,6 +317,14 @@ def generate_embeddings(
             chunk_strategy=chunk_config.strategy.value
         ).inc(len(chunks))
         
+        # Add cost and result attributes to current span
+        current_span = trace.get_current_span()
+        if current_span:
+            current_span.set_attribute("embeddings.total_cost", total_cost)
+            current_span.set_attribute("embeddings.total_tokens", total_tokens)
+            current_span.set_attribute("embeddings.chunk_count", len(chunks))
+            current_span.set_attribute("embeddings.model", embeddings[0]['model'] if embeddings else 'unknown')
+        
         # Track cost
         model = embeddings[0]['model'] if embeddings else 'unknown'
         track_ml_cost(total_cost, 'embedding', model, 'vector')
@@ -413,6 +425,7 @@ def generate_embeddings(
     time_limit=1800,  # 30 minutes hard limit
 )
 @task_metrics(worker_type='vector')
+@trace_celery_task('generate_embeddings_batch')
 def generate_embeddings_batch(
     self: Task,
     tasks: List[Dict[str, Any]]

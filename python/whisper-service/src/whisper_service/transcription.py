@@ -5,8 +5,11 @@ import logging
 from typing import Dict, List, Any, Optional, Tuple
 from openai import OpenAI
 from pydantic import BaseModel, Field
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class TranscriptionSegment(BaseModel):
@@ -80,29 +83,41 @@ class TranscriptionService:
         if file_ext not in self.SUPPORTED_FORMATS:
             raise ValueError(f"Unsupported audio format: {file_ext}")
         
-        try:
-            with open(audio_path, 'rb') as audio_file:
-                logger.info(
-                    f"Calling OpenAI Whisper API for {duration_seconds:.1f}s audio"
-                    f"{f' in {language}' if language else ''}"
-                )
-                
-                # Prepare API parameters
-                api_params = {
-                    "model": "whisper-1",
-                    "file": audio_file,
-                    "response_format": "verbose_json",
-                    "timestamp_granularities": ["segment"]
-                }
-                
-                if language:
-                    api_params["language"] = language
+        # Create span for transcription
+        with tracer.start_as_current_span(
+            "whisper.transcribe_api",
+            kind=trace.SpanKind.CLIENT
+        ) as span:
+            # Set span attributes
+            span.set_attribute("whisper.audio_duration", duration_seconds)
+            span.set_attribute("whisper.audio_format", file_ext)
+            if language:
+                span.set_attribute("whisper.language", language)
+            span.set_attribute("whisper.model", "whisper-1")
+            
+            try:
+                with open(audio_path, 'rb') as audio_file:
+                    logger.info(
+                        f"Calling OpenAI Whisper API for {duration_seconds:.1f}s audio"
+                        f"{f' in {language}' if language else ''}"
+                    )
                     
-                if prompt:
-                    api_params["prompt"] = prompt
-                
-                # Call API
-                response = self.client.audio.transcriptions.create(**api_params)
+                    # Prepare API parameters
+                    api_params = {
+                        "model": "whisper-1",
+                        "file": audio_file,
+                        "response_format": "verbose_json",
+                        "timestamp_granularities": ["segment"]
+                    }
+                    
+                    if language:
+                        api_params["language"] = language
+                        
+                    if prompt:
+                        api_params["prompt"] = prompt
+                    
+                    # Call API
+                    response = self.client.audio.transcriptions.create(**api_params)
                 
             # Calculate cost
             billing_usd = self._calculate_cost(duration_seconds)
@@ -127,26 +142,38 @@ class TranscriptionService:
                         ))
                 logger.info(f"Parsed {len(segments)} segments from response")
             
-            # Create result
-            result = TranscriptionResult(
-                text=response.text,
-                segments=segments,
-                language=response.language if hasattr(response, 'language') else language,
-                duration_seconds=duration_seconds,
-                billing_usd=billing_usd,
-                backend="api"
-            )
-            
-            logger.info(
-                f"Transcription completed: {len(result.text)} chars, "
-                f"cost=${billing_usd:.4f}"
-            )
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Transcription API error: {str(e)}")
-            raise
+                # Create result
+                result = TranscriptionResult(
+                    text=response.text,
+                    segments=segments,
+                    language=response.language if hasattr(response, 'language') else language,
+                    duration_seconds=duration_seconds,
+                    billing_usd=billing_usd,
+                    backend="api"
+                )
+                
+                # Add response attributes to span
+                span.set_attribute("whisper.transcript_length", len(result.text))
+                span.set_attribute("whisper.segments_count", len(segments))
+                span.set_attribute("whisper.detected_language", result.language)
+                span.set_attribute("whisper.cost_usd", billing_usd)
+                
+                # Set success status
+                span.set_status(Status(StatusCode.OK))
+                
+                logger.info(
+                    f"Transcription completed: {len(result.text)} chars, "
+                    f"cost=${billing_usd:.4f}"
+                )
+                
+                return result
+                
+            except Exception as e:
+                logger.error(f"Transcription API error: {str(e)}")
+                # Record exception in span
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
     
     def transcribe_local(
         self,
