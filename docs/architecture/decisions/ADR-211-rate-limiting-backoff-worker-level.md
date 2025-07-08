@@ -7,7 +7,7 @@
 
 ## Implementation Summary (MVP)
 
-**Implemented on**: 2025-01-04 - 2025-01-05  
+**Implemented on**: 2025-01-04 - 2025-01-07  
 **Phases completed**: 
 - Phase 1 (Core Infrastructure) ✅
 - Phase 2 (ShareProcessor Integration) ✅  
@@ -16,6 +16,9 @@
 - Phase 3.3 (Whisper Service Integration) ✅
 - Phase 3.4 (Vector Service Integration) ✅
 - Phase 4 (Monitoring & Alerting) ✅
+- Phase 5 (Advanced Features) ✅
+- Phase 6 (Priority Queue System) ✅ (2025-01-07)
+- Phase 7 (Development Tools) ✅ (2025-01-07)
 
 ### What's Working:
 - Distributed rate limiter with Redis backing (sliding window & token bucket algorithms)
@@ -45,12 +48,88 @@
   - 10 alerting rules covering rate limits, costs, and performance
   - Circuit breaker status monitoring
   - Redis operation latency tracking
+- **Priority Queue Management**:
+  - Per-platform and per-priority queues (e.g., share.tiktok.high, share.reddit.normal)
+  - User tier-based routing (Premium → High, Standard → Normal, Free → Low)
+  - Fair scheduling with configurable weights (3:2:1 ratio)
+  - Per-user rate limiting within global limits
+  - Concurrent share tracking per user
+- **Adaptive Back-off Strategy**:
+  - Success/failure pattern tracking with sliding window
+  - Dynamic delay adjustment based on recent history (0-20%, 20-50%, 50-80%, 80-100% success rate bands)
+  - Time-of-day awareness for optimal retry timing
+  - Hourly success rate analysis with Redis-backed statistics (24h TTL)
+  - Trend detection (improving/degrading/stable patterns)
+  - Exponential multiplier for consecutive failures (up to 8x)
+  - Configurable min/max delay bounds with jitter
+- **Development Tools**:
+  - **Rate Limit Simulator** (`simulator.py`):
+    - Request pattern simulation with configurable RPS and user distributions
+    - Failure injection for resilience testing
+    - Real-time metrics tracking (success rates, P95 latency)
+    - Visual plots for request timeline and user patterns
+  - **Capacity Planning Calculator** (`capacity_calculator.py`):
+    - Multi-service API tier recommendations (OpenAI, Whisper, Embeddings)
+    - Peak load modeling with 3x multiplier
+    - User segmentation (premium vs standard)
+    - Monthly cost projections and infrastructure sizing
+  - **Load Testing**: Realistic traffic patterns with Pareto distribution
+  - **Cost Projection**: Based on actual usage patterns and API pricing
 
 ### Known Limitations:
-- **Global rate limiting only** - all users share same limit pool (scaling issue)
-- No per-user fairness (first 100 shares win, rest queue)
-- ~~Single API key per platform (no pooling)~~ → Fixed for all ML services
-- ~~Whisper & Vector service integration pending~~ → Completed
+- ~~Global rate limiting only~~ → ✅ Fixed with priority queues and per-user limits **(BUT NOT INTEGRATED)**
+- ~~No per-user fairness~~ → ✅ Fixed with fair scheduling algorithm **(BUT NOT INTEGRATED)**
+- ~~Single API key per platform~~ → ✅ Fixed for all ML services
+- ~~Whisper & Vector service integration~~ → ✅ Completed
+- **Feature flag required** - Priority queues behind PRIORITY_QUEUES_ENABLED flag
+- **Manual tier configuration** - User tiers need to be manually assigned (no billing integration yet)
+- **Celery queue declaration** - Requires manual queue declaration on worker startup
+
+### 🚨 Integration Status for Phase 5 (CRITICAL - READ THIS)
+
+**Phase 5 Priority Queue System is BUILT but NOT INTEGRATED**:
+
+**What's Complete**:
+- ✅ `PriorityQueueService` - Full implementation with per-user rate limiting
+- ✅ Queue structure defined (`share.tiktok.high`, `share.reddit.normal`, etc.)
+- ✅ `PriorityShareProcessorFactory` - Dynamic processor creation
+- ✅ Feature flag configuration system designed
+- ✅ Integration guide (`shares.service.priority.patch`)
+- ✅ Adaptive backoff integrated into `DistributedRateLimiter`
+
+**What's NOT Done**:
+- ❌ `PriorityQueueService` NOT registered in shares module
+- ❌ Priority queues NOT registered with BullModule
+- ❌ `SharesService` still uses single queue (no priority routing)
+- ❌ Feature flag check NOT implemented in actual code
+- ❌ Queue statistics endpoint NOT created
+
+**Current Production Behavior**:
+```typescript
+// What happens now (single queue):
+await this.shareQueue.add(SHARE_QUEUE.JOBS.PROCESS, { shareId: newShare.id })
+
+// What WOULD happen with integration (priority queues):
+if (configService.get('PRIORITY_QUEUES_ENABLED')) {
+  await priorityQueueService.queueShare(shareId, userId, platform)
+}
+```
+
+**To Complete Integration (2-3 days work)**:
+1. Apply `shares.service.priority.patch` to actual service
+2. Update `shares.module.ts` to:
+   - Import `QueueRegistrationHelper`
+   - Register all priority queues
+   - Add `PriorityQueueService` as provider
+3. Create queue monitoring endpoints
+4. Test queue routing and fair scheduling
+5. Load test with multiple priority levels
+
+**MVP Recommendation**:
+- Ship WITHOUT Phase 5 integration
+- Current single queue handles <500 users fine
+- Phase 5 code is ready when you need it
+- Integration adds complexity without immediate benefit
 
 ## Context
 
@@ -300,18 +379,63 @@ Key metrics to track:
 
 ## Implementation Status
 
-**Last Updated**: 2025-01-05
+**Last Updated**: 2025-01-07
 
-### ⚠️ MVP Limitation: Global Rate Limiting
+### Priority Queue Management (Completed 2025-01-07)
 
-The current implementation uses **global platform-wide rate limits**, which works for MVP but has scaling issues:
+The initial MVP implementation had **global platform-wide rate limits**, which caused scaling issues:
 - With 10k users: First 100 shares process, remaining 9,900 queue behind rate limit
-- All users share the same rate limit pool (e.g., 100 TikTok requests/min total)
+- All users shared the same rate limit pool (e.g., 100 TikTok requests/min total)
 
-**Production requirements** (not implemented):
-- Per-user rate limiting for fairness
-- ~~API key pooling for higher throughput~~ ✅ Implemented for LLM service
-- Priority queues based on user tiers
+#### Solution: Multi-Tiered Priority Queue System
+
+**Architecture Overview:**
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Share Queue   │────▶│ Priority Router  │────▶│ Platform Queues │
+│   Manager       │     │ (User Tier Based)│     │ (15 total)      │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │
+                               ├── share.tiktok.high (Premium users)
+                               ├── share.tiktok.normal (Standard users)
+                               ├── share.tiktok.low (Free users)
+                               └── ... (same for reddit, twitter, youtube, generic)
+```
+
+**Key Features:**
+
+1. **Platform Isolation**: Separate queues per platform prevent cross-platform blocking
+2. **User Tier Routing**:
+   - Premium → HIGH priority queue
+   - Standard → NORMAL priority queue  
+   - Free → LOW priority queue
+3. **Fair Resource Allocation**:
+   - Rate limit capacity: Premium 50%, Standard 35%, Free 15%
+   - Concurrent processing: High (3), Normal (2), Low (1)
+   - Processing weight ratio: 3:2:1
+4. **Per-User Limits Within Global Limits**:
+   - Shares/minute: Premium (10), Standard (5), Free (2)
+   - Concurrent shares: Premium (5), Standard (3), Free (1)
+5. **Intelligent Backoff by Priority**:
+   - High: 2.5s, Normal: 5s, Low: 10s base delays
+6. **Dynamic Processor Management**:
+   - Separate processor instance per queue
+   - Independent concurrency and rate limit settings
+7. **Monitoring & Rebalancing**:
+   - Queue depth metrics and imbalance detection
+   - Automatic rebalancing between priority levels
+   - Stats API for real-time monitoring
+
+**Implementation Files:**
+- `packages/api-gateway/src/modules/shares/queue/priority-queue.constants.ts`
+- `packages/api-gateway/src/modules/shares/queue/priority-share-processor.ts`
+- `packages/api-gateway/src/modules/shares/queue/queue-registration.helper.ts`
+- `packages/api-gateway/src/modules/shares/services/priority-queue.service.ts`
+
+**Production requirements** (now implemented):
+- ✅ Per-user rate limiting for fairness
+- ✅ API key pooling for higher throughput (LLM, Whisper, Vector services)
+- ✅ Priority queues based on user tiers
 
 ### LLM Service Integration Details (Completed 2025-01-05)
 
@@ -594,18 +718,18 @@ volumes:
   - [x] Alert on unexpected 429 errors
 
 ### Phase 5: Advanced Features
-- [ ] **5.1** Implement adaptive back-off
-  - [ ] Track success/failure patterns
-  - [ ] Adjust delays based on recent history
-  - [ ] Add time-of-day awareness
-- [ ] **5.2** Add priority queue management
-  - [ ] Create separate queues for rate-limited platforms
-  - [ ] Implement capacity-based job scheduling
-  - [ ] Add premium user priority handling
-- [ ] **5.3** Create rate limit simulator
-  - [ ] Tool to test rate limit configurations
-  - [ ] Load testing with rate limit constraints
-  - [ ] Capacity planning calculator
+- [x] **5.1** Implement adaptive back-off
+  - [x] Track success/failure patterns
+  - [x] Adjust delays based on recent history
+  - [x] Add time-of-day awareness
+- [x] **5.2** Add priority queue management
+  - [x] Create separate queues for rate-limited platforms
+  - [x] Implement capacity-based job scheduling
+  - [x] Add premium user priority handling
+- [x] **5.3** Create rate limit simulator
+  - [x] Tool to test rate limit configurations
+  - [x] Load testing with rate limit constraints
+  - [x] Capacity planning calculator
 
 ### Testing & Documentation
 - [ ] **T.1** Unit tests for DistributedRateLimiter

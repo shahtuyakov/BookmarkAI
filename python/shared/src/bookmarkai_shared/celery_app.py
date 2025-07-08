@@ -59,6 +59,11 @@ def create_celery_app(name: str = 'bookmarkai.ml') -> Celery:
     # Set default task class
     app.Task = MLTask
     
+    # Force queue creation on startup
+    app.conf.update(
+        task_create_missing_queues=True,
+    )
+    
     # Set up Prometheus metrics for Celery
     try:
         from .metrics import setup_celery_metrics
@@ -71,6 +76,24 @@ def create_celery_app(name: str = 'bookmarkai.ml') -> Celery:
 
 
 # Signal handlers for worker lifecycle
+from celery.signals import worker_ready
+
+@worker_ready.connect
+def declare_queues(sender=None, **kwargs):
+    """Declare queues when worker is ready."""
+    try:
+        logger.info("Declaring queues on worker startup")
+        # Get the app from the sender
+        app = sender.app if hasattr(sender, 'app') else None
+        if app:
+            # Declare all configured queues
+            with app.pool.acquire(block=True) as conn:
+                for queue in app.conf.task_queues:
+                    queue(conn).declare()
+                    logger.info(f"Declared queue: {queue.name}")
+    except Exception as e:
+        logger.error(f"Failed to declare queues: {e}")
+
 @worker_process_init.connect
 def init_worker_process(sender=None, **kwargs):
     """Initialize worker process."""

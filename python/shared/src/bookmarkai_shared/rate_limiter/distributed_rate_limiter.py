@@ -14,6 +14,7 @@ from redis.exceptions import RedisError, ConnectionError
 from .rate_limit_config import RateLimitConfig, RateLimitConfigLoader, Algorithm
 from .exceptions import RateLimitError, RateLimiterUnavailableError
 from .metrics import MetricsCollector
+from .adaptive_backoff import AdaptiveBackoffStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +36,24 @@ class DistributedRateLimiter:
     Supports both sliding window and token bucket algorithms
     """
     
-    def __init__(self, redis_client: Redis, config_loader: Optional[RateLimitConfigLoader] = None):
+    def __init__(self, redis_client: Redis, config_loader: Optional[RateLimitConfigLoader] = None, enable_adaptive_backoff: bool = True):
         self.redis = redis_client
         self.config_loader = config_loader or RateLimitConfigLoader()
         self._scripts = {}
         self._circuit_breaker_open = False
         self._circuit_breaker_reset_time = 0
         self._load_lua_scripts()
+        
+        # Initialize adaptive backoff
+        self.enable_adaptive_backoff = enable_adaptive_backoff
+        if enable_adaptive_backoff:
+            self.adaptive_backoff = AdaptiveBackoffStrategy(
+                redis=redis_client,
+                base_delay_ms=5000,
+                min_delay_ms=1000,
+                max_delay_ms=60000,
+                time_of_day_enabled=True
+            )
     
     def _load_lua_scripts(self):
         """Load Lua scripts from files"""
@@ -256,11 +268,19 @@ class DistributedRateLimiter:
                 backoff.max_delay
             )
         else:  # adaptive
-            # Simplified adaptive - in production, consider success/failure history
-            delay = min(
-                backoff.initial_delay * (1.5 ** (attempts - 1)),
-                backoff.max_delay
-            )
+            # Use the adaptive backoff strategy if enabled
+            if self.enable_adaptive_backoff and backoff.type.value == 'adaptive':
+                delay = await self.adaptive_backoff.calculate_delay(
+                    service=service,
+                    identifier=identifier,
+                    attempt_number=attempts
+                )
+            else:
+                # Fallback to simple adaptive
+                delay = min(
+                    backoff.initial_delay * (1.5 ** (attempts - 1)),
+                    backoff.max_delay
+                )
         
         # Add jitter if enabled
         if backoff.jitter:
@@ -275,6 +295,24 @@ class DistributedRateLimiter:
         """Record a successful request (for adaptive backoff)"""
         attempt_key = f"rl:attempts:{service}:{identifier}"
         await self.redis.delete(attempt_key)
+        
+        # Record success for adaptive backoff
+        if self.enable_adaptive_backoff:
+            await self.adaptive_backoff.record_attempt(
+                service=service,
+                success=True,
+                identifier=identifier
+            )
+    
+    async def record_failure(self, service: str, identifier: str = 'default'):
+        """Record a failed request (for adaptive backoff)"""
+        # Record failure for adaptive backoff
+        if self.enable_adaptive_backoff:
+            await self.adaptive_backoff.record_attempt(
+                service=service,
+                success=False,
+                identifier=identifier
+            )
     
     async def update_from_headers(
         self,
