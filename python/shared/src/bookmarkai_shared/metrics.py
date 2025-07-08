@@ -107,6 +107,29 @@ model_latency = Histogram(
     registry=registry
 )
 
+# Rate limiting metrics
+rate_limit_checks = Counter(
+    'llm_rate_limit_checks_total',
+    'Total number of rate limit checks',
+    ['service', 'model', 'result'],
+    registry=registry
+)
+
+api_key_rotations = Counter(
+    'llm_api_key_rotations_total',
+    'Total number of API key rotations',
+    ['service', 'status'],
+    registry=registry
+)
+
+token_estimation_accuracy = Histogram(
+    'llm_token_estimation_accuracy_percent',
+    'Accuracy of token estimation as percentage',
+    ['service', 'model'],
+    buckets=(50, 60, 70, 80, 85, 90, 95, 98, 99, 100, 105, 110, 120),
+    registry=registry
+)
+
 # Worker info
 worker_info = Info(
     'ml_worker',
@@ -214,6 +237,31 @@ def track_model_latency(duration: float, model: str, task_type: str):
 def set_worker_info(info: Dict[str, str]):
     """Set worker information."""
     worker_info.info(info)
+
+
+def track_rate_limit_check(service: str, model: str, result: str):
+    """Track rate limit check results."""
+    rate_limit_checks.labels(
+        service=service,
+        model=model,
+        result=result  # 'allowed', 'request_limited', 'token_limited'
+    ).inc()
+
+
+def track_api_key_rotation(service: str, status: str):
+    """Track API key rotation events."""
+    api_key_rotations.labels(
+        service=service,
+        status=status  # 'success', 'all_exhausted'
+    ).inc()
+
+
+def track_token_estimation_accuracy(service: str, model: str, accuracy_percent: float):
+    """Track token estimation accuracy."""
+    token_estimation_accuracy.labels(
+        service=service,
+        model=model
+    ).observe(accuracy_percent)
 
 
 class MetricsServer:

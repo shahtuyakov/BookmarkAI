@@ -74,6 +74,7 @@ export class GenericFetcher extends BaseContentFetcher {
           url: request.url,
           ...metadata,
         },
+        responseHeaders: response.headers,
         hints: {
           hasNativeCaptions: false,
           requiresAuth: false,

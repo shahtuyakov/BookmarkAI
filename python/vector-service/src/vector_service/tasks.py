@@ -45,6 +45,17 @@ from .metrics import (
 
 logger = logging.getLogger(__name__)
 
+# Import rate-limited embedding service
+try:
+    from .embedding_service_rate_limited import RateLimitedEmbeddingService
+    from .rate_limited_client import RateLimitError
+    RATE_LIMITING_AVAILABLE = True
+except ImportError:
+    logger.warning("Rate limiting not available for embeddings service")
+    RATE_LIMITING_AVAILABLE = False
+    RateLimitedEmbeddingService = EmbeddingService  # Fallback
+    RateLimitError = Exception  # Fallback
+
 # Initialize services
 embedding_service = None
 chunking_service = None
@@ -56,8 +67,14 @@ def get_services():
     global embedding_service, chunking_service, preprocessor
     
     if embedding_service is None:
-        embedding_service = EmbeddingService()
-        logger.info("Initialized EmbeddingService")
+        # Use rate-limited service if available and enabled
+        enable_rate_limiting = os.environ.get('ENABLE_EMBEDDINGS_RATE_LIMITING', 'true').lower() == 'true'
+        if enable_rate_limiting and RATE_LIMITING_AVAILABLE:
+            embedding_service = RateLimitedEmbeddingService()
+            logger.info("Initialized RateLimitedEmbeddingService")
+        else:
+            embedding_service = EmbeddingService()
+            logger.info("Initialized EmbeddingService")
     
     if chunking_service is None:
         chunking_service = ChunkingService()
@@ -222,7 +239,17 @@ def generate_embeddings(
                     force_model=force_model
                 )
                 
-                response = embed_service.generate_embedding(request)
+                # Add identifier for rate limiting if supported
+                if hasattr(embed_service, 'generate_embedding'):
+                    # Check if the method accepts identifier parameter
+                    import inspect
+                    sig = inspect.signature(embed_service.generate_embedding)
+                    if 'identifier' in sig.parameters:
+                        response = embed_service.generate_embedding(request, identifier=share_id)
+                    else:
+                        response = embed_service.generate_embedding(request)
+                else:
+                    response = embed_service.generate_embedding(request)
                 
                 embeddings.append({
                     'embedding': response.embedding,
@@ -246,7 +273,17 @@ def generate_embeddings(
                     force_model=force_model
                 )
                 
-                batch_response = embed_service.generate_batch_embeddings(batch)
+                # Add identifier for rate limiting if supported
+                if hasattr(embed_service, 'generate_batch_embeddings'):
+                    # Check if the method accepts identifier parameter
+                    import inspect
+                    sig = inspect.signature(embed_service.generate_batch_embeddings)
+                    if 'identifier' in sig.parameters:
+                        batch_response = embed_service.generate_batch_embeddings(batch, identifier=share_id)
+                    else:
+                        batch_response = embed_service.generate_batch_embeddings(batch)
+                else:
+                    batch_response = embed_service.generate_batch_embeddings(batch)
                 
                 for j, (embedding, chunk) in enumerate(zip(batch_response.embeddings, batch_chunks)):
                     embeddings.append({
@@ -321,6 +358,20 @@ def generate_embeddings(
             # Don't fail the task if DB save fails
         
         return result.model_dump()
+        
+    except RateLimitError as e:
+        logger.warning(f"Rate limit hit for share_id {share_id}: {str(e)}")
+        # Track rate limit in metrics
+        from bookmarkai_shared.metrics import task_errors
+        
+        task_errors.labels(
+            task_name='generate_embeddings',
+            error_type='RateLimitError',
+            worker_type='vector'
+        ).inc()
+        
+        # Re-raise for retry logic with appropriate delay
+        raise
         
     except Exception as e:
         logger.error(f"Failed to generate embeddings for share {share_id}: {str(e)}")

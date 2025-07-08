@@ -146,6 +146,7 @@ export class TikTokFetcher extends BaseContentFetcher {
           storageType: storageType,        // Storage type indicator
           downloadSuccess: !!storageUrl,   // Download status for debugging
         },
+        responseHeaders: response.headers,
         hints: {
           hasNativeCaptions: true, // TikTok videos often have captions
           requiresAuth: false,

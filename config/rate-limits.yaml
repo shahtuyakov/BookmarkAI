@@ -1,0 +1,187 @@
+# Rate Limit Configuration for External APIs
+# This file defines rate limits for various external services
+# Hot-reload is enabled by default - changes take effect without restart
+
+services:
+  # Social Media Platforms
+  reddit:
+    algorithm: sliding_window
+    limits:
+      - requests: 60
+        window: 60  # 60 requests per minute (OAuth apps)
+    backoff:
+      type: exponential
+      initialDelay: 1000
+      maxDelay: 60000
+      multiplier: 2
+      
+  tiktok:
+    algorithm: sliding_window
+    limits:
+      - requests: 100
+        window: 60  # Conservative estimate
+    backoff:
+      type: exponential
+      initialDelay: 5000
+      maxDelay: 300000
+      multiplier: 2
+      
+  twitter:
+    algorithm: sliding_window
+    limits:
+      - requests: 300
+        window: 900  # 300 requests per 15 minutes
+    backoff:
+      type: exponential
+      initialDelay: 3000
+      maxDelay: 900000  # 15 minutes
+      multiplier: 3
+      
+  youtube:
+    algorithm: token_bucket
+    limits:
+      - capacity: 10000
+        refillRate: 0.116  # ~10,000 units per day
+    costMapping:
+      search: 100
+      videos: 1
+      channels: 1
+      playlists: 1
+      comments: 1
+    backoff:
+      type: adaptive
+      initialDelay: 5000
+      maxDelay: 3600000  # 1 hour
+
+  # AI/ML Services
+  openai:
+    algorithm: token_bucket
+    limits:
+      - capacity: 500
+        refillRate: 8.33  # 500 RPM = ~8.33 per second
+    costMapping:
+      'gpt-4': 10
+      'gpt-4-turbo': 10
+      'gpt-3.5-turbo': 1
+      'gpt-4o': 5
+      'gpt-4o-mini': 0.5
+      'text-embedding-ada-002': 0.1
+      'whisper-1': 5
+    backoff:
+      type: adaptive
+      initialDelay: 2000
+      maxDelay: 300000
+      
+  # Separate token-based rate limiting for OpenAI
+  openai_tokens:
+    algorithm: token_bucket
+    limits:
+      - capacity: 150000
+        refillRate: 2500  # 150k TPM = ~2500 per second
+    backoff:
+      type: adaptive
+      initialDelay: 2000
+      maxDelay: 300000
+      
+  anthropic:
+    algorithm: token_bucket
+    limits:
+      - capacity: 100
+        refillRate: 1.67  # 100 RPM
+    costMapping:
+      'claude-3-opus': 15
+      'claude-3-sonnet': 3
+      'claude-3-haiku': 1
+    backoff:
+      type: exponential
+      initialDelay: 2000
+      maxDelay: 120000
+      multiplier: 2
+      
+  whisper:
+    algorithm: sliding_window
+    limits:
+      - requests: 50
+        window: 60  # Concurrent request limit
+    backoff:
+      type: exponential
+      initialDelay: 3000
+      maxDelay: 60000
+      multiplier: 2
+      
+  whisper_minutes:
+    algorithm: token_bucket
+    limits:
+      - capacity: 50  # 50 minutes of audio capacity
+        refillRate: 0.833  # 50 minutes per hour (3000 minutes/day ÷ 24 hours ÷ 60)
+    costMapping:
+      default: 1  # 1 minute = 1 unit
+    backoff:
+      type: exponential
+      initialDelay: 5000
+      maxDelay: 300000
+      multiplier: 2
+      
+  # Embedding Services
+  embeddings:
+    algorithm: token_bucket
+    limits:
+      - capacity: 1000
+        refillRate: 16.67  # 1000 RPM
+    costMapping:
+      'text-embedding-ada-002': 1
+      'text-embedding-3-small': 0.5
+      'text-embedding-3-large': 2
+    backoff:
+      type: linear
+      initialDelay: 1000
+      maxDelay: 30000
+      
+  embeddings_tokens:
+    algorithm: token_bucket
+    limits:
+      - capacity: 1000000  # 1M tokens per minute
+        refillRate: 16667   # ~16.7k tokens per second
+    backoff:
+      type: linear
+      initialDelay: 1000
+      maxDelay: 30000
+      
+  # Search APIs
+  perplexity:
+    algorithm: sliding_window
+    limits:
+      - requests: 100
+        window: 60
+    backoff:
+      type: exponential
+      initialDelay: 2000
+      maxDelay: 60000
+      multiplier: 2
+      
+  # Image Processing
+  caption:
+    algorithm: sliding_window
+    limits:
+      - requests: 30
+        window: 60  # Conservative for image processing
+    backoff:
+      type: exponential
+      initialDelay: 5000
+      maxDelay: 120000
+      multiplier: 2
+
+# Global settings (can be overridden per service)
+defaults:
+  ttl: 3600  # Redis key TTL in seconds
+  jitter: true  # Add jitter to backoff delays
+  
+# Environment-specific overrides
+# These multiply the base limits
+environments:
+  development:
+    multiplier: 0.5  # Use 50% of production limits
+  staging:
+    multiplier: 0.8  # Use 80% of production limits
+  production:
+    multiplier: 1.0  # Use full limits

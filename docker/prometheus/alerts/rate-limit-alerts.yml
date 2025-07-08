@@ -1,0 +1,164 @@
+groups:
+  - name: rate_limit_alerts
+    interval: 30s
+    rules:
+      # Alert when any service exceeds 80% rate limit usage
+      - alert: HighRateLimitUsage
+        expr: rate_limit_usage_ratio > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: rate_limiter
+          team: platform
+        annotations:
+          summary: "High rate limit usage for {{ $labels.service }}"
+          description: "{{ $labels.service }} is using {{ $value | humanizePercentage }} of its rate limit"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/rate-limiting#high-usage"
+          
+      # Alert when service exceeds 95% rate limit usage (critical)
+      - alert: CriticalRateLimitUsage
+        expr: rate_limit_usage_ratio > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          component: rate_limiter
+          team: platform
+          pagerduty: true
+        annotations:
+          summary: "Critical rate limit usage for {{ $labels.service }}"
+          description: "CRITICAL: {{ $labels.service }} is using {{ $value | humanizePercentage }} of its rate limit and may start rejecting requests"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/rate-limiting#critical-usage"
+          
+      # Alert on sustained rate limiting (>5 minutes)
+      - alert: SustainedRateLimiting
+        expr: |
+          (
+            rate(rate_limit_checks_total{result="denied"}[5m]) > 0
+            and
+            rate(rate_limit_checks_total{result="denied"}[5m]) / rate(rate_limit_checks_total[5m]) > 0.1
+          )
+        for: 5m
+        labels:
+          severity: warning
+          component: rate_limiter
+          team: platform
+        annotations:
+          summary: "Sustained rate limiting on {{ $labels.service }}"
+          description: "{{ $labels.service }} has been denying >10% of requests for over 5 minutes"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/rate-limiting#sustained-limiting"
+          
+      # Alert on unexpected 429 errors from APIs
+      - alert: UnexpectedAPIRateLimiting
+        expr: |
+          (
+            rate(http_client_requests_total{status_code="429"}[5m]) > 0
+            and
+            rate_limit_usage_ratio < 0.8
+          )
+        for: 5m
+        labels:
+          severity: warning
+          component: rate_limiter
+          team: platform
+        annotations:
+          summary: "Unexpected 429 errors from {{ $labels.service }}"
+          description: "Receiving 429 errors from {{ $labels.service }} but our rate limit usage is only {{ $value | humanizePercentage }}"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/rate-limiting#unexpected-429"
+          
+      # Alert when circuit breaker opens
+      - alert: RateLimitCircuitBreakerOpen
+        expr: rate_limit_circuit_breaker_open == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: rate_limiter
+          team: platform
+          pagerduty: true
+        annotations:
+          summary: "Rate limit circuit breaker open for {{ $labels.service }}"
+          description: "Circuit breaker is open for {{ $labels.service }}, all requests are being rejected"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/rate-limiting#circuit-breaker"
+          
+      # Alert on high backoff delays
+      - alert: HighRateLimitBackoff
+        expr: |
+          histogram_quantile(0.95, 
+            sum by (service, le) (
+              rate(rate_limit_backoff_seconds_bucket[5m])
+            )
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          component: rate_limiter
+          team: platform
+        annotations:
+          summary: "High backoff delays for {{ $labels.service }}"
+          description: "95th percentile backoff delay for {{ $labels.service }} is {{ $value }}s"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/rate-limiting#high-backoff"
+          
+      # Alert on Redis performance issues
+      - alert: RateLimitRedisSlowOperations
+        expr: |
+          histogram_quantile(0.99,
+            sum by (operation, le) (
+              rate(rate_limit_redis_duration_seconds_bucket[5m])
+            )
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: rate_limiter
+          team: platform
+        annotations:
+          summary: "Slow Redis operations for rate limiting"
+          description: "Redis {{ $labels.operation }} operations p99 latency is {{ $value }}s"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/rate-limiting#redis-performance"
+          
+      # Alert on API quota depletion
+      - alert: APIQuotaNearDepletion
+        expr: |
+          (
+            api_quota_remaining{limit_type="requests"} < 1000
+            or
+            api_quota_remaining{limit_type="tokens"} < 10000
+          )
+        for: 5m
+        labels:
+          severity: warning
+          component: rate_limiter
+          team: platform
+        annotations:
+          summary: "API quota near depletion for {{ $labels.service }}"
+          description: "{{ $labels.service }} has only {{ $value }} {{ $labels.limit_type }} remaining"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/rate-limiting#quota-depletion"
+          
+      # Alert on cost spike
+      - alert: MLCostSpike
+        expr: |
+          (
+            sum(rate(ml_cost_usd_total[1h])) * 3600 >
+            sum(rate(ml_cost_usd_total[24h] offset 1d)) * 3600 * 2
+          )
+        for: 30m
+        labels:
+          severity: warning
+          component: cost_monitoring
+          team: platform
+        annotations:
+          summary: "ML cost spike detected"
+          description: "Current hourly cost is 2x higher than yesterday's average: ${{ $value | humanize }}/hour"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/cost-monitoring#spike"
+          
+      # Alert on projected monthly cost exceeding threshold
+      - alert: ProjectedMonthlyCostHigh
+        expr: sum(increase(ml_cost_usd_total[7d])) * 4.3 > 5000
+        for: 1h
+        labels:
+          severity: warning
+          component: cost_monitoring
+          team: platform
+        annotations:
+          summary: "Projected monthly ML cost exceeds threshold"
+          description: "Projected monthly cost: ${{ $value | humanize }} (threshold: $5000)"
+          runbook_url: "https://wiki.bookmarkai.com/runbooks/cost-monitoring#monthly-threshold"

@@ -16,6 +16,17 @@ from .media_preflight import MediaPreflightService
 
 logger = logging.getLogger(__name__)
 
+# Import rate-limited transcription service
+try:
+    from .transcription_rate_limited import RateLimitedTranscriptionService
+    from .rate_limited_client import RateLimitError
+    RATE_LIMITING_AVAILABLE = True
+except ImportError:
+    logger.warning("Rate limiting not available for Whisper service")
+    RATE_LIMITING_AVAILABLE = False
+    RateLimitedTranscriptionService = TranscriptionService  # Fallback
+    RateLimitError = Exception  # Fallback
+
 # Import metrics functions
 try:
     from bookmarkai_shared.metrics import (
@@ -94,7 +105,14 @@ def transcribe_api(
     
     # Initialize services
     audio_processor = AudioProcessor()
-    transcription_service = TranscriptionService()
+    
+    # Use rate-limited service if available and enabled
+    enable_rate_limiting = os.environ.get('ENABLE_WHISPER_RATE_LIMITING', 'true').lower() == 'true'
+    if enable_rate_limiting and RATE_LIMITING_AVAILABLE:
+        transcription_service = RateLimitedTranscriptionService()
+    else:
+        transcription_service = TranscriptionService()
+    
     preflight_service = MediaPreflightService()
     
     # Pre-flight validation
@@ -259,12 +277,17 @@ def transcribe_api(
                 
                 # Check for soft timeout
                 try:
-                    chunk_result = transcription_service.transcribe_api(
-                        chunk_path,
-                        end - start,
-                        language=options.get('language') if options else None,
-                        prompt=options.get('prompt') if options else None
-                    )
+                    # Add identifier for rate limiting if supported
+                    transcribe_kwargs = {
+                        'audio_path': chunk_path,
+                        'duration_seconds': end - start,
+                        'language': options.get('language') if options else None,
+                        'prompt': options.get('prompt') if options else None
+                    }
+                    if hasattr(transcription_service, 'transcribe_api') and 'identifier' in transcription_service.transcribe_api.__code__.co_varnames:
+                        transcribe_kwargs['identifier'] = share_id
+                    
+                    chunk_result = transcription_service.transcribe_api(**transcribe_kwargs)
                     chunk_results.append((chunk_result, start))
                     
                 except SoftTimeLimitExceeded:
@@ -284,12 +307,17 @@ def transcribe_api(
             
             # Track model latency
             model_start = time.time()
-            final_result = transcription_service.transcribe_api(
-                audio_path,
-                duration,
-                language=options.get('language') if options else None,
-                prompt=options.get('prompt') if options else None
-            )
+            # Add identifier for rate limiting if supported
+            transcribe_kwargs = {
+                'audio_path': audio_path,
+                'duration_seconds': duration,
+                'language': options.get('language') if options else None,
+                'prompt': options.get('prompt') if options else None
+            }
+            if hasattr(transcription_service, 'transcribe_api') and 'identifier' in transcription_service.transcribe_api.__code__.co_varnames:
+                transcribe_kwargs['identifier'] = share_id
+            
+            final_result = transcription_service.transcribe_api(**transcribe_kwargs)
             model_latency = time.time() - model_start
             
             # Track model latency metric
@@ -332,6 +360,29 @@ def transcribe_api(
         # Calculate processing time
         processing_time = time.time() - start_time
         
+        # Log queue depth if using rate limited service
+        queue_info = {}
+        try:
+            if isinstance(transcription_service, RateLimitedTranscriptionService) and hasattr(transcription_service, 'rate_limited_client') and transcription_service.rate_limited_client:
+                queue_info = transcription_service.rate_limited_client.get_queue_depth()
+                logger.info(
+                    f"Whisper queue depth: {queue_info['concurrent_requests']}/{queue_info['max_concurrent']} "
+                    f"concurrent requests, {queue_info['active_keys']} active keys"
+                )
+        except Exception as e:
+            logger.debug(f"Could not get queue depth: {e}")
+            
+            # Track queue depth metrics if available
+            if METRICS_ENABLED:
+                try:
+                    from bookmarkai_shared.metrics import service_queue_depth
+                    service_queue_depth.labels(
+                        service='whisper',
+                        queue_type='concurrent_requests'
+                    ).set(queue_info['concurrent_requests'])
+                except ImportError:
+                    pass
+        
         logger.info(
             f"Transcription completed successfully: "
             f"share_id={share_id}, "
@@ -361,6 +412,11 @@ def transcribe_api(
         if METRICS_ENABLED:
             track_budget_exceeded('hourly' if 'hourly' in str(e) else 'daily', 'whisper')
         # Re-raise budget errors
+        raise
+        
+    except RateLimitError as e:
+        logger.warning(f"Rate limit hit for share_id {share_id}: {str(e)}")
+        # Re-raise for retry logic with appropriate delay
         raise
         
     except Exception as e:

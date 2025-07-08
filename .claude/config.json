@@ -58,7 +58,8 @@
       "packages/api-gateway/src",
       "packages/mobile/bookmarkaimobile/src",
       "python/*/src",
-      "docs/architecture/decisions"
+      "docs/architecture/decisions",
+      "env/*"
     ]
   },
   "workflow": {

@@ -9,6 +9,7 @@ setup(
         "bookmarkai-shared",  # Our shared package
         "openai>=1.0.0",
         "anthropic>=0.3.0",
+        "tiktoken>=0.5.0",  # For accurate token counting
         "python-dotenv>=1.0.0",
     ],
     extras_require={

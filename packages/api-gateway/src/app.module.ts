@@ -10,6 +10,7 @@ import { MLModule } from './modules/ml/ml.module';
 import { MLResultsModule } from './modules/ml-results/ml-results.module';
 import { RateLimitMiddleware } from './modules/auth/middlewares/rate-limit.middleware';
 import { ConfigService } from './config/services/config.service';
+import { RateLimiterModule } from './common/rate-limiter/rate-limiter.module';
 
 /**
  * Root module for BookmarkAI API Gateway
@@ -20,6 +21,7 @@ import { ConfigService } from './config/services/config.service';
     ConfigModule,
     DatabaseModule,
     ScheduleModule.forRoot(),
+    RateLimiterModule, // Worker-level distributed rate limiting
 
     // Register BullMQ for queue management
     BullModule.forRootAsync({

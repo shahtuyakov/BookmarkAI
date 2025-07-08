@@ -5,6 +5,9 @@ setup(
     version="0.1.0",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
+    package_data={
+        "bookmarkai_shared.rate_limiter": ["scripts/*.lua"],
+    },
     install_requires=[
         "celery[redis]==5.5.0",
         "kombu>=5.3.5",
@@ -19,6 +22,7 @@ setup(
         "opentelemetry-instrumentation-celery>=0.41b0",
         "opentelemetry-exporter-otlp-proto-http>=1.20.0",
         "prometheus-client>=0.19.0",
+        "pyyaml>=6.0.0",
     ],
     python_requires=">=3.9",
 )

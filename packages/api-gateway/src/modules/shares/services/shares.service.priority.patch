@@ -1,0 +1,50 @@
+// PATCH: Update SharesService to use PriorityQueueService
+// This shows the changes needed to integrate priority queues
+
+// Add to imports:
+import { PriorityQueueService } from './priority-queue.service';
+
+// Update constructor:
+constructor(
+  private readonly sharesRepository: SharesRepository,
+  private readonly idempotencyService: IdempotencyService,
+  @InjectQueue(SHARE_QUEUE.NAME) private readonly shareQueue: Queue, // Keep for fallback
+  private readonly fetcherRegistry: ContentFetcherRegistry,
+  private readonly priorityQueueService: PriorityQueueService, // ADD THIS
+) {}
+
+// Replace the queue.add call (lines 96-107) with:
+
+  // Check if priority queues are enabled
+  const usePriorityQueues = this.configService.get('PRIORITY_QUEUES_ENABLED', false);
+  
+  if (usePriorityQueues) {
+    // Use priority-based queuing
+    try {
+      await this.priorityQueueService.queueShare(
+        newShare.id,
+        userId,
+        platform,
+        {
+          url: newShare.url,
+          title: newShare.title,
+        }
+      );
+    } catch (error) {
+      // Handle rate limit errors gracefully
+      if (error.message.includes('rate limit')) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+  } else {
+    // Legacy queue for backward compatibility
+    await this.shareQueue.add(
+      SHARE_QUEUE.JOBS.PROCESS,
+      { shareId: newShare.id },
+      { 
+        attempts: 3, 
+        backoff: { type: 'exponential', delay: 5000 },
+      },
+    );
+  }
