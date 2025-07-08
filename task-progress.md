@@ -1,6 +1,6 @@
 # BookmarkAI Task Map - Implementation Status
 
-*Last Updated: January 30, 2025*  
+*Last Updated: January 7, 2025*  
 *Legend: ~~Strikethrough~~ = Complete | **Bold** = In Progress | Normal = Not Started | 🚫 = Deferred*
 
 ## Phase 0: Local Dev Environment (Week 0) - **100% COMPLETE**
@@ -50,7 +50,7 @@
 | ~~2.8~~ | ~~Create metadata storage schema~~ | Backend | 2 days | 2.1 | ✅ COMPLETE |
 | ~~2.9~~ | ~~Set up worker status tracking~~ | Backend | 2 days | 2.7, 2.8 | ✅ COMPLETE |
 | ~~2.10~~ | ~~Connect fetchers to orchestration worker~~ | Backend | 3 days | 2.1-2.9 | ✅ COMPLETE |
-| **2.11** | **Implement rate-limit/back-off logic** | Backend | 2 days | 2.2-2.4 | ⚡ PARTIAL - TODO at worker level |
+| ~~2.11~~ | ~~Implement rate-limit/back-off logic~~ | Backend | 2 days | 2.2-2.4 | ✅ COMPLETE - See Phase 5 for advanced features |
 | 2.12 | Create replayable test fixtures | QA | 3 days | 2.2-2.4 | ❌ NOT IMPLEMENTED |
 | **2.13** | **Set up end-to-end tracing** | DevOps | 3 days | 2.10 | ⚡ PARTIAL - Future work |
 | ~~2.14~~ | ~~Implement Generic OpenGraph scraper~~ | Backend | 2 days | 2.1 | ✅ COMPLETE |
