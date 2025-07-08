@@ -13,6 +13,13 @@ from opentelemetry.trace import Status, StatusCode
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 import logging
 
+# Import the new propagator - will use it when feature flag is enabled
+try:
+    from .tracing.propagator import trace_celery_task_with_propagation, trace_propagator
+except ImportError:
+    trace_celery_task_with_propagation = None
+    trace_propagator = None
+
 logger = logging.getLogger(__name__)
 
 # Global tracer instance
@@ -136,6 +143,15 @@ def trace_celery_task(task_name: str):
     Args:
         task_name: Name of the task for the span
     """
+    # Check if we should use the new propagator (feature flag)
+    enable_trace_propagation = os.getenv('ENABLE_TRACE_PROPAGATION', 'false').lower() == 'true'
+    
+    # Use new propagator if available and enabled
+    if enable_trace_propagation and trace_celery_task_with_propagation:
+        logger.info(f"Using enhanced trace propagator for task {task_name}")
+        return trace_celery_task_with_propagation(task_name)
+    
+    # Otherwise use the legacy implementation
     def decorator(func):
         def wrapper(*args, **kwargs):
             # Extract trace context from Celery headers
