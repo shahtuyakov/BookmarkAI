@@ -52,7 +52,7 @@
 | ~~2.10~~ | ~~Connect fetchers to orchestration worker~~ | Backend | 3 days | 2.1-2.9 | ✅ COMPLETE |
 | ~~2.11~~ | ~~Implement rate-limit/back-off logic~~ | Backend | 2 days | 2.2-2.4 | ✅ COMPLETE - See Phase 5 for advanced features |
 | 2.12 | Create replayable test fixtures | QA | 3 days | 2.2-2.4 | ❌ NOT IMPLEMENTED |
-| **2.13** | **Set up end-to-end tracing** | DevOps | 3 days | 2.10 | ⚡ PARTIAL - Future work |
+| **2.13** | **Set up end-to-end tracing** | DevOps | 3 days | 2.10 | ⚡ PARTIAL - ADR-212 created |
 | ~~2.14~~ | ~~Implement Generic OpenGraph scraper~~ | Backend | 2 days | 2.1 | ✅ COMPLETE |
 | **2.15** | **Add YouTube & Instagram fetchers** | Backend | 4 days | 2.1 | ⚡ PARTIAL - YouTube has issues |
 | 2.16 | Build URL canonicalization & deduplication service | Backend | 3 days | 2.7, 2.8 | ❌ NOT IMPLEMENTED |
