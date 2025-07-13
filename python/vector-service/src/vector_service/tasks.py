@@ -30,6 +30,7 @@ from bookmarkai_shared.metrics import (
     track_ml_cost,
     track_tokens
 )
+from bookmarkai_shared.tracing import trace_celery_task
 from .metrics import (
     embeddings_generated_total,
     embedding_chunks_total,
@@ -99,6 +100,7 @@ def get_services():
     max_retries=3,
     default_retry_delay=60,
 )
+@trace_celery_task('generate_embeddings')
 @task_metrics(worker_type='vector')
 def generate_embeddings(
     self: Task,
@@ -412,6 +414,7 @@ def generate_embeddings(
     soft_time_limit=1200,  # 20 minutes soft limit
     time_limit=1800,  # 30 minutes hard limit
 )
+@trace_celery_task('generate_embeddings_batch')
 @task_metrics(worker_type='vector')
 def generate_embeddings_batch(
     self: Task,
@@ -498,6 +501,7 @@ def generate_embeddings_batch(
     acks_late=True,
     reject_on_worker_lost=True,
 )
+@trace_celery_task('generate_embeddings_local')
 def generate_embeddings_local(
     self: Task,
     share_id: str,
@@ -528,6 +532,7 @@ def generate_embeddings_local(
 
 # Health check task
 @app.task(name='vector_service.tasks.health_check')
+@trace_celery_task('health_check')
 def health_check() -> Dict[str, Any]:
     """Health check task for monitoring."""
     try:

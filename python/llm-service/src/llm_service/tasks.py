@@ -95,8 +95,8 @@ def calculate_cost(provider: str, model: str, tokens: Dict[str, int]) -> Dict[st
     acks_late=True,
     reject_on_worker_lost=True,
 )
-@task_metrics(worker_type='llm')
 @trace_celery_task('summarize_content')
+@task_metrics(worker_type='llm')
 def summarize_content(
     self: Task,
     share_id: str,
@@ -401,6 +401,7 @@ Focus on the main ideas, key insights, and actionable information.
     acks_late=True,
     reject_on_worker_lost=True,
 )
+@trace_celery_task('summarize_content_local')
 def summarize_content_local(
     self: Task,
     share_id: str,
@@ -446,8 +447,8 @@ def summarize_content_local(
     acks_late=True,
     reject_on_worker_lost=True,
 )
-@task_metrics(worker_type='llm')
 @trace_celery_task('summarize_video_combined')
+@task_metrics(worker_type='llm')
 def summarize_video_combined(
     self: Task,
     task_data: Dict[str, Any]

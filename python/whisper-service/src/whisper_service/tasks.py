@@ -13,6 +13,7 @@ from .audio_processor import AudioProcessor
 from .transcription import TranscriptionService, TranscriptionResult
 from .db import save_transcription_result, track_transcription_cost, check_budget_limits
 from .media_preflight import MediaPreflightService
+from bookmarkai_shared.tracing import trace_celery_task
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ class BudgetExceededError(Exception):
     autoretry_for=(Exception,),
     retry_kwargs={'max_retries': 3, 'countdown': 60}
 )
+@trace_celery_task('transcribe_api')
 @task_metrics(worker_type='whisper')
 def transcribe_api(
     self: Task,
@@ -445,6 +447,7 @@ def transcribe_api(
     acks_late=True,
     reject_on_worker_lost=True,
 )
+@trace_celery_task('transcribe_local')
 @task_metrics(worker_type='whisper')
 def transcribe_local(
     self: Task,
