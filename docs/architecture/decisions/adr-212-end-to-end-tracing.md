@@ -294,3 +294,65 @@ After proving value with the MVP, we can expand to:
 - [W3C Trace Context](https://www.w3.org/TR/trace-context/)
 - [Tempo Documentation](https://grafana.com/docs/tempo/latest/)
 - [Distributed Tracing Best Practices](https://www.cncf.io/blog/2022/05/18/distributed-tracing-best-practices/)
+
+## Implementation Status (Updated: 2025-01-13)
+
+### What Was Implemented
+
+1. **OpenTelemetry Setup**: ✅ All services (API Gateway, LLM, Whisper, Vector) have OpenTelemetry configured and report traces to Jaeger
+
+2. **Trace Context Propagation**: ⚠️ Partially implemented
+
+   - API Gateway correctly injects W3C Trace Context headers into Celery messages
+   - Python services have trace extraction logic using `current_task`
+   - All Celery tasks decorated with `@trace_celery_task`
+
+3. **Individual Service Tracing**: ✅ Each service creates its own traces successfully
+
+### Known Issues
+
+1. **Trace Context Not Propagating Through RabbitMQ/Celery**
+
+   - Despite correct implementation, traces remain isolated per service
+   - Root cause appears to be in Celery's message header handling
+   - Each service creates new trace IDs instead of continuing parent traces
+
+2. **Technical Findings**
+   - Celery's `current_task.request.headers` returns minimal headers (`{'meth': None}`)
+   - Trace context headers added to Celery message body are not accessible via standard Celery APIs
+   - Potential conflict between OpenTelemetry's automatic Celery instrumentation and custom decorators
+
+### Current State
+
+- **Functional Impact**: None - system works perfectly
+- **Observability**: Each service has independent traces visible in Jaeger
+- **Correlation**: Can use timestamps and correlation IDs to manually link requests
+
+### Recommended Next Steps
+
+1. **Option A: Accept Current State**
+
+   - Document that traces are per-service
+   - Use correlation IDs for request tracking
+   - Revisit when Celery/OpenTelemetry integration improves
+
+2. **Option B: Alternative Implementation**
+
+   - Store trace context in Redis with correlation ID as key
+   - Retrieve trace context at task start using correlation ID
+   - More complex but guaranteed to work
+
+3. **Option C: Deep Investigation**
+   - Debug Celery's internal message handling
+   - Consider custom Celery task base class
+   - Potentially contribute fix upstream
+
+### Decision
+
+Proceeding with **Option A** for now. The current implementation provides:
+
+- Full tracing within each service boundary
+- Correlation IDs for manual request tracking
+- No functional impact on the system
+
+The effort to achieve full trace propagation through Celery is disproportionate to the benefit at this stage.

@@ -1,19 +1,16 @@
+import * as fs from 'fs';
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '../../config/services/config.service';
-import { MLMetricsService } from './services/ml-metrics.service';
 import * as amqplib from 'amqplib';
 import { v4 as uuidv4 } from 'uuid';
-import { trace, context, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import {
   SummarizationTaskSchema,
   TranscriptionTaskSchema,
   EmbeddingTaskSchema,
   BatchEmbeddingTaskSchema,
-  type SummarizationTask,
-  type TranscriptionTask,
-  type EmbeddingTask,
-  type BatchEmbeddingTask,
 } from '@bookmarkai/contracts';
+import { ConfigService } from '../../config/services/config.service';
+import { MLMetricsService } from './services/ml-metrics.service';
 
 export interface MLTaskPayload {
   version: '1.0';
@@ -54,7 +51,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
   private connection: amqplib.ChannelModel | null = null;
   private channel: amqplib.ConfirmChannel | null = null;
   private readonly exchangeName = 'bookmarkai.ml';
-  
+
   // Connection reliability improvements
   private connectionState: ConnectionState = ConnectionState.DISCONNECTED;
   private reconnectAttempts = 0;
@@ -66,32 +63,36 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
   private healthCheckTimer: NodeJS.Timeout | null = null;
   private readonly healthCheckInterval = 30000; // 30 seconds
   private isShuttingDown = false;
-  
+
   // Circuit breaker pattern
   private consecutiveFailures = 0;
   private readonly maxConsecutiveFailures = 10;
   private circuitBreakerOpenUntil: Date | null = null;
   private readonly circuitBreakerCooldown = 30000; // 30 seconds
-  
+
   // Message retry queue
   private retryQueue: Map<string, RetryableMessage> = new Map();
   private retryTimer: NodeJS.Timeout | null = null;
   private readonly maxMessageRetries = 3;
   private readonly messageRetryBaseDelay = 1000; // 1 second
   private readonly messageRetryMaxDelay = 10000; // 10 seconds
-  
+
   // Publisher confirm settings
   private readonly publishTimeout = 5000; // 5 seconds
-  private pendingConfirms: Map<number, { resolve: Function; reject: Function; timer: NodeJS.Timeout }> = new Map();
-  
+  private pendingConfirms: Map<
+    number,
+    { resolve: (value: void) => void; reject: (reason?: any) => void; timer: NodeJS.Timeout }
+  > = new Map();
+
   // Contract validation
   private readonly enableContractValidation: boolean;
-  
+
   constructor(
     private readonly configService: ConfigService,
     private readonly metricsService: MLMetricsService,
   ) {
-    this.enableContractValidation = this.configService.get<string>('ENABLE_CONTRACT_VALIDATION', 'false') === 'true';
+    this.enableContractValidation =
+      this.configService.get<string>('ENABLE_CONTRACT_VALIDATION', 'false') === 'true';
     if (this.enableContractValidation) {
       this.logger.log('Contract validation is enabled for ML tasks');
     }
@@ -105,7 +106,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
 
   async onModuleDestroy() {
     this.isShuttingDown = true;
-    
+
     // Clear all timers
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -119,20 +120,22 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       clearInterval(this.retryTimer);
       this.retryTimer = null;
     }
-    
+
     // Clear pending confirms
     for (const [, confirm] of this.pendingConfirms) {
       clearTimeout(confirm.timer);
       confirm.reject(new Error('Service shutting down'));
     }
     this.pendingConfirms.clear();
-    
+
     await this.disconnect();
   }
 
   private async connect(): Promise<void> {
-    if (this.connectionState === ConnectionState.CONNECTING || 
-        this.connectionState === ConnectionState.CONNECTED) {
+    if (
+      this.connectionState === ConnectionState.CONNECTING ||
+      this.connectionState === ConnectionState.CONNECTED
+    ) {
       return;
     }
 
@@ -142,7 +145,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
     try {
       const brokerUrl = this.configService.get<string>(
         'RABBITMQ_URL',
-        'amqp://ml:ml_password@localhost:5672/'
+        'amqp://ml:ml_password@localhost:5672/',
       );
 
       // Build connection options with TLS support
@@ -152,8 +155,9 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       };
 
       // Check if we're using AMQPS (TLS)
-      const useSsl = this.configService.get<string>('RABBITMQ_USE_SSL', 'false').toLowerCase() === 'true' || 
-                     brokerUrl.startsWith('amqps://');
+      const useSsl =
+        this.configService.get<string>('RABBITMQ_USE_SSL', 'false').toLowerCase() === 'true' ||
+        brokerUrl.startsWith('amqps://');
 
       if (useSsl) {
         // For cloud services like Amazon MQ, TLS is handled automatically
@@ -161,10 +165,10 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         const caCert = this.configService.get<string>('RABBITMQ_SSL_CACERT', '');
         const clientCert = this.configService.get<string>('RABBITMQ_SSL_CERTFILE', '');
         const clientKey = this.configService.get<string>('RABBITMQ_SSL_KEYFILE', '');
-        const verifyPeer = this.configService.get<string>('RABBITMQ_VERIFY_PEER', 'true').toLowerCase() === 'true';
+        const verifyPeer =
+          this.configService.get<string>('RABBITMQ_VERIFY_PEER', 'true').toLowerCase() === 'true';
 
         if (caCert || clientCert || clientKey || !verifyPeer) {
-          const fs = require('fs');
           connectionOptions.socket = {
             cert: clientCert ? fs.readFileSync(clientCert) : undefined,
             key: clientKey ? fs.readFileSync(clientKey) : undefined,
@@ -179,7 +183,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       this.connection = await amqplib.connect(brokerUrl, connectionOptions);
 
       // Set up connection event handlers
-      this.connection.on('error', (err) => {
+      this.connection.on('error', err => {
         this.logger.error('RabbitMQ connection error:', err);
         this.handleConnectionError();
       });
@@ -191,7 +195,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         }
       });
 
-      this.connection.on('blocked', (reason) => {
+      this.connection.on('blocked', reason => {
         this.logger.warn('RabbitMQ connection blocked:', reason);
         this.metricsService.incrementConnectionError('blocked');
       });
@@ -202,9 +206,9 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
 
       // Create confirm channel with proper error handling
       this.channel = await this.connection.createConfirmChannel();
-      
+
       // Set up channel event handlers
-      this.channel.on('error', (err) => {
+      this.channel.on('error', err => {
         this.logger.error('RabbitMQ channel error:', err);
         this.handleConnectionError();
       });
@@ -216,7 +220,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         }
       });
 
-      this.channel.on('return', (msg) => {
+      this.channel.on('return', msg => {
         this.logger.warn('Message returned:', {
           routingKey: msg.fields.routingKey,
           replyCode: msg.fields.replyCode,
@@ -226,7 +230,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       });
 
       // Set up publisher confirms handlers
-      this.channel.on('ack', (data) => {
+      this.channel.on('ack', data => {
         const confirm = this.pendingConfirms.get(data.deliveryTag);
         if (confirm) {
           clearTimeout(confirm.timer);
@@ -235,7 +239,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         }
       });
 
-      this.channel.on('nack', (data) => {
+      this.channel.on('nack', data => {
         const confirm = this.pendingConfirms.get(data.deliveryTag);
         if (confirm) {
           clearTimeout(confirm.timer);
@@ -284,7 +288,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       this.circuitBreakerOpenUntil = null;
 
       this.logger.log('Connected to RabbitMQ and initialized ML queues');
-      
+
       // Process any pending retry messages
       await this.processRetryQueue();
     } catch (error) {
@@ -323,9 +327,9 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
     // Calculate exponential backoff with jitter
     const baseDelay = Math.min(
       this.initialReconnectDelay * Math.pow(2, this.reconnectAttempts),
-      this.maxReconnectDelay
+      this.maxReconnectDelay,
     );
-    
+
     // Add jitter to prevent thundering herd
     const jitter = baseDelay * this.reconnectJitterFactor * Math.random();
     const delay = Math.floor(baseDelay + jitter);
@@ -416,10 +420,13 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         message.lastError = error.message;
 
         if (message.attempts >= this.maxMessageRetries) {
-          this.logger.error(`Message ${id} failed after ${message.attempts} attempts. Moving to DLQ.`, {
-            task: message.task,
-            error: error.message,
-          });
+          this.logger.error(
+            `Message ${id} failed after ${message.attempts} attempts. Moving to DLQ.`,
+            {
+              task: message.task,
+              error: error.message,
+            },
+          );
           this.retryQueue.delete(id);
           this.metricsService.incrementTasksSent(message.task.taskType, 'failure');
           // TODO: Implement actual DLQ publishing
@@ -427,10 +434,12 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
           // Calculate next retry time with exponential backoff
           const retryDelay = Math.min(
             this.messageRetryBaseDelay * Math.pow(2, message.attempts - 1),
-            this.messageRetryMaxDelay
+            this.messageRetryMaxDelay,
           );
           message.nextRetryTime = now + retryDelay;
-          this.logger.warn(`Message ${id} retry ${message.attempts} failed. Next retry in ${retryDelay}ms`);
+          this.logger.warn(
+            `Message ${id} retry ${message.attempts} failed. Next retry in ${retryDelay}ms`,
+          );
         }
       }
     }
@@ -440,7 +449,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
     if (!this.circuitBreakerOpenUntil) {
       return false;
     }
-    
+
     if (new Date() > this.circuitBreakerOpenUntil) {
       this.circuitBreakerOpenUntil = null;
       this.consecutiveFailures = 0;
@@ -448,7 +457,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       this.logger.log('Circuit breaker closed');
       return false;
     }
-    
+
     return true;
   }
 
@@ -471,7 +480,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       if (this.connectionState !== ConnectionState.CONNECTING) {
         await this.connect();
       }
-      
+
       // If still not connected after attempt, throw error
       if (this.connectionState !== ConnectionState.CONNECTED || !this.channel) {
         throw new Error('RabbitMQ is not connected');
@@ -490,7 +499,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
           clearTimeout(timer);
           resolve();
         })
-        .catch((err) => {
+        .catch(err => {
           clearTimeout(timer);
           reject(err);
         });
@@ -511,13 +520,14 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       maxLength?: number;
       style?: 'brief' | 'detailed' | 'bullets';
       backend?: 'api' | 'local';
-    }
+    },
   ): Promise<void> {
     // Determine backend based on provider or environment preference
-    const backend = options?.backend || 
+    const backend =
+      options?.backend ||
       (options?.provider === 'local' ? 'local' : 'api') ||
       (this.configService.get<string>('PREFERRED_LLM_BACKEND', 'api') as 'api' | 'local');
-    
+
     const task: MLTaskPayload = {
       version: '1.0',
       taskType: 'summarize_llm',
@@ -548,12 +558,13 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       backend?: 'api' | 'local';
       normalize?: boolean;
       prompt?: string;
-    }
+    },
   ): Promise<void> {
     // Determine backend based on environment or load
-    const backend = options?.backend || 
+    const backend =
+      options?.backend ||
       (this.configService.get<string>('PREFERRED_STT', 'api') as 'api' | 'local');
-    
+
     const task: MLTaskPayload = {
       version: '1.0',
       taskType: 'transcribe_whisper',
@@ -591,10 +602,11 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       forceModel?: 'text-embedding-3-small' | 'text-embedding-3-large';
       chunkStrategy?: 'none' | 'transcript' | 'paragraph' | 'sentence' | 'fixed';
       backend?: 'api' | 'local';
-    }
+    },
   ): Promise<void> {
     // Determine backend (default to API for now)
-    const backend = options?.backend || 
+    const backend =
+      options?.backend ||
       (this.configService.get<string>('PREFERRED_EMBEDDING_BACKEND', 'api') as 'api' | 'local');
 
     const task: MLTaskPayload = {
@@ -637,7 +649,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         forceModel?: 'text-embedding-3-small' | 'text-embedding-3-large';
         chunkStrategy?: 'none' | 'transcript' | 'paragraph' | 'sentence' | 'fixed';
       };
-    }>
+    }>,
   ): Promise<void> {
     // Convert to format expected by the batch task
     const batchPayload = tasks.map(t => ({
@@ -716,7 +728,10 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
 
     // Set a timeout for span completion
     const spanTimeout = setTimeout(() => {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: 'Span timeout - operation took too long' });
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: 'Span timeout - operation took too long',
+      });
       span.end();
     }, 30000); // 30 second timeout for publishing
 
@@ -726,7 +741,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       const spanContext = currentSpan.spanContext();
       if (spanContext && spanContext.traceId && spanContext.spanId) {
         task.metadata.traceparent = `00-${spanContext.traceId}-${spanContext.spanId}-01`;
-        
+
         // Also add tracestate if present
         if (spanContext.traceState) {
           task.metadata.tracestate = spanContext.traceState.serialize();
@@ -736,31 +751,27 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
 
     // Determine routing key based on task type and backend
     let routingKey = `ml.${task.taskType.split('_')[0]}`;
-    if (task.taskType === 'transcribe_whisper' && 
-        task.payload.options?.backend === 'local') {
+    if (task.taskType === 'transcribe_whisper' && task.payload.options?.backend === 'local') {
       routingKey = 'ml.transcribe_local';
     }
-    if (task.taskType === 'summarize_llm' && 
-        task.payload.options?.backend === 'local') {
+    if (task.taskType === 'summarize_llm' && task.payload.options?.backend === 'local') {
       routingKey = 'ml.summarize_local';
     }
-    
+
     // Map task types to Celery task names
     const taskNameMap = {
-      'summarize_llm': 'llm_service.tasks.summarize_content',
-      'transcribe_whisper': 'whisper.tasks.transcribe_api',
-      'embed_vectors': 'vector_service.tasks.generate_embeddings'
+      summarize_llm: 'llm_service.tasks.summarize_content',
+      transcribe_whisper: 'whisper.tasks.transcribe_api',
+      embed_vectors: 'vector_service.tasks.generate_embeddings',
     };
-    
+
     // Use override task name if provided (for batch tasks)
     let celeryTaskName = overrideTaskName || taskNameMap[task.taskType] || task.taskType;
-    if (task.taskType === 'transcribe_whisper' && 
-        task.payload.options?.backend === 'local') {
+    if (task.taskType === 'transcribe_whisper' && task.payload.options?.backend === 'local') {
       celeryTaskName = 'whisper.tasks.transcribe_local';
     }
     // For summarization, check if we should use local queue
-    if (task.taskType === 'summarize_llm' && 
-        task.payload.options?.backend === 'local') {
+    if (task.taskType === 'summarize_llm' && task.payload.options?.backend === 'local') {
       celeryTaskName = 'llm_service.tasks.summarize_content_local';
     }
 
@@ -771,7 +782,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
     } catch (error) {
       span.recordException(error);
       span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
-      
+
       // Add to retry queue if it's a temporary failure
       if (this.shouldRetryMessage(error)) {
         const retryId = `${task.shareId}-${task.taskType}-${task.metadata.correlationId}`;
@@ -795,31 +806,33 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
   }
 
   private async publishTaskInternal(
-    task: MLTaskPayload, 
-    celeryTaskName: string, 
-    routingKey: string
+    task: MLTaskPayload,
+    celeryTaskName: string,
+    routingKey: string,
   ): Promise<void> {
     const startTime = Date.now();
-    
+
     try {
       await this.ensureConnected();
     } catch (error) {
       this.metricsService.incrementTasksSent(task.taskType, 'circuit_breaker_open');
       throw error;
     }
-    
+
     // Celery message format
     const celeryMessage = {
       id: task.metadata.correlationId,
       task: celeryTaskName,
       args: [],
-      kwargs: task.payload.isBatch ? {
-        tasks: task.payload.tasks  // For batch tasks
-      } : {
-        share_id: task.shareId,
-        content: task.payload.content,
-        options: task.payload.options
-      },
+      kwargs: task.payload.isBatch
+        ? {
+            tasks: task.payload.tasks, // For batch tasks
+          }
+        : {
+            share_id: task.shareId,
+            content: task.payload.content,
+            options: task.payload.options,
+          },
       retries: task.metadata.retryCount,
       eta: null,
       expires: null,
@@ -830,40 +843,35 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
         retries: task.metadata.retryCount,
         root_id: task.metadata.correlationId,
         parent_id: null,
-        group: null
+        group: null,
+        // Add trace context to Celery message headers
+        ...(task.metadata.traceparent && { traceparent: task.metadata.traceparent }),
+        ...(task.metadata.tracestate && { tracestate: task.metadata.tracestate }),
       },
       priority: 0,
       reply_to: null,
-      correlation_id: task.metadata.correlationId
+      correlation_id: task.metadata.correlationId,
     };
 
     const messageBuffer = Buffer.from(JSON.stringify(celeryMessage));
-    
+
     // Record message size
     this.metricsService.recordMessageSize(task.taskType, messageBuffer.length);
-    
+
     // Track retries
     if (task.metadata.retryCount > 0) {
       this.metricsService.incrementTaskRetry(task.taskType);
     }
-    
+
     try {
       // Publish with mandatory flag and proper confirms
-      const published = this.channel!.publish(
-        this.exchangeName,
-        routingKey,
-        messageBuffer,
-        {
-          persistent: true,
-          mandatory: true,
-          contentType: 'application/json',
-          contentEncoding: 'utf-8',
-          headers: {
-            ...(task.metadata.traceparent && { 'traceparent': task.metadata.traceparent }),
-            ...(task.metadata.tracestate && { 'tracestate': task.metadata.tracestate }),
-          },
-        }
-      );
+      const published = this.channel!.publish(this.exchangeName, routingKey, messageBuffer, {
+        persistent: true,
+        mandatory: true,
+        contentType: 'application/json',
+        contentEncoding: 'utf-8',
+        headers: {},
+      });
 
       if (!published) {
         throw new Error('Channel flow control prevented publishing');
@@ -871,38 +879,40 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
 
       // Wait for broker confirmation with timeout
       await this.waitForConfirmWithTimeout(this.publishTimeout);
-      
+
       // Reset consecutive failures on success
       this.consecutiveFailures = 0;
-      
+
       // Record success metrics
       const durationSeconds = (Date.now() - startTime) / 1000;
       this.metricsService.recordTaskPublishDuration(task.taskType, 'success', durationSeconds);
       this.metricsService.incrementTasksSent(task.taskType, 'success');
-      
+
       this.logger.log(`Published ${task.taskType} task for share ${task.shareId}`);
     } catch (error) {
       this.consecutiveFailures++;
-      
+
       // Check if we should open circuit breaker
       if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
         this.openCircuitBreaker();
       }
-      
+
       this.logger.error(`Failed to publish task: ${error.message}`, error);
-      
+
       // Record failure metrics
       const durationSeconds = (Date.now() - startTime) / 1000;
       this.metricsService.recordTaskPublishDuration(task.taskType, 'failure', durationSeconds);
       this.metricsService.incrementTasksSent(task.taskType, 'failure');
-      
+
       // Handle connection errors specifically
-      if (error.message?.includes('Channel closed') || 
-          error.message?.includes('Connection closed') ||
-          error.message?.includes('Channel flow control')) {
+      if (
+        error.message?.includes('Channel closed') ||
+        error.message?.includes('Connection closed') ||
+        error.message?.includes('Channel flow control')
+      ) {
         this.handleConnectionError();
       }
-      
+
       throw error;
     }
   }
@@ -918,12 +928,12 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
       'ETIMEDOUT',
       'ENOTFOUND',
     ];
-    
+
     const errorMessage = error.message || '';
     return retryableErrors.some(e => errorMessage.toLowerCase().includes(e.toLowerCase()));
   }
 
-  async getMLResult(shareId: string, taskType: string): Promise<any> {
+  async getMLResult(_shareId: string, _taskType: string): Promise<any> {
     // This would query the ml_results table
     // For now, we'll leave this as a placeholder
     // The actual implementation would use the database service
@@ -932,10 +942,12 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
 
   // Health check method for monitoring
   async isHealthy(): Promise<boolean> {
-    return this.connectionState === ConnectionState.CONNECTED && 
-           !this.isCircuitBreakerOpen() &&
-           this.channel !== null &&
-           this.connection !== null;
+    return (
+      this.connectionState === ConnectionState.CONNECTED &&
+      !this.isCircuitBreakerOpen() &&
+      this.channel !== null &&
+      this.connection !== null
+    );
   }
 
   // Get current status for debugging
@@ -951,7 +963,7 @@ export class MLProducerEnhancedService implements OnModuleInit, OnModuleDestroy 
     this.metricsService.setConnectionState(this.connectionState);
     this.metricsService.setReconnectAttempts(this.reconnectAttempts);
     this.metricsService.setCircuitBreakerState(this.isCircuitBreakerOpen());
-    
+
     return {
       connectionState: this.connectionState,
       reconnectAttempts: this.reconnectAttempts,

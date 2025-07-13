@@ -94,6 +94,9 @@ def extract_trace_context(headers: Dict[str, Any]) -> context.Context:
     # Extract context (returns empty context if no trace info found)
     try:
         ctx = propagator.extract(carrier=carrier)
+        # Log debug info if we successfully extracted a trace context
+        if carrier.get("traceparent"):
+            logger.debug(f"Extracted trace context from traceparent: {carrier.get('traceparent')}")
     except Exception as e:
         logger.warning(f"Failed to extract trace context: {e}")
         ctx = context.get_current()
@@ -139,11 +142,17 @@ def trace_celery_task(task_name: str):
     def decorator(func):
         def wrapper(*args, **kwargs):
             # Extract trace context from Celery headers
-            task = kwargs.get('__task__')
             headers = {}
             
-            if task and hasattr(task, 'request'):
+            # Try to get the current Celery task context
+            from celery import current_task
+            task = current_task
+            
+            if task and hasattr(task, 'request') and hasattr(task.request, 'headers'):
                 headers = task.request.headers or {}
+                # Log only when trace context is found for debugging
+                if 'traceparent' in headers:
+                    logger.debug(f"Task {task_name} - Trace context found: {headers['traceparent']}")
             
             # Extract context from headers
             ctx = extract_trace_context(headers)
