@@ -76,8 +76,8 @@ if [ "$llm_running" = true ] || [ "$whisper_running" = true ] || [ "$vector_runn
     [ "$vector_running" = true ] && echo "  - Vector Worker"
 fi
 
-# Stop ML services
-docker compose -f docker-compose.ml.yml down
+# Stop ML services using both compose files for proper handling
+docker compose -f docker-compose.yml -f docker-compose.ml.yml stop llm-worker whisper-worker vector-worker
 
 # Optionally stop infrastructure services
 read -p "Also stop infrastructure services (PostgreSQL, Redis, RabbitMQ)? [y/N] " -n 1 -r

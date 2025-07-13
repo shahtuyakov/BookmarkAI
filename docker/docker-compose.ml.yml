@@ -17,7 +17,7 @@ services:
       - ../env/development/shared.env
       - ../env/development/python-services.env
     ports:
-      - '9091:9091'  # Prometheus metrics endpoint
+      - '9091:9091' # Prometheus metrics endpoint
     environment:
       # Override specific values that need to reference other containers
       DB_HOST: postgres
@@ -43,8 +43,7 @@ services:
       PROMETHEUS_METRICS_PORT: 9091
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_llm
     # RabbitMQ is now in main docker-compose.yml
-    external_links:
-      - ml-rabbitmq:rabbitmq
+    # RabbitMQ is in main docker-compose.yml
     volumes:
       - ../python/llm-service:/app
       - ../python/shared:/shared:ro
@@ -55,13 +54,13 @@ services:
       --concurrency=4
       --queues=ml.summarize
       --without-gossip
-      --without-heartbeat
+      --heartbeat-interval=30
       --prefetch-multiplier=8
       --max-tasks-per-child=50
     networks:
       - bookmarkai-ml
-      - bookmarkai-main  # To access postgres and redis
-      - bookmarkai-network  # To access jaeger for tracing
+      - bookmarkai-main # To access postgres and redis
+      - bookmarkai-network # To access jaeger for tracing
     restart: unless-stopped
 
   # Whisper Transcription Worker
@@ -76,7 +75,7 @@ services:
       - ../env/development/shared.env
       - ../env/development/python-services.env
     ports:
-      - '9092:9092'  # Prometheus metrics endpoint
+      - '9092:9092' # Prometheus metrics endpoint
     environment:
       # Override specific values that need to reference other containers
       DB_HOST: postgres
@@ -101,10 +100,10 @@ services:
       SERVICE_NAME: whisper-service
       PROMETHEUS_METRICS_PORT: 9092
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_whisper
-      
+
       # Silence detection
       WHISPER_SILENCE_THRESHOLD_DB: ${WHISPER_SILENCE_THRESHOLD_DB:--40.0}
-      
+
       # AWS/S3 configuration
       AWS_DEFAULT_REGION: us-east-1
       S3_MEDIA_BUCKET: bookmarkai-media-development
@@ -115,29 +114,28 @@ services:
       # AWS credentials for boto3 (prevents profile lookup)
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
-      
+
       # Logging
       LOG_LEVEL: INFO
       PYTHONUNBUFFERED: 1
-    external_links:
-      - ml-rabbitmq:rabbitmq
+    # RabbitMQ is in main docker-compose.yml
     volumes:
       - ../python/whisper-service:/app/whisper-service
       - ../python/shared:/shared:ro
-      - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}  # Mount video directory
+      - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos} # Mount video directory
     command: >
       celery -A whisper_service.celery_app worker
       --loglevel=info
       --concurrency=4
       --queues=ml.transcribe
       --without-gossip
-      --without-heartbeat
+      --heartbeat-interval=30
       --prefetch-multiplier=8
       --max-tasks-per-child=50
     networks:
       - bookmarkai-ml
-      - bookmarkai-main  # To access postgres and redis
-      - bookmarkai-network  # To access jaeger for tracing
+      - bookmarkai-main # To access postgres and redis
+      - bookmarkai-network # To access jaeger for tracing
     restart: unless-stopped
 
   # Vector Embedding Worker
@@ -152,7 +150,7 @@ services:
       - ../env/development/shared.env
       - ../env/development/python-services.env
     ports:
-      - '9093:9093'  # Prometheus metrics endpoint
+      - '9093:9093' # Prometheus metrics endpoint
     environment:
       # Override specific values that need to reference other containers
       DB_HOST: postgres
@@ -184,7 +182,7 @@ services:
       # Batch processing
       VECTOR_BATCH_SIZE: ${VECTOR_BATCH_SIZE:-100}
       VECTOR_BUDGET_STRICT_MODE: ${VECTOR_BUDGET_STRICT_MODE:-false}
-      
+
       # AWS/S3 configuration
       AWS_DEFAULT_REGION: us-east-1
       S3_MEDIA_BUCKET: bookmarkai-media-development
@@ -195,29 +193,28 @@ services:
       # AWS credentials for boto3 (prevents profile lookup)
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
-      
+
       # Logging
       LOG_LEVEL: INFO
       PYTHONUNBUFFERED: 1
-    external_links:
-      - ml-rabbitmq:rabbitmq
+    # RabbitMQ is in main docker-compose.yml
     volumes:
       - ../python/vector-service:/app
       - ../python/shared:/shared:ro
-      - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}  # Mount video directory
+      - ${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos}:${YTDLP_DOWNLOAD_DIR:-/tmp/bookmarkai-videos} # Mount video directory
     command: >
       celery -A vector_service.celery_app worker
       --loglevel=info
       --concurrency=4
       --queues=ml.embed
       --without-gossip
-      --without-heartbeat
+      --heartbeat-interval=30
       --prefetch-multiplier=8
       --max-tasks-per-child=50
     networks:
       - bookmarkai-ml
-      - bookmarkai-main  # To access postgres and redis
-      - bookmarkai-network  # To access jaeger for tracing
+      - bookmarkai-main # To access postgres and redis
+      - bookmarkai-network # To access jaeger for tracing
     restart: unless-stopped
 
   # Flower for Celery monitoring (optional, for development)
@@ -227,11 +224,10 @@ services:
     environment:
       CELERY_BROKER_URL: amqp://ml:ml_password@rabbitmq:5672/
       FLOWER_PORT: 5555
-      FLOWER_BASIC_AUTH: admin:bookmarkai123  # Change in production
+      FLOWER_BASIC_AUTH: admin:bookmarkai123 # Change in production
     ports:
       - '5555:5555'
-    external_links:
-      - ml-rabbitmq:rabbitmq
+    # RabbitMQ is in main docker-compose.yml
     networks:
       - bookmarkai-ml
     profiles:
@@ -241,10 +237,11 @@ services:
 
 networks:
   bookmarkai-ml:
-    driver: bridge
+    external: true
+    name: docker_bookmarkai-ml # This connects to the network defined in main docker-compose
   bookmarkai-main:
     external: true
-    name: docker_default  # This connects to the main docker-compose network
+    name: docker_default # This connects to the main docker-compose network
   bookmarkai-network:
     external: true
-    name: docker_bookmarkai-network  # This connects to the network where Jaeger runs
+    name: docker_bookmarkai-network # This connects to the network where Jaeger runs

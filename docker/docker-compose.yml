@@ -15,15 +15,17 @@ services:
   # RabbitMQ for Celery message broker
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: ml-rabbitmq
+    container_name: rabbitmq
+    hostname: rabbitmq
     <<: *shared-env
     ports:
-      - '${MQ_PORT:-5672}:5672'    # AMQP port
-      - '${MQ_MANAGEMENT_PORT:-15672}:15672'  # Management UI
+      - '${MQ_PORT:-5672}:5672' # AMQP port
+      - '${MQ_MANAGEMENT_PORT:-15672}:15672' # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: ${MQ_USER}
       RABBITMQ_DEFAULT_PASS: ${MQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: ${MQ_VHOST}
+      RABBITMQ_NODENAME: rabbit@rabbitmq
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -33,7 +35,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-  
+    networks:
+      - default
+      - bookmarkai-ml
+
   # PostgreSQL with pgvector extension
   postgres:
     image: ankane/pgvector:latest
@@ -201,9 +206,9 @@ services:
       - SPAN_STORAGE_TYPE=memory
       - METRICS_STORAGE_TYPE=prometheus
     ports:
-      - '16686:16686'  # Jaeger UI
-      - '4318:4318'    # OTLP HTTP
-      - '4317:4317'    # OTLP gRPC
+      - '16686:16686' # Jaeger UI
+      - '4318:4318' # OTLP HTTP
+      - '4317:4317' # OTLP gRPC
     networks:
       - bookmarkai-network
 
@@ -220,4 +225,6 @@ volumes:
 
 networks:
   bookmarkai-network:
+    driver: bridge
+  bookmarkai-ml:
     driver: bridge

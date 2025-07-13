@@ -69,9 +69,9 @@ cd ..
 echo -e "${YELLOW}Starting ML workers with Docker Compose...${NC}"
 cd docker
 
-# Start the ML worker containers
+# Start the ML worker containers using both compose files for proper network connectivity
 echo -e "${YELLOW}Starting ML worker containers...${NC}"
-docker compose -f docker-compose.ml.yml up -d llm-worker whisper-worker vector-worker
+docker compose -f docker-compose.yml -f docker-compose.ml.yml up -d llm-worker whisper-worker vector-worker
 
 # Wait for workers to start
 echo -e "${YELLOW}Waiting for workers to initialize...${NC}"
@@ -127,7 +127,7 @@ echo "  docker logs -f bookmarkai-whisper-worker  # Transcription logs"
 echo "  docker logs -f bookmarkai-vector-worker   # Vector embedding logs"
 echo ""
 echo "To monitor Celery tasks with Flower:"
-echo "  cd docker && docker-compose -f docker-compose.ml.yml --profile monitoring up flower"
+echo "  cd docker && docker compose -f docker-compose.yml -f docker-compose.ml.yml --profile monitoring up flower"
 echo ""
 echo "To stop all services:"
 echo "  ./scripts/stop-ml-services.sh"
