@@ -137,8 +137,11 @@ export class PriorityShareProcessorFactory {
 /**
  * Legacy processor for backward compatibility
  * Handles jobs that don't have priority information
+ * 
+ * NOTE: Commented out to avoid duplicate processor registration.
+ * Enable only when transitioning to priority queues.
  */
-@Processor(SHARE_QUEUE.NAME)
+// @Processor(SHARE_QUEUE.NAME)
 export class LegacyShareProcessor extends ShareProcessor {
   private readonly legacyLogger = new Logger(LegacyShareProcessor.name);
   

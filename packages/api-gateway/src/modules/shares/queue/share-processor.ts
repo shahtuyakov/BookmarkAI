@@ -18,6 +18,7 @@ import { FetchResponse } from '../fetchers/interfaces/content-fetcher.interface'
 import { SharesRepository } from '../repositories/shares.repository';
 import { WorkerRateLimiterService } from '../services/worker-rate-limiter.service';
 import { RateLimitError } from '../../../common/rate-limiter';
+import { YouTubeProcessingStrategy } from '../fetchers/types/youtube.types';
 
 /**
  * Processor for share background tasks
@@ -54,7 +55,8 @@ export class ShareProcessor {
    */
   private requiresEnhancement(platform: string): boolean {
     // Platforms that support video enhancement workflow
-    const enhancementPlatforms = ['tiktok', 'youtube'];
+    const enhancementPlatforms = ['tiktok'];
+    // YouTube will use its own enhancement path
     return enhancementPlatforms.includes(platform.toLowerCase());
   }
 
@@ -144,6 +146,84 @@ export class ShareProcessor {
     if (fetchResult.media?.url) {
       await this.queueMediaDownload(share.id, fetchResult.media);
     }
+  }
+
+  /**
+   * Process YouTube content with ADR-213 two-phase enhancement workflow
+   */
+  private async processYouTubeEnhancement(share: any, fetchResult: FetchResponse): Promise<void> {
+    this.logger.log(`Processing YouTube enhancement for share ${share.id}`);
+    
+    const processingStrategy = fetchResult.platformData?.processingStrategy as YouTubeProcessingStrategy | undefined;
+    if (!processingStrategy) {
+      this.logger.warn(`No processing strategy found for YouTube share ${share.id}`);
+      return this.processStandardContent(share, fetchResult);
+    }
+
+    // Phase 1 already completed in fetcher (basic metadata stored)
+    // Phase 2: Queue enhancement based on content type
+    
+    // 1. Quick embedding from the fetcher's pre-processed content
+    const quickEmbeddingContent = fetchResult.platformData?.quickEmbeddingContent as string | undefined;
+    if (quickEmbeddingContent) {
+      try {
+        await this.mlProducer.publishEmbeddingTask(
+          share.id,
+          {
+            text: quickEmbeddingContent,
+            type: 'caption',
+            metadata: {
+              title: share.title || fetchResult.content.text,
+              url: share.url,
+              author: fetchResult.metadata?.author,
+              platform: share.platform,
+              contentType: processingStrategy.type,
+              isBasicEmbedding: true,
+            }
+          },
+          {
+            embeddingType: 'content',
+          }
+        );
+        this.logger.log(`Queued YouTube quick embedding for share ${share.id}`);
+      } catch (error) {
+        this.logger.error(`Failed to queue YouTube quick embedding: ${error.message}`);
+      }
+    }
+
+    // 2. For non-music content, queue transcription/enhancement
+    if (processingStrategy.transcriptionStrategy !== 'skip') {
+      // For YouTube, we'll need to download the video first
+      // This is a placeholder - actual implementation would use YouTube download service
+      this.logger.log(
+        `YouTube enhancement for ${processingStrategy.type} content would be queued here. ` +
+        `Strategy: ${processingStrategy.transcriptionStrategy}, ` +
+        `Priority: ${processingStrategy.processingPriority}`
+      );
+      
+      // TODO: Implement YouTube-specific enhancement queue
+      // This would include:
+      // - Smart download based on strategy
+      // - Transcription with appropriate method
+      // - Chapter extraction if available
+      // - Enhanced summarization
+    }
+
+    // 3. Store YouTube-specific metadata
+    try {
+      await this.storeYouTubeMetadata(share.id, fetchResult);
+    } catch (error) {
+      this.logger.error(`Failed to store YouTube metadata: ${error.message}`);
+    }
+  }
+
+  /**
+   * Store YouTube-specific metadata in the database
+   */
+  private async storeYouTubeMetadata(shareId: string, fetchResult: FetchResponse): Promise<void> {
+    // TODO: Store in youtube_content table
+    // This would include content type, processing strategy, channel info, etc.
+    this.logger.debug(`Storing YouTube metadata for share ${shareId}`);
   }
 
   /**
@@ -301,7 +381,10 @@ export class ShareProcessor {
         await this.storeMetadata(job.data.shareId, fetchResult);
         
         // Determine processing path based on content type and feature flags
-        if (this.isVideoEnhancementEnabled(share.userId) && 
+        if (share.platform === Platform.YOUTUBE && fetchResult.platformData?.processingStrategy) {
+          // YOUTUBE ENHANCEMENT WORKFLOW
+          await this.processYouTubeEnhancement(share, fetchResult);
+        } else if (this.isVideoEnhancementEnabled(share.userId) && 
             this.isVideoContent(fetchResult) && 
             this.requiresEnhancement(share.platform)) {
           // VIDEO ENHANCEMENT WORKFLOW (Two-track)
