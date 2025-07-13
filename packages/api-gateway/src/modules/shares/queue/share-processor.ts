@@ -21,6 +21,7 @@ import { RateLimitError } from '../../../common/rate-limiter';
 import { YouTubeProcessingStrategy, YouTubeEnhancementData } from '../fetchers/types/youtube.types';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
+import { YouTubeTranscriptService } from '../services/youtube-transcript.service';
 
 /**
  * Processor for share background tasks
@@ -40,6 +41,7 @@ export class ShareProcessor {
     private readonly sharesRepository: SharesRepository,
     private readonly rateLimiter: WorkerRateLimiterService,
     @InjectQueue(SHARE_QUEUE.NAME) private readonly shareQueue: Queue,
+    private readonly youtubeTranscriptService: YouTubeTranscriptService,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
@@ -209,7 +211,7 @@ export class ShareProcessor {
       try {
         const enhancementData: YouTubeEnhancementData = {
           shareId: share.id,
-          videoId: fetchResult.platformData?.videoId as string,
+          videoId: fetchResult.platformData?.id as string, // YouTube API stores video ID as 'id'
           processingStrategy,
           apiData: fetchResult.platformData as any, // platformData contains the spread YouTube API data
           priority: processingStrategy.processingPriority,
@@ -348,7 +350,7 @@ export class ShareProcessor {
     concurrency: 2,
   })
   async processYouTubeEnhancementJob(job: Job<YouTubeEnhancementData>) {
-    const { shareId, videoId, processingStrategy } = job.data;
+    const { shareId, videoId, processingStrategy, apiData } = job.data;
     
     this.logger.log(
       `Processing YouTube enhancement job for share ${shareId}, video ${videoId}, ` +
@@ -356,15 +358,108 @@ export class ShareProcessor {
     );
     
     try {
-      // For now, just log and simulate processing
-      // TODO: Implement actual download, transcription, and summarization
-      this.logger.log(
-        `YouTube enhancement processing: ` +
-        `strategy=${processingStrategy.transcriptionStrategy}, ` +
-        `priority=${processingStrategy.processingPriority}`
-      );
+      // Skip processing for music content
+      if (processingStrategy.type === 'youtube_music') {
+        this.logger.log(`Skipping enhancement for music content: ${shareId}`);
+        await this.updateShareStatus(shareId, ShareStatus.DONE);
+        return { shareId, videoId, status: 'skipped', reason: 'music_content' };
+      }
+
+      // Always try to fetch captions first (most videos have auto-generated captions)
+      // The caption field only indicates if the owner uploaded captions, not auto-generated ones
+      this.logger.log(`Attempting to fetch captions for YouTube video ${videoId}`);
       
-      // Simulate some processing
+      // Try the youtube-transcript package first (more reliable)
+      let transcript = await this.youtubeTranscriptService.fetchTranscriptViaPackage(videoId);
+      
+      // If package fails, try yt-dlp as fallback
+      if (!transcript) {
+        this.logger.log(`youtube-transcript package failed, trying yt-dlp for video ${videoId}`);
+        transcript = await this.youtubeTranscriptService.fetchTranscriptViaYtDlp(videoId);
+      }
+      
+      let processingMethod = 'transcription_pending';
+      
+      if (transcript) {
+        processingMethod = 'captions';
+        this.logger.log(`Successfully fetched transcript for video ${videoId}`);
+        
+        // Check if it's a placeholder or actual transcript
+        if (transcript.startsWith('CAPTIONS_UNAVAILABLE:')) {
+          this.logger.warn(`Captions detected but extraction failed for ${videoId}. Falling back to video download.`);
+          processingMethod = 'transcription_fallback';
+          // TODO: Implement video download + Whisper transcription
+        } else {
+          // Queue summarization with the transcript
+          await this.mlProducer.publishSummarizationTask(
+            shareId,
+            {
+              text: transcript,
+              title: apiData?.snippet?.title || 'YouTube Video',
+              url: `https://youtube.com/watch?v=${videoId}`,
+              contentType: 'youtube',
+            },
+            {
+              style: 'detailed',
+              maxLength: 1000,
+            }
+          );
+          
+          this.logger.log(`Queued summarization task for share ${shareId} using captions`);
+          
+          // Also queue embedding with the full transcript
+          await this.mlProducer.publishEmbeddingTask(
+            shareId,
+            {
+              text: transcript,
+              type: 'transcript',
+              metadata: {
+                title: apiData?.snippet?.title || 'YouTube Video',
+                url: `https://youtube.com/watch?v=${videoId}`,
+                author: apiData?.snippet?.channelTitle,
+                platform: 'youtube',
+                contentType: processingStrategy.type,
+                isEnhancedEmbedding: true, // Mark as enhanced Phase 2 embedding
+              }
+            },
+            {
+              embeddingType: 'content',
+            }
+          );
+          
+          this.logger.log(`Queued enhanced embedding task for share ${shareId}`);
+        }
+      } else {
+        this.logger.warn(`No transcript found for video ${videoId} - would fall back to video download + Whisper`);
+        processingMethod = 'video_download_pending';
+        
+        // TODO: Implement video download + transcription fallback
+        // For now, just queue a basic embedding with the title and description
+        const fallbackText = `${apiData?.snippet?.title || 'YouTube Video'}. ${apiData?.snippet?.description || ''}`.substring(0, 1000);
+        
+        await this.mlProducer.publishEmbeddingTask(
+          shareId,
+          {
+            text: fallbackText,
+            type: 'caption',
+            metadata: {
+              title: apiData?.snippet?.title || 'YouTube Video',
+              url: `https://youtube.com/watch?v=${videoId}`,
+              author: apiData?.snippet?.channelTitle,
+              platform: 'youtube',
+              contentType: processingStrategy.type,
+              isFallbackEmbedding: true,
+            }
+          },
+          {
+            embeddingType: 'content',
+          }
+        );
+        
+        this.logger.log(`Queued fallback embedding for share ${shareId} - video download implementation pending`);
+      }
+      
+      // Simulate processing
       await this.delay(2000);
       
       // Update share status to indicate enhancement is complete
@@ -375,6 +470,7 @@ export class ShareProcessor {
         videoId,
         status: 'completed',
         processedAt: new Date(),
+        method: processingMethod
       };
     } catch (error) {
       this.logger.error(

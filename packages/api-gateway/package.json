@@ -78,6 +78,7 @@
     "rxjs": "^7.8.2",
     "uuid": "^9.0.1",
     "yaml": "2.8.0",
+    "youtube-transcript": "1.2.1",
     "zod": "^3.25.56"
   },
   "devDependencies": {

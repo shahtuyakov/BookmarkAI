@@ -24,6 +24,7 @@ import { FetchersModule } from './fetchers/fetchers.module';
 import { MLModule } from '../ml/ml.module';
 // import { YouTubeModule } from '../youtube/youtube.module'; // Using single processor approach
 import { WorkerRateLimiterService } from './services/worker-rate-limiter.service';
+import { YouTubeTranscriptService } from './services/youtube-transcript.service';
 import * as Redis from 'ioredis';
 
 /**
@@ -84,6 +85,7 @@ import * as Redis from 'ioredis';
     ErrorService,
     ShareProcessor,
     WorkerRateLimiterService,
+    YouTubeTranscriptService,
     {
       provide: Redis.Redis,
       inject: [ConfigService],
