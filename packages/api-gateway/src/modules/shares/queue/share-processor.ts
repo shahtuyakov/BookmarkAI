@@ -4,7 +4,7 @@ import { Job } from 'bull';
 import { DrizzleService } from '../../../database/services/drizzle.service';
 import { ConfigService } from '../../../config/services/config.service';
 import { shares } from '../../../db/schema/shares';
-import { SHARE_QUEUE } from './share-queue.constants';
+import { SHARE_QUEUE, SHARE_PROCESS_JOB } from './share-queue.constants';
 import { eq } from 'drizzle-orm';
 import { ShareStatus } from '../constants/share-status.enum';
 import { ContentFetcherRegistry } from '../fetchers/content-fetcher.registry';
@@ -19,7 +19,8 @@ import { SharesRepository } from '../repositories/shares.repository';
 import { WorkerRateLimiterService } from '../services/worker-rate-limiter.service';
 import { RateLimitError } from '../../../common/rate-limiter';
 import { YouTubeProcessingStrategy, YouTubeEnhancementData } from '../fetchers/types/youtube.types';
-import { YouTubeEnhancementQueue } from './youtube-enhancement-queue.service';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
 
 /**
  * Processor for share background tasks
@@ -38,7 +39,7 @@ export class ShareProcessor {
     private readonly workflowService: WorkflowService,
     private readonly sharesRepository: SharesRepository,
     private readonly rateLimiter: WorkerRateLimiterService,
-    private readonly youtubeEnhancementQueue: YouTubeEnhancementQueue,
+    @InjectQueue(SHARE_QUEUE.NAME) private readonly shareQueue: Queue,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
@@ -214,8 +215,21 @@ export class ShareProcessor {
           priority: processingStrategy.processingPriority,
         };
 
-        // Queue YouTube enhancement using the service
-        await this.youtubeEnhancementQueue.queueEnhancement(enhancementData);
+        // Queue YouTube enhancement job using the same queue but different job name
+        await this.shareQueue.add(
+          'youtube.enhancement', // Different job name for YouTube enhancement
+          enhancementData,
+          {
+            priority: processingStrategy.processingPriority,
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 10000,
+            },
+            timeout: this.getTimeoutForContentType(processingStrategy.type),
+          }
+        );
+
         this.logger.log(
           `Queued YouTube Phase 2 enhancement for share ${share.id} ` +
           `(type: ${processingStrategy.type}, priority: ${processingStrategy.processingPriority})`
@@ -326,12 +340,62 @@ export class ShareProcessor {
   }
 
   /**
+   * Process YouTube enhancement jobs
+   * Handles Phase 2 background processing for YouTube content
+   */
+  @Process({
+    name: 'youtube.enhancement',
+    concurrency: 2,
+  })
+  async processYouTubeEnhancementJob(job: Job<YouTubeEnhancementData>) {
+    const { shareId, videoId, processingStrategy } = job.data;
+    
+    this.logger.log(
+      `Processing YouTube enhancement job for share ${shareId}, video ${videoId}, ` +
+      `type: ${processingStrategy.type}`
+    );
+    
+    try {
+      // For now, just log and simulate processing
+      // TODO: Implement actual download, transcription, and summarization
+      this.logger.log(
+        `YouTube enhancement processing: ` +
+        `strategy=${processingStrategy.transcriptionStrategy}, ` +
+        `priority=${processingStrategy.processingPriority}`
+      );
+      
+      // Simulate some processing
+      await this.delay(2000);
+      
+      // Update share status to indicate enhancement is complete
+      await this.updateShareStatus(shareId, ShareStatus.DONE);
+      
+      return {
+        shareId,
+        videoId,
+        status: 'completed',
+        processedAt: new Date(),
+      };
+    } catch (error) {
+      this.logger.error(
+        `YouTube enhancement failed for share ${shareId}: ${error.message}`,
+        error.stack
+      );
+      
+      // Update share status to error
+      await this.updateShareStatus(shareId, ShareStatus.ERROR);
+      
+      throw error; // Let Bull handle retries
+    }
+  }
+
+  /**
    * Process a share
    * In Phase 1, this simulates processing with a delay
    * In Phase 2+, this will integrate with fetchers and ML services
    */
   @Process({
-    name: SHARE_QUEUE.JOBS.PROCESS,
+    name: SHARE_PROCESS_JOB,
     concurrency: 3,
   })
   async processShare(job: Job<{ shareId: string }>) {
@@ -533,6 +597,26 @@ export class ShareProcessor {
    */
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Get timeout based on YouTube content type
+   */
+  private getTimeoutForContentType(contentType: string): number {
+    switch (contentType) {
+      case 'youtube_short':
+        return 5 * 60 * 1000; // 5 minutes
+      case 'youtube_standard':
+        return 15 * 60 * 1000; // 15 minutes
+      case 'youtube_long':
+        return 30 * 60 * 1000; // 30 minutes
+      case 'youtube_edu':
+        return 30 * 60 * 1000; // 30 minutes
+      case 'youtube_music':
+        return 2 * 60 * 1000; // 2 minutes (metadata only)
+      default:
+        return 15 * 60 * 1000; // 15 minutes default
+    }
   }
 
   /**

@@ -2,17 +2,17 @@ import { Process, Processor } from '@nestjs/bull';
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Job } from 'bull';
 import { YOUTUBE_ENHANCEMENT_QUEUE } from './youtube-enhancement-queue.constants';
-import { YouTubeEnhancementData, YouTubeContentType } from '../fetchers/types/youtube.types';
-import { YtDlpService } from '../services/ytdlp.service';
+import { YouTubeEnhancementData, YouTubeContentType } from '../../shares/fetchers/types/youtube.types';
+import { YtDlpService } from '../../shares/services/ytdlp.service';
 import { MLProducerService } from '../../ml/ml-producer.service';
 import { DrizzleService } from '../../../database/services/drizzle.service';
 import { shares } from '../../../db/schema/shares';
 import { youtubeContent, youtubeEnhancements } from '../../../db/schema/youtube';
 import { eq } from 'drizzle-orm';
 import { VideoWorkflowState } from '../../../shares/types/workflow.types';
-import { YouTubeError } from '../fetchers/errors/youtube.error';
-import { YouTubeErrorCode } from '../fetchers/types/youtube.types';
-import { ShareStatus } from '../constants/share-status.enum';
+import { YouTubeError } from '../../shares/fetchers/errors/youtube.error';
+import { YouTubeErrorCode } from '../../shares/fetchers/types/youtube.types';
+import { ShareStatus } from '../../shares/constants/share-status.enum';
 
 // Type for enhancement record from database
 type EnhancementRecord = typeof youtubeEnhancements.$inferSelect;
