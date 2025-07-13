@@ -18,7 +18,8 @@ import { FetchResponse } from '../fetchers/interfaces/content-fetcher.interface'
 import { SharesRepository } from '../repositories/shares.repository';
 import { WorkerRateLimiterService } from '../services/worker-rate-limiter.service';
 import { RateLimitError } from '../../../common/rate-limiter';
-import { YouTubeProcessingStrategy } from '../fetchers/types/youtube.types';
+import { YouTubeProcessingStrategy, YouTubeEnhancementData } from '../fetchers/types/youtube.types';
+import { YouTubeEnhancementQueue } from './youtube-enhancement-queue.service';
 
 /**
  * Processor for share background tasks
@@ -37,6 +38,7 @@ export class ShareProcessor {
     private readonly workflowService: WorkflowService,
     private readonly sharesRepository: SharesRepository,
     private readonly rateLimiter: WorkerRateLimiterService,
+    private readonly youtubeEnhancementQueue: YouTubeEnhancementQueue,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
@@ -49,6 +51,7 @@ export class ShareProcessor {
     return fetchResult.media?.type === 'video' && 
            fetchResult.media?.url != null;
   }
+
 
   /**
    * Check if platform requires video enhancement
@@ -201,12 +204,28 @@ export class ShareProcessor {
         `Priority: ${processingStrategy.processingPriority}`
       );
       
-      // TODO: Implement YouTube-specific enhancement queue
-      // This would include:
-      // - Smart download based on strategy
-      // - Transcription with appropriate method
-      // - Chapter extraction if available
-      // - Enhanced summarization
+      // Queue YouTube enhancement for Phase 2 processing
+      try {
+        const enhancementData: YouTubeEnhancementData = {
+          shareId: share.id,
+          videoId: fetchResult.platformData?.videoId as string,
+          processingStrategy,
+          apiData: fetchResult.platformData as any, // platformData contains the spread YouTube API data
+          priority: processingStrategy.processingPriority,
+        };
+
+        // Queue YouTube enhancement using the service
+        await this.youtubeEnhancementQueue.queueEnhancement(enhancementData);
+        this.logger.log(
+          `Queued YouTube Phase 2 enhancement for share ${share.id} ` +
+          `(type: ${processingStrategy.type}, priority: ${processingStrategy.processingPriority})`
+        );
+      } catch (error) {
+        this.logger.error(`Failed to queue YouTube enhancement: ${error.message}`);
+        // Fall back to standard processing if enhancement queue fails
+        this.logger.warn(`Falling back to standard processing for share ${share.id}`);
+        return this.processStandardContent(share, fetchResult);
+      }
     }
 
     // 3. Store YouTube-specific metadata

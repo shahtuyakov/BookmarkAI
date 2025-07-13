@@ -64,6 +64,9 @@ import { YouTubeQuotaManager } from './managers/youtube-quota-manager';
       ],
     },
   ],
-  exports: [ContentFetcherRegistry],
+  exports: [
+    ContentFetcherRegistry,
+    YtDlpService, // Export for use in other modules like YouTube Enhancement Processor
+  ],
 })
 export class FetchersModule {}

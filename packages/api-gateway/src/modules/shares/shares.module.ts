@@ -18,6 +18,8 @@ import { SharesRateLimitMiddleware } from './middlewares/rate-limit.middleware';
 import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ErrorService } from './services/error.service';
 import { ShareProcessor } from './queue/share-processor';
+// import { YouTubeEnhancementProcessor } from './queue/youtube-enhancement.processor';
+import { YouTubeEnhancementQueue } from './queue/youtube-enhancement-queue.service';
 import { SearchRepository } from './repositories/search.repository';
 import { SharesRepository } from './repositories/shares.repository';
 import { FetchersModule } from './fetchers/fetchers.module';
@@ -78,8 +80,10 @@ import * as Redis from 'ioredis';
     SharesRepository,
     DrizzleService,
     ErrorService,
-    ShareProcessor, // Register the processor here
-    WorkerRateLimiterService, // Rate limiting for external API calls
+    ShareProcessor,
+    // YouTubeEnhancementProcessor, // TODO: Re-enable when queue registration is fixed
+    YouTubeEnhancementQueue,
+    WorkerRateLimiterService,
     {
       provide: Redis.Redis,
       inject: [ConfigService],
@@ -99,7 +103,6 @@ import * as Redis from 'ioredis';
     IdempotencyService,
     ErrorService,
     SearchService,
-    // BullModule and ShareProcessor moved to ShareQueueModule
   ],
 })
 export class SharesModule {
