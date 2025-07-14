@@ -51,7 +51,7 @@ class ShareActivity : Activity() {
                         showToast("Already saved to BookmarkAI")
                     }
                     is ShareResult.UnsupportedUrl -> {
-                        showToast("Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, and X.")
+                        showToast("Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, X, and YouTube.")
                     }
                     is ShareResult.InvalidUrl -> {
                         showToast("Invalid URL format")

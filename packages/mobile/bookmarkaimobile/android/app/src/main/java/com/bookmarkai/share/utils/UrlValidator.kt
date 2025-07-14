@@ -16,7 +16,8 @@ object UrlValidator {
         TIKTOK("TikTok"),
         REDDIT("Reddit"), 
         TWITTER("Twitter"),
-        X("X (Twitter)");
+        X("X (Twitter)"),
+        YOUTUBE("YouTube");
         
         companion object {
             fun fromUrl(url: String): SupportedPlatform? {
@@ -25,6 +26,7 @@ object UrlValidator {
                     isRedditUrl(url) -> REDDIT
                     isTwitterUrl(url) -> TWITTER
                     isXUrl(url) -> X
+                    isYouTubeUrl(url) -> YOUTUBE
                     else -> null
                 }
             }
@@ -156,6 +158,18 @@ object UrlValidator {
         return try {
             val host = Uri.parse(url).host?.lowercase() ?: return false
             host.contains("x.com")
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Check if URL is from YouTube
+     */
+    private fun isYouTubeUrl(url: String): Boolean {
+        return try {
+            val host = Uri.parse(url).host?.lowercase() ?: return false
+            host.contains("youtube.com") || host == "youtu.be" || host == "m.youtube.com"
         } catch (e: Exception) {
             false
         }

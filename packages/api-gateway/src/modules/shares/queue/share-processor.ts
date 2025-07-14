@@ -369,14 +369,8 @@ export class ShareProcessor {
       // The caption field only indicates if the owner uploaded captions, not auto-generated ones
       this.logger.log(`Attempting to fetch captions for YouTube video ${videoId}`);
       
-      // Try the youtube-transcript package first (more reliable)
-      let transcript = await this.youtubeTranscriptService.fetchTranscriptViaPackage(videoId);
-      
-      // If package fails, try yt-dlp as fallback
-      if (!transcript) {
-        this.logger.log(`youtube-transcript package failed, trying yt-dlp for video ${videoId}`);
-        transcript = await this.youtubeTranscriptService.fetchTranscriptViaYtDlp(videoId);
-      }
+      // Use the main fetchTranscript method which handles both API and yt-dlp fallback
+      const transcript = await this.youtubeTranscriptService.fetchTranscript(videoId);
       
       let processingMethod = 'transcription_pending';
       
