@@ -1,9 +1,9 @@
 # ADR-213: YouTube Fetcher Implementation with Two-Phase Processing
 
-- **Status**: Partially Implemented (Phase 1 Complete)
+- **Status**: Implemented (Phase 2 Components Complete, Integration Pending)
 - **Date**: 2025-01-13
 - **Authors**: @bookmarkai-backend
-- **Updated**: 2025-07-13 - Phase 1 implementation completed
+- **Updated**: 2025-01-15 - Phase 2 components implemented, integration pending
 - **Supersedes**: —
 - **Superseded by**: —
 - **Related**: ADR-021 (Content Fetcher Interface), ADR-211 (Rate Limiting), ADR-212 (Distributed Tracing)
@@ -115,7 +115,18 @@ Quick Embed          Quick Embed       Quick Embed   Metadata Only
 
 ---
 
-## Implementation Status (Updated 2025-07-13)
+## Implementation Status (Updated 2025-01-15)
+
+### Implementation Timeline
+
+Recent commits show progressive implementation of YouTube functionality:
+- **b341afd** (Initial): Added ADR-213 documenting two-phase processing architecture
+- **7541bec** (Phase 1): Implemented YouTube Fetcher with API integration and content classification
+- **9a07100** (Phase 2 Start): Added enhancement queue and processor foundation
+- **443c9df** (Refactor): Consolidated queue into ShareProcessor, added download service
+- **5fe4342** (Transcript): Implemented YouTube transcript service with yt-dlp
+- **c8d673b** (Enhancement): Refined processing pipeline, removed youtube-transcript package
+- **611bb32** (Polish): Refactored content classification, improved type safety
 
 ### Phase 1: Completed ✅
 
@@ -174,42 +185,89 @@ The immediate YouTube API fetch with content classification has been successfull
 - ✅ Metadata storage in database
 - ✅ Quick embedding for searchability
 
-### Phase 2: Pending Implementation 🚧
+### Phase 2: Implemented Components ✅
 
-The following components are ready to be implemented for background enhancement:
+The following Phase 2 components have been successfully implemented:
 
-1. **YouTube Enhancement Queue** 🚧
-   - BullMQ queue for background processing
-   - Priority-based job scheduling
-   - Retry mechanism for failed jobs
+1. **YouTube Enhancement Queue** ✅ (Implemented in commit 9a07100, later refactored in 443c9df)
+   - BullMQ queue for background processing implemented
+   - Priority-based job scheduling with content-type-aware priorities
+   - Retry mechanism with exponential backoff
+   - Queue monitoring and metrics collection
+   - Note: Later integrated directly into ShareProcessor for streamlined job management
 
-2. **YouTube Enhancement Processor** 🚧
-   - Background job processor for Phase 2
-   - Smart download decision logic
+2. **YouTube Enhancement Processor** ✅ (Implemented in commit 443c9df)
+   - Background job processor fully implemented
+   - Smart processing strategies for different content types:
+     - Music: Metadata only, no transcription
+     - Shorts: High priority, quick processing
+     - Educational: Enhanced summarization
+     - Long videos: Chunked processing
    - Integration with existing ML pipeline
+   - Comprehensive error handling and job status tracking
 
-3. **YouTube Download Service** 🚧
-   - yt-dlp integration for video/audio download
-   - Quality selection based on content type
-   - Storage management and cleanup
+3. **YouTube Download Service** ✅ (Implemented in commit 443c9df)
+   - yt-dlp integration completed
+   - Smart quality selection based on content type:
+     - Shorts: 360p or best available under 720p
+     - Standard/Long: 480p preferred
+     - Music: Audio-only extraction
+   - Storage management with automatic cleanup
+   - Retry logic for download failures
 
-4. **Transcription Integration** 🚧
-   - Whisper service integration
-   - Caption API fallback strategy
-   - Chunking for long videos
+4. **YouTube Transcript Service** ✅ (Implemented in commit 5fe4342, enhanced in c8d673b)
+   - Direct yt-dlp integration for caption/subtitle extraction
+   - Support for multiple subtitle formats (SRT, VTT, JSON3)
+   - Language preference handling (en, en-US, en-GB)
+   - Automatic format conversion to plain text
+   - Error handling for throttling and rate limiting
+   - Note: Replaced the original plan to use YouTube API captions
 
-5. **Chapter Extraction** 🚧
-   - Chapter detection from description
-   - Timestamp parsing and validation
-   - Chapter-based embedding generation
+5. **Chapter Support** ⚠️ (Partially implemented)
+   - Transcript timestamps preserved in extracted text
+   - Database schema supports chapter storage
+   - Chapter extraction logic pending implementation
+   - Chapter-based embedding generation not yet implemented
 
-### 16.3 Key Implementation Decisions Made:
+### Phase 2: Integration Status 🚧
+
+While all Phase 2 components are implemented, the full two-phase processing flow is not yet integrated:
+
+1. **YouTube Fetcher Integration** 🚧
+   - Phase 2 enhancement queue code exists but is commented out
+   - Currently only triggers Phase 1 processing
+   - Needs to be wired to queue enhancement jobs after initial fetch
+
+2. **Share Processor Enhancement** 🚧
+   - Currently uses Phase 1 approach with direct transcript fetching
+   - Does not utilize the Phase 2 enhancement queue
+   - Needs refactoring to support two-phase status progression
+
+3. **Status Progression** 🚧
+   - Database schema supports `pending → fetched → enriched` flow
+   - Actual implementation still uses single-phase processing
+   - Enhancement tracking table not being utilized
+
+### Architecture Evolution
+
+During implementation, several architectural decisions evolved:
+
+1. **Enhancement Queue Consolidation**: The separate `YouTubeEnhancementQueue` service was removed and its functionality integrated directly into `ShareProcessor` for better cohesion.
+
+2. **Transcript Strategy Change**: Instead of using YouTube API captions with Whisper fallback, the implementation uses yt-dlp as the primary transcript source with Whisper as fallback.
+
+3. **Content Type Implementation**: The `YouTubeContentType` enum was replaced with a type-safe map structure for better flexibility and maintainability.
+
+### Key Implementation Decisions Made:
 
 1. **API Key Configuration**: Used existing `YOUTUBE_API_KEY` instead of `FETCHER_YOUTUBE_API_KEY` pattern
-2. **URL Support**: Added YouTube Shorts URL format to validation patterns
+2. **URL Support**: Added YouTube Shorts URL format to validation patterns  
 3. **Response Handling**: Adapted to Axios response format (`response.data` instead of `response.json()`)
 4. **Database Schema**: Fixed date field default value for PostgreSQL compatibility
 5. **Content Classification**: Music videos skip transcription, Shorts get high priority
+6. **Queue Architecture**: Consolidated enhancement queue functionality into ShareProcessor
+7. **Transcript Source**: yt-dlp as primary source instead of YouTube API captions
+8. **Package Management**: Removed `youtube-transcript` package in favor of yt-dlp
 
 ### Metrics and Monitoring:
 
@@ -221,9 +279,44 @@ Current implementation provides:
 
 ### Next Steps:
 
-1. Implement YouTube Enhancement Queue and Processor
-2. Create YouTube Download Service with yt-dlp
-3. Integrate with existing Transcription Service
-4. Implement chapter extraction logic
-5. Add comprehensive integration tests
-6. Deploy to staging for real-world testing
+1. **Enable Two-Phase Processing Flow** 🔴 (Critical)
+   - Wire Phase 2 enhancement queue to YouTube fetcher
+   - Uncomment and test enhancement queue integration
+   - Implement proper status progression (`pending → fetched → enriched`)
+
+2. **Complete Chapter Support** 🟡 (Important)
+   - Implement chapter extraction from video descriptions
+   - Parse timestamp formats and validate chapters
+   - Generate separate embeddings per chapter
+   - Enable timestamp-based search functionality
+
+3. **Refactor Share Processor** 🟡 (Important)
+   - Transition from Phase 1 direct processing to Phase 2 queue-based approach
+   - Utilize enhancement tracking table for status management
+   - Implement proper two-phase status updates
+
+4. **Add Comprehensive Integration Tests** 🟢 (Nice to have)
+   - Test full two-phase processing flow
+   - Verify content type classification accuracy
+   - Test error handling and retry mechanisms
+   - Validate quota management under load
+
+5. **Production Deployment & Monitoring** 🟢 (Nice to have)
+   - Deploy to staging environment
+   - Monitor API quota usage patterns
+   - Track processing times by content type
+   - Analyze enhancement success rates
+
+6. **Performance Optimization** 🟢 (Future)
+   - Implement caching for frequently accessed content
+   - Optimize download quality selection algorithm
+   - Consider CDN integration for downloaded content
+
+### Known Gaps and Issues:
+
+1. **Two-Phase Processing Not Active**: While all components exist, the actual two-phase flow is not enabled
+2. **Enhancement Queue Disconnected**: The queue exists but YouTube fetcher doesn't queue jobs
+3. **Status Tracking Incomplete**: Enhancement tracking table not being updated
+4. **Chapter Support Minimal**: Database ready but extraction logic missing
+5. **Testing Coverage**: No integration tests for the full YouTube pipeline
+6. **Monitoring Limited**: Metrics collection implemented but not exposed to monitoring stack
