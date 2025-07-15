@@ -22,6 +22,7 @@ import { YouTubeProcessingStrategy, YouTubeEnhancementData } from '../fetchers/t
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { YouTubeTranscriptService } from '../services/youtube-transcript.service';
+import { YouTubeChapterService } from '../services/youtube-chapter.service';
 
 /**
  * Processor for share background tasks
@@ -42,6 +43,7 @@ export class ShareProcessor {
     private readonly rateLimiter: WorkerRateLimiterService,
     @InjectQueue(SHARE_QUEUE.NAME) private readonly shareQueue: Queue,
     private readonly youtubeTranscriptService: YouTubeTranscriptService,
+    private readonly youtubeChapterService: YouTubeChapterService,
   ) {
     // Get configuration with defaults
     this.processingDelayMs = this.configService.get('WORKER_DELAY_MS', 5000);
@@ -422,6 +424,9 @@ export class ShareProcessor {
           );
           
           this.logger.log(`Queued enhanced embedding task for share ${shareId}`);
+
+          // Extract and process chapters if video is long enough
+          await this.processVideoChapters(shareId, videoId, apiData, transcript);
         }
       } else {
         this.logger.warn(`No transcript found for video ${videoId} - would fall back to video download + Whisper`);
@@ -808,6 +813,153 @@ export class ShareProcessor {
       `[Task 2.7 Placeholder] Queueing media download for share ${shareId}: ${media.type} - ${media.url}`
     );
     // Task 2.7 will implement this with a separate media download queue
+  }
+
+  /**
+   * Process video chapters - extract and store chapters with embeddings
+   */
+  private async processVideoChapters(
+    shareId: string, 
+    videoId: string, 
+    apiData: any, 
+    transcript: string
+  ): Promise<void> {
+    try {
+      this.logger.log(`Processing chapters for video ${videoId}`);
+      
+      // Extract chapters using the chapter service
+      const chapterResult = await this.youtubeChapterService.extractChapters(apiData, transcript);
+      
+      if (!chapterResult.hasChapters) {
+        this.logger.debug(`No chapters found for video ${videoId} (${chapterResult.extractionMethod})`);
+        return;
+      }
+      
+      this.logger.log(
+        `Found ${chapterResult.chapters.length} chapters for video ${videoId} using ${chapterResult.extractionMethod}`
+      );
+      
+      // Store chapters in database and generate embeddings for each
+      await this.storeVideoChapters(shareId, chapterResult.chapters);
+      
+      // Generate individual embeddings for each chapter
+      for (const chapter of chapterResult.chapters) {
+        await this.generateChapterEmbedding(shareId, videoId, chapter, apiData);
+      }
+      
+      this.logger.log(`Successfully processed ${chapterResult.chapters.length} chapters for video ${videoId}`);
+      
+    } catch (error) {
+      this.logger.error(`Failed to process chapters for video ${videoId}: ${error.message}`, error.stack);
+      // Don't throw - chapter processing is optional and shouldn't fail the entire job
+    }
+  }
+
+  /**
+   * Store video chapters in the database
+   */
+  private async storeVideoChapters(shareId: string, chapters: any[]): Promise<void> {
+    try {
+      // Note: This is a placeholder for the database operations
+      // In a full implementation, you would:
+      // 1. Import the youtubeChapters schema
+      // 2. Insert chapter records into the youtube_chapters table
+      // 3. Link to the share and youtube_content records
+      
+      this.logger.debug(`Storing ${chapters.length} chapters for share ${shareId}`);
+      
+      // TODO: Implement database storage
+      // const chapterRecords = chapters.map(chapter => ({
+      //   shareId,
+      //   startSeconds: chapter.startSeconds,
+      //   endSeconds: chapter.endSeconds,
+      //   title: chapter.title,
+      //   transcriptSegment: chapter.transcriptSegment,
+      //   chapterOrder: chapter.order,
+      //   durationSeconds: chapter.endSeconds ? chapter.endSeconds - chapter.startSeconds : null
+      // }));
+      // 
+      // await this.db.database.insert(youtubeChapters).values(chapterRecords);
+      
+    } catch (error) {
+      this.logger.error(`Failed to store chapters for share ${shareId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate embedding for a single chapter
+   */
+  private async generateChapterEmbedding(
+    shareId: string, 
+    videoId: string, 
+    chapter: any, 
+    apiData: any
+  ): Promise<void> {
+    try {
+      // Create rich chapter content for embedding
+      const chapterContent = this.createChapterEmbeddingContent(chapter, apiData);
+      
+      await this.mlProducer.publishEmbeddingTask(
+        shareId,
+        {
+          text: chapterContent,
+          type: 'transcript',
+          metadata: {
+            title: `${apiData?.snippet?.title || 'YouTube Video'} - ${chapter.title}`,
+            url: `https://youtube.com/watch?v=${videoId}&t=${chapter.startSeconds}s`,
+            author: apiData?.snippet?.channelTitle,
+            platform: 'youtube',
+            chapterTitle: chapter.title,
+            startSeconds: chapter.startSeconds,
+            endSeconds: chapter.endSeconds,
+            chapterOrder: chapter.order,
+            isChapterEmbedding: true,
+          }
+        },
+        {
+          embeddingType: 'content',
+        }
+      );
+      
+      this.logger.debug(`Queued chapter embedding for "${chapter.title}" (${chapter.startSeconds}s-${chapter.endSeconds}s)`);
+      
+    } catch (error) {
+      this.logger.error(`Failed to queue chapter embedding for chapter "${chapter.title}": ${error.message}`);
+      // Don't throw - continue processing other chapters
+    }
+  }
+
+  /**
+   * Create rich content for chapter embedding
+   */
+  private createChapterEmbeddingContent(chapter: any, apiData: any): string {
+    const parts = [
+      chapter.title,
+      chapter.transcriptSegment || '',
+      `Timestamp: ${this.formatTimestamp(chapter.startSeconds)} - ${this.formatTimestamp(chapter.endSeconds)}`,
+      `From video: ${apiData?.snippet?.title || ''}`,
+      `By: ${apiData?.snippet?.channelTitle || ''}`,
+    ].filter(Boolean);
+    
+    return parts.join('. ').substring(0, 8000); // Limit content size
+  }
+
+  /**
+   * Format seconds to timestamp string
+   */
+  private formatTimestamp(seconds: number): string {
+    if (!seconds) return '0:00';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } else {
+      return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
   }
 
   /**
