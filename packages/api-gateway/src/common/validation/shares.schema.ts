@@ -6,7 +6,7 @@ import { PaginationSchema, SortSchema, FieldsSchema } from './pagination.schema'
  */
 
 // Supported platforms
-export const PlatformSchema = z.enum(['tiktok', 'reddit', 'twitter', 'x', 'unknown']);
+export const PlatformSchema = z.enum(['tiktok', 'reddit', 'twitter', 'x', 'youtube', 'unknown']);
 
 // Share status
 export const ShareStatusSchema = z.enum(['pending', 'processing', 'done', 'failed']);
@@ -17,6 +17,7 @@ const URL_PATTERNS = {
   reddit: /^https?:\/\/(www\.)?reddit\.com\/r\/[^/]+\/comments\/[^/]+/,
   twitter: /^https?:\/\/(www\.)?twitter\.com\/[^/]+\/status\/\d+/,
   x: /^https?:\/\/(www\.)?x\.com\/[^/]+\/status\/\d+/,
+  youtube: /^https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)[a-zA-Z0-9_-]{11}(?:[?&].*)?$/,
 };
 
 // URL validation with platform detection
@@ -28,7 +29,7 @@ export const ShareUrlSchema = z
       return Object.values(URL_PATTERNS).some(pattern => pattern.test(url));
     },
     {
-      message: 'URL must be from a supported platform: tiktok.com, reddit.com, twitter.com, x.com',
+      message: 'URL must be from a supported platform: tiktok.com, reddit.com, twitter.com, x.com, youtube.com, youtu.be',
     },
   );
 

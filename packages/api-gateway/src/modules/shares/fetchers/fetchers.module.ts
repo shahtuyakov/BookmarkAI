@@ -7,9 +7,14 @@ import {
   TwitterFetcher,
   XFetcher,
   GenericFetcher,
+  YouTubeFetcher,
 } from './platforms';
 import { YtDlpService } from '../services/ytdlp.service';
 import { S3StorageService } from '../services/s3-storage.service';
+import { YouTubeContentClassifier } from './classifiers/youtube-content-classifier';
+import { YouTubeQuotaManager } from './managers/youtube-quota-manager';
+// import { YouTubeEnhancementQueue } from '../queue/youtube-enhancement-queue.service';
+// import { YOUTUBE_ENHANCEMENT_QUEUE } from '../queue/youtube-enhancement-queue.constants';
 
 /**
  * Module for content fetchers
@@ -25,12 +30,18 @@ import { S3StorageService } from '../services/s3-storage.service';
     YtDlpService,
     S3StorageService,
     
+    // YouTube services
+    YouTubeContentClassifier,
+    YouTubeQuotaManager,
+    // YouTubeEnhancementQueue, // TODO: Move to shares module to avoid circular dependencies
+    
     // Platform fetchers
     TikTokFetcher,
     RedditFetcher,
     TwitterFetcher,
     XFetcher,
     GenericFetcher,
+    YouTubeFetcher,
     
     // Provider for all fetchers array
     {
@@ -41,16 +52,21 @@ import { S3StorageService } from '../services/s3-storage.service';
         twitter: TwitterFetcher,
         x: XFetcher,
         generic: GenericFetcher,
-      ) => [tiktok, reddit, twitter, x, generic],
+        youtube: YouTubeFetcher,
+      ) => [tiktok, reddit, twitter, x, generic, youtube],
       inject: [
         TikTokFetcher,
         RedditFetcher,
         TwitterFetcher,
         XFetcher,
         GenericFetcher,
+        YouTubeFetcher,
       ],
     },
   ],
-  exports: [ContentFetcherRegistry],
+  exports: [
+    ContentFetcherRegistry,
+    YtDlpService, // Export for use in other modules like YouTube Enhancement Processor
+  ],
 })
 export class FetchersModule {}

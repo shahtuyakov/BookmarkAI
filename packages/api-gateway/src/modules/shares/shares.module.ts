@@ -22,7 +22,10 @@ import { SearchRepository } from './repositories/search.repository';
 import { SharesRepository } from './repositories/shares.repository';
 import { FetchersModule } from './fetchers/fetchers.module';
 import { MLModule } from '../ml/ml.module';
+// import { YouTubeModule } from '../youtube/youtube.module'; // Using single processor approach
 import { WorkerRateLimiterService } from './services/worker-rate-limiter.service';
+import { YouTubeTranscriptService } from './services/youtube-transcript.service';
+import { YouTubeChapterService } from './services/youtube-chapter.service';
 import * as Redis from 'ioredis';
 
 /**
@@ -38,6 +41,9 @@ import * as Redis from 'ioredis';
     
     // Import MLModule for ML task publishing
     MLModule,
+    
+    // Import YouTubeModule for YouTube-specific processing
+    // YouTubeModule, // Removed to use single processor approach
 
     // Register BullMQ queue with enhanced configuration from ADR
     BullModule.registerQueueAsync({
@@ -78,8 +84,10 @@ import * as Redis from 'ioredis';
     SharesRepository,
     DrizzleService,
     ErrorService,
-    ShareProcessor, // Register the processor here
-    WorkerRateLimiterService, // Rate limiting for external API calls
+    ShareProcessor,
+    WorkerRateLimiterService,
+    YouTubeTranscriptService,
+    YouTubeChapterService,
     {
       provide: Redis.Redis,
       inject: [ConfigService],
@@ -99,7 +107,6 @@ import * as Redis from 'ioredis';
     IdempotencyService,
     ErrorService,
     SearchService,
-    // BullModule and ShareProcessor moved to ShareQueueModule
   ],
 })
 export class SharesModule {

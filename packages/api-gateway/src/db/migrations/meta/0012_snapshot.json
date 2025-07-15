@@ -1,6 +1,6 @@
 {
-  "id": "5ede724f-27b2-4ca1-962b-53ff1278ef3f",
-  "prevId": "1dce054d-df5a-4136-b2f6-e8463780802e",
+  "id": "cd69c319-d976-4958-8cd0-62b20280b744",
+  "prevId": "5ede724f-27b2-4ca1-962b-53ff1278ef3f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2040,7 +2040,7 @@
           "type": "date",
           "primaryKey": false,
           "notNull": true,
-          "default": "'CURRENT_DATE'"
+          "default": "now()"
         },
         "videos_list_calls": {
           "name": "videos_list_calls",
