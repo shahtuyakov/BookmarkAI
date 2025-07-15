@@ -16,7 +16,6 @@ import {
   YouTubeErrorCode
 } from '../types/youtube.types';
 import { sanitizeContent } from '../../utils/content-sanitizer';
-// import { YouTubeEnhancementQueue } from '../../queue/youtube-enhancement-queue.service';
 
 /**
  * YouTube content fetcher with two-phase processing
@@ -30,7 +29,6 @@ export class YouTubeFetcher extends BaseContentFetcher {
     protected readonly configService: ConfigService,
     private readonly quotaManager: YouTubeQuotaManager,
     private readonly classifier: YouTubeContentClassifier,
-    // private readonly enhancementQueue: YouTubeEnhancementQueue,
   ) {
     super(Platform.YOUTUBE, configService);
   }
@@ -73,15 +71,8 @@ export class YouTubeFetcher extends BaseContentFetcher {
       // 5. Create quick embedding content (used in response)
       this.createQuickEmbeddingContent(apiData, processingStrategy);
 
-      // 6. Queue background enhancement
-      // TODO: Enable when enhancement queue is properly integrated
-      // await this.enhancementQueue.queueEnhancement({
-      //   shareId: request.shareId,
-      //   videoId,
-      //   processingStrategy,
-      //   apiData,
-      //   priority: processingStrategy.processingPriority
-      // });
+      // 6. Phase 2 enhancement will be handled by ShareProcessor
+      // The processing strategy is embedded in platformData for ShareProcessor to use
 
       // 7. Return immediate response
       const response = this.createFetchResponse(apiData, processingStrategy, request.url);
@@ -306,5 +297,6 @@ export class YouTubeFetcher extends BaseContentFetcher {
       ? truncated.substring(0, lastSpace) + '...'
       : truncated + '...';
   }
+
 
 }

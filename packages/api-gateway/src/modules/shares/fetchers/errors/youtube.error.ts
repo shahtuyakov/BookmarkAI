@@ -40,6 +40,7 @@ export class YouTubeError extends FetcherError {
       case YouTubeErrorCode.DOWNLOAD_FAILED:
       case YouTubeErrorCode.TRANSCRIPTION_FAILED:
       case YouTubeErrorCode.CAPTIONS_UNAVAILABLE:
+      case YouTubeErrorCode.ENHANCEMENT_QUEUE_FAILED:
         return FetcherErrorCode.API_UNAVAILABLE;
       default:
         return FetcherErrorCode.API_UNAVAILABLE;

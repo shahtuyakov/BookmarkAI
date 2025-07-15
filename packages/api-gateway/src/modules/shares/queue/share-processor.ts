@@ -226,7 +226,7 @@ export class ShareProcessor {
             attempts: 3,
             backoff: {
               type: 'exponential',
-              delay: 10000,
+              delay: 2000, // Start with 2s, matching the YouTube fetcher pattern
             },
             timeout: this.getTimeoutForContentType(processingStrategy.type),
           }
@@ -456,8 +456,8 @@ export class ShareProcessor {
       // Simulate processing
       await this.delay(2000);
       
-      // Update share status to indicate enhancement is complete
-      await this.updateShareStatus(shareId, ShareStatus.DONE);
+      // Update share status to indicate YouTube Phase 2 enhancement is complete
+      await this.updateShareStatus(shareId, ShareStatus.ENRICHED);
       
       return {
         shareId,
@@ -472,9 +472,44 @@ export class ShareProcessor {
         error.stack
       );
       
-      // Update share status to error
-      await this.updateShareStatus(shareId, ShareStatus.ERROR);
+      // Handle YouTube-specific errors with custom retry strategies
+      if (this.isYouTubeQuotaError(error)) {
+        this.logger.warn(`YouTube API quota exceeded for share ${shareId}, will retry after quota reset`);
+        
+        // For quota exceeded, don't mark as error - let it retry after 24 hours
+        // Set custom retry delay for quota exceeded
+        const quotaResetDelay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+        job.opts.delay = quotaResetDelay;
+        
+        // Re-throw with specific message to trigger Bull's retry with custom delay
+        throw new Error(`YouTube API quota exceeded. Retrying after quota reset in 24 hours.`);
+      }
       
+      if (this.isYouTubeRateLimitError(error)) {
+        this.logger.warn(`YouTube API rate limit hit for share ${shareId}, will retry with exponential backoff`);
+        
+        // For rate limiting, use shorter delay (1 hour)
+        const rateLimitDelay = 60 * 60 * 1000; // 1 hour in milliseconds
+        job.opts.delay = rateLimitDelay;
+        
+        throw new Error(`YouTube API rate limited. Retrying in 1 hour.`);
+      }
+      
+      if (this.isYouTubeTransientError(error)) {
+        this.logger.warn(`YouTube transient error for share ${shareId}, will retry with standard backoff`);
+        // Let Bull handle standard exponential backoff for transient errors
+        throw error;
+      }
+      
+      // For permanent errors (video not found, private, etc.), mark as error and don't retry
+      if (this.isYouTubePermanentError(error)) {
+        this.logger.error(`YouTube permanent error for share ${shareId}: ${error.message}`);
+        await this.updateShareStatus(shareId, ShareStatus.ERROR);
+        return { shareId, videoId, status: 'failed', reason: 'permanent_error', error: error.message };
+      }
+      
+      // For unknown errors, mark as error after retries are exhausted
+      await this.updateShareStatus(shareId, ShareStatus.ERROR);
       throw error; // Let Bull handle retries
     }
   }
@@ -555,20 +590,23 @@ export class ShareProcessor {
         
         // Determine processing path based on content type and feature flags
         if (share.platform === Platform.YOUTUBE && fetchResult.platformData?.processingStrategy) {
-          // YOUTUBE ENHANCEMENT WORKFLOW
+          // YOUTUBE ENHANCEMENT WORKFLOW (Two-phase)
           await this.processYouTubeEnhancement(share, fetchResult);
+          // Update status to "fetched" - Phase 1 complete, Phase 2 queued
+          await this.updateShareStatus(job.data.shareId, ShareStatus.FETCHED);
         } else if (this.isVideoEnhancementEnabled(share.userId) && 
             this.isVideoContent(fetchResult) && 
             this.requiresEnhancement(share.platform)) {
           // VIDEO ENHANCEMENT WORKFLOW (Two-track)
           await this.processVideoEnhancement(share, fetchResult);
+          // Single-phase platforms use DONE status
+          await this.updateShareStatus(job.data.shareId, ShareStatus.DONE);
         } else {
           // STANDARD WORKFLOW (Existing parallel processing)
           await this.processStandardContent(share, fetchResult);
+          // Single-phase platforms use DONE status
+          await this.updateShareStatus(job.data.shareId, ShareStatus.DONE);
         }
-        
-        // Update status to "done"
-        await this.updateShareStatus(job.data.shareId, ShareStatus.DONE);
       } catch (fetchError) {
         if (fetchError instanceof FetcherError) {
           this.logger.error(
@@ -618,10 +656,15 @@ export class ShareProcessor {
       this.logger.log(`Successfully processed share ${job.data.shareId}`);
       
       // Return result for monitoring/visibility
+      // For YouTube, status is FETCHED after Phase 1, ENRICHED after Phase 2
+      const finalStatus = share.platform === Platform.YOUTUBE 
+        ? ShareStatus.FETCHED  // Phase 1 complete, Phase 2 queued
+        : ShareStatus.DONE;     // Single-phase complete
+        
       return { 
         id: share.id, 
         url: share.url, 
-        status: ShareStatus.DONE,
+        status: finalStatus,
         processingTimeMs: this.processingDelayMs
       };
     } catch (error) {
@@ -765,5 +808,61 @@ export class ShareProcessor {
       `[Task 2.7 Placeholder] Queueing media download for share ${shareId}: ${media.type} - ${media.url}`
     );
     // Task 2.7 will implement this with a separate media download queue
+  }
+
+  /**
+   * Check if error is a YouTube API quota exceeded error
+   */
+  private isYouTubeQuotaError(error: any): boolean {
+    return (
+      error?.message?.includes('quota') ||
+      error?.message?.includes('quotaExceeded') ||
+      error?.code === 'YOUTUBE_QUOTA_EXCEEDED' ||
+      (error?.response?.status === 403 && 
+       error?.response?.data?.error?.message?.includes('quota'))
+    );
+  }
+
+  /**
+   * Check if error is a YouTube API rate limit error
+   */
+  private isYouTubeRateLimitError(error: any): boolean {
+    return (
+      error?.response?.status === 429 ||
+      error?.message?.includes('rate limit') ||
+      error?.message?.includes('Too Many Requests') ||
+      error?.code === 'YOUTUBE_RATE_LIMITED'
+    );
+  }
+
+  /**
+   * Check if error is a transient YouTube error that should be retried
+   */
+  private isYouTubeTransientError(error: any): boolean {
+    return (
+      error?.response?.status >= 500 || // Server errors
+      error?.code === 'ECONNRESET' ||
+      error?.code === 'ENOTFOUND' ||
+      error?.code === 'ETIMEDOUT' ||
+      error?.message?.includes('timeout') ||
+      error?.message?.includes('network') ||
+      error?.message?.includes('connection')
+    );
+  }
+
+  /**
+   * Check if error is a permanent YouTube error that should not be retried
+   */
+  private isYouTubePermanentError(error: any): boolean {
+    return (
+      error?.code === 'YOUTUBE_VIDEO_NOT_FOUND' ||
+      error?.code === 'YOUTUBE_VIDEO_PRIVATE' ||
+      error?.code === 'YOUTUBE_VIDEO_RESTRICTED' ||
+      error?.code === 'YOUTUBE_INVALID_VIDEO_ID' ||
+      error?.code === 'YOUTUBE_API_KEY_INVALID' ||
+      (error?.response?.status === 404) ||
+      (error?.response?.status === 403 && 
+       !error?.response?.data?.error?.message?.includes('quota'))
+    );
   }
 }
