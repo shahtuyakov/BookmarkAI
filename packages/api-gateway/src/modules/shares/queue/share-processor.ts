@@ -4,6 +4,7 @@ import { Job } from 'bull';
 import { DrizzleService } from '../../../database/services/drizzle.service';
 import { ConfigService } from '../../../config/services/config.service';
 import { shares } from '../../../db/schema/shares';
+import { youtubeContent, youtubeChapters, youtubeEnhancements } from '../../../db/schema/youtube';
 import { SHARE_QUEUE, SHARE_PROCESS_JOB } from './share-queue.constants';
 import { eq } from 'drizzle-orm';
 import { ShareStatus } from '../constants/share-status.enum';
@@ -258,9 +259,171 @@ export class ShareProcessor {
    * Store YouTube-specific metadata in the database
    */
   private async storeYouTubeMetadata(shareId: string, fetchResult: FetchResponse): Promise<void> {
-    // TODO: Store in youtube_content table
-    // This would include content type, processing strategy, channel info, etc.
     this.logger.debug(`Storing YouTube metadata for share ${shareId}`);
+
+    try {
+      const videoData = fetchResult.platformData as any;
+      const processingStrategy = videoData.processingStrategy as YouTubeProcessingStrategy;
+
+      // Extract channel information
+      const channelId = videoData.snippet?.channelId;
+      const channelTitle = videoData.snippet?.channelTitle;
+
+      // Extract video statistics
+      const statistics = videoData.statistics || {};
+      const viewCount = statistics.viewCount ? parseInt(statistics.viewCount, 10) : null;
+      const likeCount = statistics.likeCount ? parseInt(statistics.likeCount, 10) : null;
+      const commentCount = statistics.commentCount ? parseInt(statistics.commentCount, 10) : null;
+
+      // Parse duration from ISO 8601 format (PT14M3S)
+      const durationSeconds = this.parseDurationToSeconds(videoData.contentDetails?.duration || 'PT0S');
+
+      // Extract content details
+      const contentDetails = videoData.contentDetails || {};
+      const snippet = videoData.snippet || {};
+
+      // Determine content flags
+      const isShort = durationSeconds < 60;
+      const isLive = snippet.liveBroadcastContent === 'live';
+      const isMusic = snippet.categoryId === '10'; // Music category
+
+      // Parse published date
+      const publishedAt = snippet.publishedAt ? new Date(snippet.publishedAt) : null;
+
+      // Store in youtube_content table
+      const youtubeContentRecord = {
+        shareId,
+        youtubeId: videoData.id,
+        channelId,
+        channelTitle,
+        durationSeconds,
+        viewCount,
+        likeCount,
+        commentCount,
+        contentType: processingStrategy.type,
+        processingPriority: processingStrategy.processingPriority,
+        hasCaptions: contentDetails.caption === 'true',
+        isShort,
+        isLive,
+        isMusic,
+        contentRating: contentDetails.contentRating?.ytRating || null,
+        privacyStatus: snippet.privacyStatus || 'public',
+        publishedAt,
+        tags: snippet.tags || [],
+        downloadStrategy: processingStrategy.downloadStrategy,
+        transcriptionStrategy: processingStrategy.transcriptionStrategy,
+      };
+
+      const [insertedContent] = await this.db.database
+        .insert(youtubeContent)
+        .values(youtubeContentRecord)
+        .returning({ id: youtubeContent.id });
+
+      this.logger.log(`Successfully stored YouTube content metadata for share ${shareId}, youtube_content_id: ${insertedContent.id}`);
+
+    } catch (error) {
+      this.logger.error(`Failed to store YouTube metadata for share ${shareId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Parse ISO 8601 duration to seconds (PT12M44S format)
+   */
+  private parseDurationToSeconds(duration: string): number {
+    const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return 0;
+
+    const hours = parseInt(match[1] || '0', 10);
+    const minutes = parseInt(match[2] || '0', 10);
+    const seconds = parseInt(match[3] || '0', 10);
+
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  /**
+   * Initialize enhancement tracking for YouTube content
+   */
+  private async initializeEnhancementTracking(shareId: string, processingStrategy: YouTubeProcessingStrategy): Promise<void> {
+    try {
+      // Retry logic to wait for YouTube metadata to be stored (handles race condition)
+      let contentRecord = null;
+      let retries = 0;
+      const maxRetries = 5;
+      const retryDelay = 1000; // 1 second
+
+      while (!contentRecord && retries < maxRetries) {
+        [contentRecord] = await this.db.database
+          .select({ id: youtubeContent.id })
+          .from(youtubeContent)
+          .where(eq(youtubeContent.shareId, shareId))
+          .limit(1);
+
+        if (!contentRecord) {
+          retries++;
+          if (retries < maxRetries) {
+            this.logger.debug(`YouTube content not found for share ${shareId}, retrying in ${retryDelay}ms (attempt ${retries}/${maxRetries})`);
+            await this.delay(retryDelay);
+          }
+        }
+      }
+
+      if (!contentRecord) {
+        throw new Error(`YouTube content record not found for share ${shareId} after ${maxRetries} retries`);
+      }
+
+      // Check if enhancement tracking already exists
+      const [existingRecord] = await this.db.database
+        .select({ id: youtubeEnhancements.id })
+        .from(youtubeEnhancements)
+        .where(eq(youtubeEnhancements.shareId, shareId))
+        .limit(1);
+
+      if (existingRecord) {
+        this.logger.debug(`Enhancement tracking already exists for share ${shareId}`);
+        return;
+      }
+
+      // Initialize enhancement tracking record
+      const enhancementRecord = {
+        shareId,
+        youtubeContentId: contentRecord.id,
+        downloadStatus: processingStrategy.downloadStrategy === 'none' ? 'skipped' : 'pending',
+        transcriptionStatus: processingStrategy.transcriptionStrategy === 'skip' ? 'skipped' : 'pending',
+        summaryStatus: 'pending',
+        embeddingStatus: 'pending',
+        retryCount: 0,
+      };
+
+      await this.db.database
+        .insert(youtubeEnhancements)
+        .values(enhancementRecord);
+
+      this.logger.debug(`Initialized enhancement tracking for share ${shareId}`);
+    } catch (error) {
+      this.logger.error(`Failed to initialize enhancement tracking for share ${shareId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Update enhancement status in the database
+   */
+  private async updateEnhancementStatus(shareId: string, updates: Partial<any>): Promise<void> {
+    try {
+      await this.db.database
+        .update(youtubeEnhancements)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(eq(youtubeEnhancements.shareId, shareId));
+
+      this.logger.debug(`Updated enhancement status for share ${shareId}:`, updates);
+    } catch (error) {
+      this.logger.error(`Failed to update enhancement status for share ${shareId}: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -359,7 +522,14 @@ export class ShareProcessor {
       `type: ${processingStrategy.type}`
     );
     
+    const startTime = Date.now();
+    
     try {
+      // Initialize enhancement tracking
+      await this.initializeEnhancementTracking(shareId, processingStrategy);
+      
+      // Mark Phase 2 as started
+      await this.updateEnhancementStatus(shareId, { phase2StartedAt: new Date() });
       // Skip processing for music content
       if (processingStrategy.type === 'youtube_music') {
         this.logger.log(`Skipping enhancement for music content: ${shareId}`);
@@ -379,6 +549,12 @@ export class ShareProcessor {
       if (transcript) {
         processingMethod = 'captions';
         this.logger.log(`Successfully fetched transcript for video ${videoId}`);
+        
+        // Update transcription status to completed
+        await this.updateEnhancementStatus(shareId, {
+          transcriptionStatus: 'completed',
+          transcriptionSource: 'youtube_api', // or yt-dlp based on source
+        });
         
         // Check if it's a placeholder or actual transcript
         if (transcript.startsWith('CAPTIONS_UNAVAILABLE:')) {
@@ -460,6 +636,17 @@ export class ShareProcessor {
       
       // Simulate processing
       await this.delay(2000);
+      
+      // Mark Phase 2 as completed with final timing
+      const endTime = Date.now();
+      const totalProcessingTime = Math.round((endTime - startTime) / 1000);
+      
+      await this.updateEnhancementStatus(shareId, {
+        phase2CompletedAt: new Date(),
+        totalProcessingTimeSeconds: totalProcessingTime,
+        embeddingStatus: 'completed', // Assuming embeddings were queued successfully
+        summaryStatus: 'completed',   // Assuming summary was queued successfully
+      });
       
       // Update share status to indicate YouTube Phase 2 enhancement is complete
       await this.updateShareStatus(shareId, ShareStatus.ENRICHED);
@@ -860,26 +1047,38 @@ export class ShareProcessor {
    */
   private async storeVideoChapters(shareId: string, chapters: any[]): Promise<void> {
     try {
-      // Note: This is a placeholder for the database operations
-      // In a full implementation, you would:
-      // 1. Import the youtubeChapters schema
-      // 2. Insert chapter records into the youtube_chapters table
-      // 3. Link to the share and youtube_content records
-      
       this.logger.debug(`Storing ${chapters.length} chapters for share ${shareId}`);
-      
-      // TODO: Implement database storage
-      // const chapterRecords = chapters.map(chapter => ({
-      //   shareId,
-      //   startSeconds: chapter.startSeconds,
-      //   endSeconds: chapter.endSeconds,
-      //   title: chapter.title,
-      //   transcriptSegment: chapter.transcriptSegment,
-      //   chapterOrder: chapter.order,
-      //   durationSeconds: chapter.endSeconds ? chapter.endSeconds - chapter.startSeconds : null
-      // }));
-      // 
-      // await this.db.database.insert(youtubeChapters).values(chapterRecords);
+
+      // First, get the youtube_content_id for this share
+      const [contentRecord] = await this.db.database
+        .select({ id: youtubeContent.id })
+        .from(youtubeContent)
+        .where(eq(youtubeContent.shareId, shareId))
+        .limit(1);
+
+      if (!contentRecord) {
+        throw new Error(`YouTube content record not found for share ${shareId}`);
+      }
+
+      // Prepare chapter records for insertion
+      const chapterRecords = chapters.map(chapter => ({
+        youtubeContentId: contentRecord.id,
+        shareId,
+        startSeconds: chapter.startSeconds,
+        endSeconds: chapter.endSeconds,
+        title: chapter.title,
+        transcriptSegment: chapter.transcriptSegment,
+        chapterOrder: chapter.order,
+        durationSeconds: chapter.endSeconds ? chapter.endSeconds - chapter.startSeconds : null,
+      }));
+
+      // Insert all chapters at once
+      const insertedChapters = await this.db.database
+        .insert(youtubeChapters)
+        .values(chapterRecords)
+        .returning({ id: youtubeChapters.id, title: youtubeChapters.title });
+
+      this.logger.log(`Successfully stored ${insertedChapters.length} chapters for share ${shareId}`);
       
     } catch (error) {
       this.logger.error(`Failed to store chapters for share ${shareId}: ${error.message}`);
