@@ -17,16 +17,19 @@ _Legend: ~~Strikethrough~~ = Complete | **Bold** = In Progress | Normal = Not St
 | ~~0.8~~ | ~~Configure ESLint/Prettier and Git hooks~~    | DevOps  | 1 day         | 0.1          | ✅ COMPLETE              |
 | ~~0.9~~ | ~~Implement secrets handling sandbox~~         | DevOps  | 2 days        | 0.6          | ✅ COMPLETE (2025-05-17) |
 
-## Phase 1: MVP Skeleton (Weeks 1-2) - **100% COMPLETE**
+## Phase 1: MVP Skeleton (Weeks 1-2) - **82% COMPLETE**
 
 | Task ID  | Task Description                            | Owner           | Est. Duration | Dependencies | Notes                    |
 | -------- | ------------------------------------------- | --------------- | ------------- | ------------ | ------------------------ |
 | ~~1.1~~  | ~~Create NestJS+Fastify project structure~~ | Backend         | 2 days        | 0.7          | ✅ COMPLETE              |
 | ~~1.2~~  | ~~Implement JWT auth middleware~~           | Backend         | 2 days        | 1.1          | ✅ COMPLETE (2025-05-17) |
+| 1.2.1    | Add social auth (Google & Apple)            | Backend         | 5 days        | 1.2          | ❌ NOT STARTED           |
 | ~~1.3~~  | ~~Develop health check endpoint~~           | Backend         | 1 day         | 1.1          | ✅ COMPLETE (2025-05-17) |
 | ~~1.4~~  | ~~Implement /shares endpoint~~              | Backend         | 3 days        | 1.1, 1.2     | ✅ COMPLETE (2025-05-17) |
 | ~~1.5~~  | ~~Set up BullMQ worker~~                    | Backend         | 2 days        | 1.4          | ✅ COMPLETE (2025-05-17) |
 | ~~1.6~~  | ~~Create React Native mobile app shell~~    | Mobile          | 4 days        | -            | ✅ COMPLETE (2025-05-21) |
+| 1.6.1    | Integrate Google Sign-In (Mobile)           | Mobile          | 2 days        | 1.6, 1.2.1   | ❌ NOT STARTED           |
+| 1.6.2    | Integrate Apple Sign-In (iOS)               | Mobile          | 2 days        | 1.6, 1.2.1   | ❌ NOT STARTED           |
 | ~~1.7~~  | ~~Implement iOS Share Extension~~           | Mobile          | 3 days        | 1.6          | ✅ COMPLETE (2025-05-26) |
 | ~~1.8~~  | ~~Implement Android Intent Filter~~         | Mobile          | 3 days        | 1.6          | ✅ COMPLETE (2025-05-27) |
 | ~~1.9~~  | ~~Create browser WebExtension~~             | Frontend        | 4 days        | -            | ✅ COMPLETE (2025-01-30) |
@@ -84,6 +87,7 @@ _Legend: ~~Strikethrough~~ = Complete | **Bold** = In Progress | Normal = Not St
 | ------- | ------------------------------------------------------------- | -------- | ------------- | -------------- | ------------------------- |
 | 4.1     | Set up Next.js 14 web project                                 | Frontend | 3 days        | -              | ❌ NOT STARTED            |
 | 4.2     | Implement authentication in web app                           | Frontend | 2 days        | 4.1            | ❌ NOT STARTED            |
+| 4.2.1   | Add Google & Apple auth (Web)                                | Frontend | 3 days        | 4.2, 1.2.1     | ❌ NOT STARTED            |
 | ~~4.3~~ | ~~Develop pgvector similarity queries~~                       | Backend  | 3 days        | 3.6            | ✅ COMPLETE (2025-06-30)  |
 | 4.4     | Implement Drizzle ORM integration                             | Backend  | 2 days        | 4.3            | ❌ NOT STARTED            |
 | ~~4.5~~ | ~~Create GraphQL/tRPC API for search~~                        | Backend  | 4 days        | 4.3, 4.4       | ✅ COMPLETE - REST API    |
@@ -144,18 +148,24 @@ _All Phase 9 tasks remain NOT STARTED_
 | Phase     | Total Tasks | Complete | In Progress | Not Started | Completion % |
 | --------- | ----------- | -------- | ----------- | ----------- | ------------ |
 | Phase 0   | 9           | 9        | 0           | 0           | **100%**     |
-| Phase 1   | 14          | 14       | 0           | 0           | **100%**     |
+| Phase 1   | 17          | 14       | 0           | 3           | **82%**      |
 | Phase 2   | 17          | 13       | 3           | 1           | **76%**      |
 | Phase 3   | 15          | 10       | 2           | 3           | **67%**      |
-| Phase 4   | 17          | 3        | 0           | 14          | **18%**      |
+| Phase 4   | 18          | 3        | 0           | 15          | **17%**      |
 | Phase 5   | 16          | 0        | 0           | 16          | **0%**       |
 | Phase 6   | 15          | 0        | 0           | 15          | **0%**       |
 | Phase 7   | 12          | 0        | 0           | 12          | **0%**       |
 | Phase 8   | 10          | 0        | 0           | 10          | **0%**       |
 | Phase 9   | 5           | 0        | 0           | 5           | **0%**       |
-| **TOTAL** | **130**     | **49**   | **5**       | **76**      | **38%**      |
+| **TOTAL** | **134**     | **49**   | **5**       | **80**      | **37%**      |
 
-## Recent Updates (January 13, 2025)
+## Recent Updates (January 18, 2025)
+
+📝 **Social Authentication**: Added tasks for Google & Apple Sign-In integration
+✅ **Auth Fix**: Resolved iOS logout error with refresh token handling
+🔄 **Task Updates**: Added 4 new tasks for OAuth2 integration across backend, mobile, and web
+
+## Previous Updates (January 13, 2025)
 
 📝 **ADR-212**: End-to-End Distributed Tracing Architecture documented
 🔄 **Tracing Implementation**: Added OpenTelemetry support to ML producer service

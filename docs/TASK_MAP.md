@@ -20,10 +20,13 @@
 |---------|-----------------|-------|---------------|--------------|-------|
 | 1.1 | Create NestJS+Fastify project structure | Backend | 2 days | 0.7 | Set up modules, controllers, services |
 | 1.2 | Implement JWT auth middleware | Backend | 2 days | 1.1 | Use KMS for token signing |
+| 1.2.1 | Add social auth (Google & Apple) | Backend | 5 days | 1.2 | OAuth2 integration with JWT |
 | 1.3 | Develop health check endpoint | Backend | 1 day | 1.1 | Include DB & Redis connectivity checks |
 | 1.4 | Implement /shares endpoint | Backend | 3 days | 1.1, 1.2 | Store minimal share data |
 | 1.5 | Set up BullMQ worker | Backend | 2 days | 1.4 | Echo URL and update status |
 | 1.6 | Create React Native mobile app shell | Mobile | 4 days | - | Basic navigation & auth flows |
+| 1.6.1 | Integrate Google Sign-In (Mobile) | Mobile | 2 days | 1.6, 1.2.1 | React Native Google Sign-In |
+| 1.6.2 | Integrate Apple Sign-In (iOS) | Mobile | 2 days | 1.6, 1.2.1 | Sign in with Apple capability |
 | 1.7 | Implement iOS Share Extension | Mobile | 3 days | 1.6 | Swift implementation bridged to RN |
 | 1.8 | Implement Android Intent Filter | Mobile | 3 days | 1.6 | Kotlin implementation bridged to RN |
 | 1.9 | Create browser WebExtension | Frontend | 4 days | - | Add star button to supported sites |
@@ -81,6 +84,7 @@
 |---------|-----------------|-------|---------------|--------------|-------|
 | 4.1 | Set up Next.js 14 web project | Frontend | 3 days | - | Configure app router & layout |
 | 4.2 | Implement authentication in web app | Frontend | 2 days | 4.1 | JWT-based auth |
+| 4.2.1 | Add Google & Apple auth (Web) | Frontend | 3 days | 4.2, 1.2.1 | OAuth2 flow with redirect |
 | 4.3 | Develop pgvector similarity queries | Backend | 3 days | 3.6 | Optimize HNSW indexes |
 | 4.4 | Implement Drizzle ORM integration | Backend | 2 days | 4.3 | Type-safe database access |
 | 4.5 | Create GraphQL/tRPC API for search | Backend | 4 days | 4.3, 4.4 | Expose search functionality |
