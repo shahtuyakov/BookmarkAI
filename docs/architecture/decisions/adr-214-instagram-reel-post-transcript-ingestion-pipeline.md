@@ -1,8 +1,8 @@
 # ADR-214: Instagram Reel Transcript Ingestion Pipeline
 
-- **Status**: Proposed
+- **Status**: Implemented
 - **Date**: 2025-01-13
-- **Updated**: 2025-01-16
+- **Updated**: 2025-01-17
 - **Authors**: @bookmarkai-backend
 - **Supersedes**: —
 - **Superseded by**: —
@@ -51,12 +51,11 @@ Instagram Reel URL Shared
          │
          ▼
 ┌─────────────────────┐
-│  Instagram Fetcher  │ (3-8s total)
+│  Instagram Fetcher  │ (5-10s total)
 │                     │
-│ 1. oEmbed metadata  │
+│ 1. yt-dlp extract   │
 │ 2. Content classify │
-│ 3. yt-dlp download  │
-│ 4. Store to S3/local│
+│ 3. Store to S3/local│
 └────────┬────────────┘
          │
     Return with
@@ -83,15 +82,16 @@ Instagram Reel URL Shared
 
 | Component | Specification | Latency | Cost |
 |-----------|---------------|---------|------|
-| **oEmbed Fetch** | Instagram oEmbed API | < 1s | $0.00 |
+| **yt-dlp Metadata + Download** | Direct extraction (no oEmbed) | 5-10s | $0.00 |
 | **Content Classification** | Rule-based detection | < 0.1s | $0.00 |
-| **yt-dlp Download** | Audio extraction (m4a) | 2-5s | $0.00 |
 | **Storage (S3/Local)** | Based on configuration | < 1s | ~$0.0001 |
-| **Total Fetch Time** | End-to-end fetcher | 3-8s | ~$0.0001 |
+| **Total Fetch Time** | End-to-end fetcher | 5-10s | ~$0.0001 |
 | **ML Pipeline (Async)** | | | |
 | **Whisper Transcription** | OpenAI Whisper API | 5-20s | $0.006/min |
-| **Summarization** | GPT-4o-mini | 2-5s | $0.001 |
+| **Summarization** | GPT-3.5-turbo | 2-5s | $0.001 |
 | **Embeddings** | text-embedding-3-small | < 1s | $0.00002 |
+
+**Implementation Note**: Instagram's oEmbed API requires authentication, so we use yt-dlp for both metadata extraction and video download in a single operation.
 
 ### 2.3 URL Filtering & Content Detection
 
@@ -127,49 +127,43 @@ Classification indicators:
 
 ## 3 — Database Schema
 
-Following the TikTok pattern, we need a single table for Instagram-specific metadata:
+Following the TikTok pattern, Instagram-specific metadata is stored in the shares table's platform_data JSONB field rather than a separate table:
 
-```sql
--- Instagram-specific metadata and processing data
-CREATE TABLE instagram_content (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  share_id UUID NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
-  reel_id VARCHAR(100) NOT NULL,
-  author_username VARCHAR(100),
-  caption TEXT,
-  hashtags TEXT[],
+```typescript
+// Instagram platform_data structure
+{
+  // yt-dlp extracted data
+  title: string;              // Video title from yt-dlp
+  description: string;        // Video description
+  uploader: string;           // Instagram username
+  uploadDate: string;         // Upload date
+  viewCount?: number;         // View count if available
   
-  -- Content classification
-  content_type VARCHAR(50) NOT NULL DEFAULT 'instagram_reel_standard',
-  classification_confidence DECIMAL(3,2),
+  // Instagram specific
+  reelId: string;             // Extracted from URL
+  contentType: string;        // instagram_reel_standard, instagram_reel_music, etc.
+  processingStrategy: {
+    type: string;
+    priority: number;
+    shouldTranscribe: boolean;
+    downloadStrategy: string;
+    transcriptionStrategy: string;
+    summaryComplexity: string;
+  };
+  hashtags: string[];         // Extracted hashtags
   
-  -- Storage information (following TikTok pattern)
-  storage_url TEXT,           -- S3 or local path to downloaded audio
-  storage_type VARCHAR(20),   -- 'local' or 's3'
-  file_size_bytes BIGINT,
-  duration_seconds INTEGER,
+  // Storage information
+  storageUrl: string;         // S3 or local path
+  storageType: 'local' | 's3';
+  downloadSuccess: boolean;
   
-  -- Processing results (stored after ML pipeline completion)
-  transcript_text TEXT,
-  transcript_language VARCHAR(10) DEFAULT 'en',
-  whisper_confidence DECIMAL(3,2),
-  
-  -- Metadata
-  download_time_ms INTEGER,
-  processing_completed_at TIMESTAMPTZ,
-  error_message TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  UNIQUE(share_id)
-);
-
--- Indexes for performance
-CREATE INDEX idx_instagram_content_share_id ON instagram_content(share_id);
-CREATE INDEX idx_instagram_content_reel_id ON instagram_content(reel_id);
-CREATE INDEX idx_instagram_content_type ON instagram_content(content_type);
-CREATE INDEX idx_instagram_content_created_at ON instagram_content(created_at);
+  // Processing flags
+  shouldTranscribe: boolean;
+  processingPriority: number;
+}
 ```
+
+The instagram_content table was created but is not actively used in the current implementation, as all data is stored in the existing shares and ml_results tables.
 
 ---
 
@@ -181,51 +175,69 @@ CREATE INDEX idx_instagram_content_created_at ON instagram_content(created_at);
 export class InstagramFetcher extends BaseContentFetcher {
   async fetch(request: FetchRequest): Promise<FetchResponse> {
     // 1. Validate URL is a Reel
-    const { type, contentId } = InstagramUrlParser.detectContentType(request.url);
-    if (type !== InstagramUrlType.REEL) {
-      throw new FetcherError(UNSUPPORTED_CONTENT_MESSAGES[type]);
-    }
-    
-    // 2. Fetch oEmbed metadata
-    const metadata = await this.fetchOEmbedData(request.url);
-    
-    // 3. Classify content type
-    const contentType = this.classifier.classify(metadata);
-    const strategy = INSTAGRAM_PROCESSING_STRATEGIES[contentType];
-    
-    // 4. Download if not music/dance content
-    let storageUrl = null;
-    if (strategy.shouldTranscribe) {
-      const ytDlpResult = await this.ytDlpService.extractVideoInfo(
-        request.url,
-        true  // Download audio only
+    const urlInfo = this.instagramUrlParser.parse(request.url);
+    if (urlInfo.type !== InstagramUrlType.REEL) {
+      throw new FetcherError(
+        FetcherErrorCode.UNSUPPORTED_CONTENT_TYPE,
+        UNSUPPORTED_CONTENT_MESSAGES[urlInfo.type]
       );
-      storageUrl = ytDlpResult?.storageUrl;
     }
+    
+    // 2. Use yt-dlp to extract metadata and download video
+    const ytDlpResult = await this.ytDlpService.extractVideoInfo(request.url, true);
+    
+    // 3. Extract metadata from yt-dlp result
+    const metadata = {
+      author_name: ytDlpResult.uploader || 'Unknown',
+      caption: ytDlpResult.description || ytDlpResult.title || '',
+      hashtags: this.extractHashtags(ytDlpResult.description || ''),
+    };
+    
+    // 4. Classify content type
+    const contentType = this.classifier.classify({
+      author: metadata.author_name,
+      caption: metadata.caption,
+      duration: ytDlpResult.duration,
+      hashtags: metadata.hashtags,
+    });
+    const strategy = INSTAGRAM_PROCESSING_STRATEGIES[contentType];
     
     // 5. Return response with storage location
     return {
       content: {
-        title: `${metadata.author_name}'s Reel`,
-        text: metadata.caption,
-        author: metadata.author_name,
+        text: sanitizeContent(metadata.caption),
+        platform: Platform.INSTAGRAM,
+        platformId: urlInfo.contentId,
+        author: sanitizeContent(metadata.author_name),
       },
-      media: storageUrl ? {
-        url: storageUrl,      // Local/S3 path, not HTTP URL
-        type: 'video',
-        storageType: ytDlpResult.storageType,
-      } : undefined,
-      metadata: {
-        platform: 'instagram',
-        contentType,
-        hashtags: this.extractHashtags(metadata.caption),
-        duration: ytDlpResult?.duration,
+      platformData: {
+        // yt-dlp extracted data
+        title: ytDlpResult.title,
+        description: ytDlpResult.description,
+        uploader: ytDlpResult.uploader,
+        uploadDate: ytDlpResult.uploadDate,
+        viewCount: ytDlpResult.viewCount,
+        // Instagram specific
+        reelId: urlInfo.contentId,
+        contentType: contentType,
+        processingStrategy: strategy,
+        hashtags: metadata.hashtags,
         shouldTranscribe: strategy.shouldTranscribe,
-      }
+        processingPriority: strategy.priority,
+        storageUrl: ytDlpResult.storageUrl,
+        storageType: ytDlpResult.storageType,
+        downloadSuccess: !!ytDlpResult.storageUrl,
+      },
     };
   }
 }
 ```
+
+**Key Implementation Details:**
+- Direct yt-dlp extraction without oEmbed API (authentication not required)
+- Content classification based on hashtags, caption keywords, and duration
+- All metadata stored in platform_data JSONB field
+- Graceful error handling for private content or download failures
 
 ### 4.2 ShareProcessor Integration
 
@@ -241,8 +253,17 @@ Following TikTok's proven patterns:
 - **URL Validation**: Reject non-Reel URLs with clear error messages
 - **Download Failures**: Log warning but still return metadata for basic functionality
 - **Private Content**: Return specific error code for private Reels
-- **Rate Limiting**: Use existing WorkerRateLimiterService
+- **Rate Limiting**: Use existing WorkerRateLimiterService with Instagram configuration
 - **Graceful Degradation**: Fall back to caption-only if download fails
+
+### 4.4 Platform Verification Updates
+
+Updated across the system to support Instagram URLs:
+- **API Gateway**: CreateShareDto regex validation includes instagram.com and instagr.am
+- **Common Validation**: shares.schema.ts PlatformSchema includes Instagram
+- **Mobile iOS**: ShareViewController.swift supports Instagram URLs
+- **Mobile Android**: UrlValidator.kt includes Instagram domain validation
+- **SDK**: Modified exports to avoid Node.js dependencies in React Native
 
 ---
 
@@ -319,18 +340,28 @@ With content classification and music/dance filtering:
 
 ## 9 — Migration Strategy
 
-### 9.1 Rollout Plan
-- **Week 1**: Implement Instagram fetcher with URL filtering and content classification
-- **Week 2**: Integration testing with existing ShareProcessor and ML pipeline
-- **Week 3**: Feature flag rollout (10% → 50% → 100%)
-- **Week 4**: Monitor metrics and optimize classification rules
+### 9.1 Implementation Summary (Completed)
 
-### 9.2 Success Criteria
-- Fetch success rate > 85%
-- Correct Reel filtering (0 non-Reel content processed)
-- Music/dance detection accuracy > 80%
-- Daily cost < $10
-- No regression in TikTok processing
+**What was built:**
+1. **Instagram URL Parser**: Detects and validates Instagram content types (Reels only)
+2. **Content Classifier**: Categorizes Reels for processing optimization
+3. **Instagram Fetcher**: Uses yt-dlp for metadata extraction and video download
+4. **Platform Integration**: Updated platform enums, validation, and mobile support
+5. **Rate Limiting**: Configured Instagram-specific rate limits
+6. **ML Pipeline**: Integrated with existing Whisper, summarization, and embedding services
+
+**Key Decisions Made:**
+- Used yt-dlp directly instead of oEmbed API (authentication requirement)
+- Stored all data in existing tables (shares, ml_results) rather than instagram_content
+- Followed TikTok's single-phase pattern for simplicity
+- Implemented content classification for cost optimization
+
+### 9.2 Production Metrics (Initial Results)
+- **Fetch Success**: ✅ 100% (1/1 test)
+- **Processing Time**: ~9 seconds for fetch + download
+- **ML Pipeline**: Successfully transcribed and summarized
+- **Storage**: S3 upload working correctly
+- **Mobile Support**: URLs pass validation on iOS and Android
 
 ---
 
@@ -343,6 +374,9 @@ With content classification and music/dance filtering:
 5. **Visual Analysis**: Extract key frames for visual content understanding
 6. **Two-Phase Model**: Consider YouTube-style processing for longer content
 7. **Trending Audio Cache**: Skip download for known music tracks
+8. **Instagram-Specific Table**: Migrate platform_data to dedicated instagram_content table
+9. **Metrics Dashboard**: Add Instagram-specific metrics to Grafana
+10. **Authentication Support**: Implement OAuth for accessing private content with user consent
 
 ---
 
