@@ -60,7 +60,45 @@
       "python/*/src",
       "docs/architecture/decisions",
       "env/*"
-    ]
+    ],
+    "contextualPatterns": {
+      "authentication": [
+        "**/auth.service.ts",
+        "**/jwt.strategy.ts",
+        "**/guards/*.ts",
+        "**/supabase.service.ts"
+      ],
+      "mlPipeline": [
+        "**/ml.producer.ts",
+        "**/ml.module.ts",
+        "python/*/tasks.py",
+        "**/ml-producer.service.ts"
+      ],
+      "mobileShare": [
+        "**/ShareExtension/**",
+        "**/ShareIntent.kt",
+        "**/share.service.ts",
+        "**/ShareScreen.tsx"
+      ],
+      "vectorSearch": [
+        "**/search.service.ts",
+        "**/embeddings.schema.ts",
+        "python/vector-service/**",
+        "**/vector-*.ts"
+      ],
+      "database": [
+        "**/drizzle/schema/**",
+        "**/repositories/*.ts",
+        "**/migrations/**",
+        "**/seed.ts"
+      ]
+    },
+    "smartSearch": {
+      "useAstGrepFirst": true,
+      "parallelSearchDepth": 3,
+      "cacheResults": true,
+      "contextWindow": 5
+    }
   },
   "workflow": {
     "setup": {
@@ -302,6 +340,126 @@
       "Repository pattern for data access",
       "Dependency injection with NestJS"
     ]
+  },
+  "startup": {
+    "autoLoad": [
+      "CLAUDE.md",
+      "docs/architecture/decisions/ADR-*.md",
+      "docs/project_commands_upd.md",
+      "env/README.md"
+    ],
+    "recentChanges": {
+      "gitLogDepth": 10,
+      "showDiff": false,
+      "focusAreas": ["packages/api-gateway", "packages/mobile", "python"]
+    },
+    "healthChecks": [
+      "workflow.docker.dockerPs",
+      "workflow.ml.healthCheck",
+      "workflow.debug.rabbitmqQueues"
+    ],
+    "contextAwareness": {
+      "detectActiveArea": true,
+      "loadRelevantDocs": true,
+      "showRecentErrors": true
+    }
+  },
+  "quickStartProfiles": {
+    "ml-development": {
+      "description": "ML service development setup",
+      "commands": [
+        "workflow.docker.startML",
+        "workflow.ml.healthCheck",
+        "workflow.docker.logs.llm",
+        "workflow.docker.logs.whisper"
+      ],
+      "contextFiles": [
+        "python/llm-service/README.md",
+        "python/whisper-service/README.md",
+        "docs/ml-producer-metrics.md"
+      ]
+    },
+    "mobile-development": {
+      "description": "React Native development",
+      "commands": [
+        "workflow.development.mobile.metro",
+        "workflow.development.mobile.ios"
+      ],
+      "contextFiles": [
+        "packages/mobile/bookmarkaimobile/README.md",
+        "docs/architecture/decisions/ADR-050-*.md"
+      ]
+    },
+    "api-development": {
+      "description": "API Gateway development",
+      "commands": [
+        "workflow.docker.startAll",
+        "workflow.development.api",
+        "workflow.database.connect"
+      ],
+      "contextFiles": [
+        "packages/api-gateway/README.md",
+        "apps/api/openapi.yaml"
+      ]
+    },
+    "full-stack": {
+      "description": "Complete development environment",
+      "commands": ["aliases.startup", "aliases.health-check"],
+      "contextFiles": ["CLAUDE.md", "docs/project_commands_upd.md"]
+    }
+  },
+  "problemPatterns": {
+    "mlPipeline": {
+      "symptoms": ["ML task stuck", "embeddings not generated", "transcription timeout"],
+      "diagnosis": [
+        "workflow.ml.healthCheck",
+        "workflow.debug.rabbitmqQueues",
+        "workflow.docker.logs.llm"
+      ],
+      "solutions": [
+        "errorRecovery.mlServiceDown",
+        "Check python service logs for model loading issues",
+        "Verify RabbitMQ connection in env files"
+      ]
+    },
+    "authIssues": {
+      "symptoms": ["401 errors", "JWT expired", "Invalid token"],
+      "diagnosis": [
+        "Check env/development/api-gateway.env for JWT_SECRET",
+        "Verify AUTH_PROVIDER_ENABLED in env files"
+      ],
+      "solutions": [
+        "Ensure JWT_SECRET matches across services",
+        "Check token expiration settings",
+        "Verify Supabase connection"
+      ]
+    },
+    "vectorSearch": {
+      "symptoms": ["Search returns no results", "Embedding errors"],
+      "diagnosis": [
+        "workflow.ml.testVector",
+        "Check pgvector extension in PostgreSQL",
+        "workflow.docker.logs.vector"
+      ],
+      "solutions": [
+        "Run vector service health check",
+        "Check embedding dimensions (1536)",
+        "Verify OpenAI API key"
+      ]
+    },
+    "mobileShare": {
+      "symptoms": ["Share extension not working", "Content not captured"],
+      "diagnosis": [
+        "Check mobile app logs",
+        "Verify API endpoint configuration",
+        "Check authentication in share extension"
+      ],
+      "solutions": [
+        "Rebuild share extension",
+        "Check API_URL in mobile env",
+        "Verify app group configuration"
+      ]
+    }
   },
   "ai": {
     "defaultModel": "default",
