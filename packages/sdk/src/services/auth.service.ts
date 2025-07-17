@@ -82,6 +82,14 @@ export class AuthService {
   }
 
   /**
+   * Get current refresh token
+   */
+  async getRefreshToken(): Promise<string | null> {
+    const tokens = await this.getStoredTokens();
+    return tokens?.refreshToken || null;
+  }
+
+  /**
    * Store new tokens
    */
   async setTokens(tokens: TokenPair, expiresIn?: number): Promise<void> {

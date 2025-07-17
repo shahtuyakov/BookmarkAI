@@ -217,6 +217,13 @@ export class BookmarkAIClient {
   }
 
   /**
+   * Get the current refresh token
+   */
+  async getRefreshToken(): Promise<string | null> {
+    return this.authService.getRefreshToken();
+  }
+
+  /**
    * Update configuration
    */
   updateConfig(config: Partial<ClientConfig>): void {

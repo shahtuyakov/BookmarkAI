@@ -102,9 +102,13 @@ export class AuthApiService {
    */
   async logout(): Promise<void> {
     try {
+      // Get the refresh token before logout
+      const refreshToken = await this.client.getRefreshToken();
+      
       await this.client.request({
         url: '/v1/auth/logout',
         method: 'POST',
+        data: refreshToken ? { refreshToken } : {},
       });
     } finally {
       // Always clear local tokens, even if server request fails

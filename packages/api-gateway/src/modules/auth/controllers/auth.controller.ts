@@ -96,7 +96,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async logout(
     @Req() request: Request,
-    @Body() body: { refreshToken?: string },
+    @Body() body: { refreshToken?: string } = {},
     @Res({ passthrough: true }) response: Response,
   ) {
     const user = request.user as { id: string };
@@ -104,7 +104,7 @@ export class AuthController {
     // Clear the cookie for web clients
     this.clearCookieIfWeb(response);
     
-    await this.authService.logout(user.id, body.refreshToken);
+    await this.authService.logout(user.id, body?.refreshToken);
     
     return { success: true };
   }
