@@ -462,15 +462,6 @@
     }
   },
   "ai": {
-    "defaultModel": "default",
-    "modelStrategy": "Default (recommended) - Opus 4 for up to 50% of usage limits, then use Sonnet 4",
-    "availableModels": {
-      "default": "Opus 4 for complex tasks, Sonnet 4 for daily use (recommended)",
-      "opus": "Opus 4 for complex tasks - Reaches usage limits ~5x faster",
-      "sonnet": "Sonnet 4 for daily use"
-    },
-    "temperature": 0.7,
-    "maxTokens": 4096,
     "useMCPTools": true,
     "mcpToolsEnabled": [
       "mcp__zen__thinkdeep",
@@ -485,73 +476,11 @@
       "mcp__zen__tracer"
     ],
     "preferredTools": [
-      "ast-grep",
       "TodoWrite",
       "mcp__zen__debug",
       "mcp__zen__analyze",
       "mcp__zen__thinkdeep"
-    ],
-    "astGrepCapabilities": {
-      "description": "ast-grep (sg) - structural search/rewrite tool for many languages",
-      "syntax": {
-        "basicCommand": "sg --pattern 'PATTERN' --lang LANGUAGE [PATH]",
-        "metavariables": {
-          "$VAR": "Matches a single node (identifier, expression, etc.)",
-          "$$$VAR": "Matches zero or more nodes (multiple arguments, statements, etc.)",
-          "$_": "Matches any single node (wildcard)",
-          "$$$": "Matches any sequence of nodes (wildcard)"
-        },
-        "tips": [
-          "Use --pattern flag for inline patterns",
-          "Use $$$VAR for multiple items (args, statements)",
-          "Use $VAR for single items",
-          "Include newlines \\n for multi-line patterns",
-          "Language flag is required (--lang typescript, --lang python, etc.)"
-        ]
-      },
-      "supportedLanguages": [
-        "typescript", "javascript", "tsx", "jsx",
-        "python", "rust", "go", "java", "c", "cpp",
-        "html", "css", "json", "yaml", "bash"
-      ],
-      "useCases": [
-        "Syntax-aware code search",
-        "Structural pattern matching", 
-        "Code refactoring with AST precision",
-        "Finding function/class definitions",
-        "Complex code transformations",
-        "Cross-language code analysis"
-      ],
-      "moreDetails": {
-        "sgHelp": "sg --help"
-        },
-      "priority": "Use ast-grep FIRST for any syntax-aware or structural search before falling back to text-based tools like grep/rg",
-      "when_to_use": [
-        "Finding all function definitions",
-        "Locating specific patterns (hooks, decorators, etc)",
-        "Refactoring code structures",
-        "Cross-file architectural analysis",
-        "Type-aware code search",
-        "Complex AST-based transformations"
-      ],
-      "when_not_to_use": [
-        "Simple text string searches",
-        "Log file analysis", 
-        "Documentation searches",
-        "Binary file inspection"
-      ]
-    },
-    "taskComplexityMapping": {
-      "simple": "sonnet",
-      "standard": "default", 
-      "complex": "opus",
-      "architectural": "opus"
-    },
-    "usage": {
-      "currentModel": "Default (Opus 4 + Sonnet 4)",
-      "switchCommand": "Use /model command or --model flag",
-      "customModelFlag": "--model <model-name>"
-    }
+    ]
   },
   "performance": {
     "parallelCommands": [
