@@ -24,7 +24,7 @@ export class ContentFetcherRegistry {
     // Load enabled platforms for compliance
     this.enabledPlatforms = new Set(
       this.configService
-        .get<string>('ENABLED_PLATFORMS', 'tiktok,reddit,twitter,x,youtube,generic')
+        .get<string>('ENABLED_PLATFORMS', 'tiktok,reddit,twitter,x,youtube,instagram,generic')
         .split(',')
         .map((p) => p.trim() as Platform)
     );
@@ -140,6 +140,8 @@ export class ContentFetcherRegistry {
       [Platform.REDDIT]: { max: 60, duration: 60000 },    // 60/min
       [Platform.TWITTER]: { max: 300, duration: 900000 }, // 300/15min (if implemented)
       [Platform.X]: { max: 300, duration: 900000 },       // 300/15min (if implemented)
+      [Platform.YOUTUBE]: { max: 100, duration: 60000 },  // 100/min (conservative for API quota)
+      [Platform.INSTAGRAM]: { max: 200, duration: 3600000 }, // 200/hour
       [Platform.GENERIC]: { max: 120, duration: 60000 },  // 120/min
       [Platform.UNKNOWN]: { max: 30, duration: 60000 },   // 30/min (conservative)
     };

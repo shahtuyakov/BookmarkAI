@@ -208,6 +208,16 @@ export class RateLimitConfigService {
           maxDelay: 3600000, // 1 hour
         },
       },
+      instagram: {
+        algorithm: 'sliding_window',
+        limits: [{ requests: 200, window: 3600 }], // 200 per hour (conservative)
+        backoff: {
+          type: 'exponential',
+          initialDelay: 5000,
+          maxDelay: 600000, // 10 minutes
+          multiplier: 2,
+        },
+      },
     };
 
     this.configs.clear();

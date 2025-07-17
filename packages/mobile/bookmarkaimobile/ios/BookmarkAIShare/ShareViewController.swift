@@ -25,7 +25,7 @@ class ShareViewController: SLComposeServiceViewController {
         }
         
         guard isURLSupported(url) else {
-            showError("Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, X, and YouTube.")
+            showError("Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, X, YouTube, and Instagram.")
             return
         }
         
@@ -235,7 +235,7 @@ class ShareViewController: SLComposeServiceViewController {
         let isSupported = isURLSupported(url)
         placeholder = isSupported
             ? "Share \(url.host ?? "content") to BookmarkAI"
-            : "⚠️ Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, X, and YouTube."
+            : "⚠️ Unsupported URL. BookmarkAI supports TikTok, Reddit, Twitter, X, YouTube, and Instagram."
     }
     
     private func isURLSupported(_ url: URL) -> Bool {
@@ -245,7 +245,9 @@ class ShareViewController: SLComposeServiceViewController {
                host.contains("twitter.com") ||
                host.contains("x.com") ||
                host.contains("youtube.com") ||
-               host.contains("youtu.be")
+               host.contains("youtu.be") ||
+               host.contains("instagram.com") ||
+               host.contains("instagr.am")
     }
     
     override func didSelectCancel() {

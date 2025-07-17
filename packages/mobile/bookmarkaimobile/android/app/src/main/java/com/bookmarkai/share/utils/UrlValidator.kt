@@ -17,7 +17,8 @@ object UrlValidator {
         REDDIT("Reddit"), 
         TWITTER("Twitter"),
         X("X (Twitter)"),
-        YOUTUBE("YouTube");
+        YOUTUBE("YouTube"),
+        INSTAGRAM("Instagram");
         
         companion object {
             fun fromUrl(url: String): SupportedPlatform? {
@@ -27,6 +28,7 @@ object UrlValidator {
                     isTwitterUrl(url) -> TWITTER
                     isXUrl(url) -> X
                     isYouTubeUrl(url) -> YOUTUBE
+                    isInstagramUrl(url) -> INSTAGRAM
                     else -> null
                 }
             }
@@ -170,6 +172,18 @@ object UrlValidator {
         return try {
             val host = Uri.parse(url).host?.lowercase() ?: return false
             host.contains("youtube.com") || host == "youtu.be" || host == "m.youtube.com"
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Check if URL is from Instagram
+     */
+    private fun isInstagramUrl(url: String): Boolean {
+        return try {
+            val host = Uri.parse(url).host?.lowercase() ?: return false
+            host.contains("instagram.com") || host == "instagr.am"
         } catch (e: Exception) {
             false
         }

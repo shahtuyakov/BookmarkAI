@@ -8,6 +8,7 @@ import {
   XFetcher,
   GenericFetcher,
   YouTubeFetcher,
+  InstagramFetcher,
 } from './platforms';
 import { YtDlpService } from '../services/ytdlp.service';
 import { S3StorageService } from '../services/s3-storage.service';
@@ -42,6 +43,7 @@ import { YouTubeQuotaManager } from './managers/youtube-quota-manager';
     XFetcher,
     GenericFetcher,
     YouTubeFetcher,
+    InstagramFetcher,
     
     // Provider for all fetchers array
     {
@@ -53,7 +55,8 @@ import { YouTubeQuotaManager } from './managers/youtube-quota-manager';
         x: XFetcher,
         generic: GenericFetcher,
         youtube: YouTubeFetcher,
-      ) => [tiktok, reddit, twitter, x, generic, youtube],
+        instagram: InstagramFetcher,
+      ) => [tiktok, reddit, twitter, x, generic, youtube, instagram],
       inject: [
         TikTokFetcher,
         RedditFetcher,
@@ -61,6 +64,7 @@ import { YouTubeQuotaManager } from './managers/youtube-quota-manager';
         XFetcher,
         GenericFetcher,
         YouTubeFetcher,
+        InstagramFetcher,
       ],
     },
   ],
