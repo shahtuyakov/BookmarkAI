@@ -62,7 +62,7 @@ export abstract class BaseContentFetcher implements ContentFetcherInterface {
       ),
       credentials: this.loadCredentials(),
       enabledPlatforms: this.configService
-        .get<string>('ENABLED_PLATFORMS', 'tiktok,reddit,generic')
+        .get<string>('ENABLED_PLATFORMS', 'tiktok,reddit,twitter,x,youtube,instagram,generic')
         .split(',')
         .map((p) => p.trim() as Platform),
     };

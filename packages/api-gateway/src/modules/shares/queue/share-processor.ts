@@ -64,7 +64,7 @@ export class ShareProcessor {
    */
   private requiresEnhancement(platform: string): boolean {
     // Platforms that support video enhancement workflow
-    const enhancementPlatforms = ['tiktok'];
+    const enhancementPlatforms = ['tiktok', 'instagram'];
     // YouTube will use its own enhancement path
     return enhancementPlatforms.includes(platform.toLowerCase());
   }

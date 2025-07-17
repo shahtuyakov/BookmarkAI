@@ -1,0 +1,2 @@
+-- Empty migration file (placeholder)
+-- This migration was missing and is added as a placeholder to maintain sequence

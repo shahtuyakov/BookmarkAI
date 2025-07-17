@@ -3,7 +3,7 @@ import apiClient from './client';
 export interface Share {
   id: string;
   url: string;
-  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'generic' | 'unknown';
+  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'youtube' | 'instagram' | 'generic' | 'unknown';
   status: 'pending' | 'processing' | 'fetching' | 'done' | 'error';
   title?: string;
   description?: string;

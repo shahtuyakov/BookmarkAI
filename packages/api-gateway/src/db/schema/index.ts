@@ -8,3 +8,4 @@ export * from './ml-results';
 export * from './llm-costs';
 export * from './vector-costs';
 export * from './youtube';
+export * from './instagram';

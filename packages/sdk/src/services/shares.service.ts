@@ -1,4 +1,4 @@
-import { AxiosError } from 'axios';
+// Remove axios import to avoid bundling Node.js dependencies in React Native
 import { BookmarkAIClient } from '../client';
 import { ShareBatchProcessor } from '../utils/batch';
 
@@ -46,7 +46,7 @@ export interface Share {
   title?: string;
   notes?: string;
   status: 'pending' | 'processing' | 'done' | 'failed';
-  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'unknown';
+  platform: 'tiktok' | 'reddit' | 'twitter' | 'x' | 'youtube' | 'instagram' | 'generic' | 'unknown';
   userId: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -83,12 +83,23 @@ const KEY_REUSE_WINDOW_MS = 30_000;
 function isTransientNetworkError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
 
-  // AxiosError codes for network issues across environments
+  // Network error codes across environments
   const TRANSIENT_CODES = ['ECONNABORTED', 'ENETUNREACH', 'ETIMEDOUT', 'ECONNRESET', 'ERR_NETWORK'];
 
-  if ((error as AxiosError).isAxiosError) {
-    const code = (error as AxiosError).code;
-    return code ? TRANSIENT_CODES.includes(code) : false;
+  // Check for common network error patterns without relying on axios
+  const errorObj = error as any;
+  
+  // Check if it has a code property with transient error codes
+  if (errorObj.code && TRANSIENT_CODES.includes(errorObj.code)) {
+    return true;
+  }
+  
+  // Check for network-related error messages
+  if (errorObj.message) {
+    const message = errorObj.message.toLowerCase();
+    if (message.includes('network') || message.includes('timeout') || message.includes('abort')) {
+      return true;
+    }
   }
 
   return false;
