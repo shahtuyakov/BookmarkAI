@@ -1,754 +1,178 @@
 {
   "project": {
     "name": "BookmarkAI",
-    "type": "monorepo",
-    "description": "Social media content capture and enrichment platform",
+    "description": "Social media content capture platform with ML-powered enrichment",
+    "overview": "Monorepo with NestJS API, React Native mobile app, browser extension, and Python ML services",
     "primaryLanguages": ["typescript", "python"],
-    "frameworks": {
-      "backend": "nestjs",
-      "mobile": "react-native",
-      "ml": "fastapi"
+    "architecture": "Event-driven microservices with BullMQ, PostgreSQL + pgvector, Redis cache"
+  },
+
+  "quickStart": {
+    "newDeveloper": [
+      "pnpm install",
+      "./scripts/docker-start.sh",
+      "pnpm -w run db:migrate",
+      "pnpm -w run dev:api"
+    ],
+    "dailyStartup": [
+      "docker-compose -f docker/docker-compose.yml up -d",
+      "pnpm -w run dev:api"
+    ]
+  },
+
+  "codeStyle": {
+    "typescript": {
+      "indent": 2,
+      "quotes": "single",
+      "preferArrowFunctions": true,
+      "useTypeScript": "strict"
+    },
+    "python": {
+      "formatter": "black",
+      "maxLineLength": 88
     }
   },
-  "preferences": {
-    "codeStyle": {
-      "typescript": {
-        "indent": 2,
-        "quotes": "single",
-        "semicolons": true,
-        "trailingComma": "all",
-        "functionStyle": "arrow",
-        "useStrict": true
+
+  "projectStructure": {
+    "packages": {
+      "api-gateway": {
+        "path": "packages/api-gateway",
+        "description": "Main API service (NestJS)",
+        "key_files": ["src/app.module.ts", "src/drizzle/schema/"]
       },
-      "python": {
-        "indent": 4,
-        "quotes": "double",
-        "maxLineLength": 88,
-        "formatter": "black"
+      "mobile": {
+        "path": "packages/mobile/bookmarkaimobile",
+        "description": "React Native app with share extensions"
+      },
+      "extension": {
+        "path": "packages/extension",
+        "description": "Browser extension for content capture"
+      },
+      "sdk": {
+        "path": "packages/sdk",
+        "description": "TypeScript SDK for API communication"
       }
     },
-    "patterns": {
-      "preferFunctional": true,
-      "avoidClasses": true,
-      "useTypeScript": true,
-      "errorHandling": "explicit",
-      "asyncAwait": true
+    "mlServices": {
+      "path": "python/",
+      "services": ["llm-service", "whisper-service", "vector-service"],
+      "description": "Celery workers for ML tasks via RabbitMQ"
     }
   },
+
+  "developmentWorkflows": {
+    "addFeature": {
+      "api": [
+        "1. Create controller/service in packages/api-gateway/src/modules/",
+        "2. Add DTOs for validation",
+        "3. Update OpenAPI spec: apps/api/openapi.yaml",
+        "4. Generate SDK: pnpm -w run sdk:generate",
+        "5. Add tests"
+      ],
+      "mobile": [
+        "1. Update component in packages/mobile/bookmarkaimobile/src/",
+        "2. Update SDK if needed",
+        "3. Test on simulator",
+        "4. Run contract tests: pnpm --filter @bookmarkai/mobile test:contracts"
+      ]
+    },
+    "debugging": {
+      "mlPipeline": [
+        "docker logs -f bookmarkai-llm-worker",
+        "docker exec ml-rabbitmq rabbitmqctl list_queues",
+        "Check Celery Flower: http://localhost:5555"
+      ],
+      "api": [
+        "docker logs -f bookmarkai-api-gateway",
+        "Check metrics: http://localhost:3001/api/ml/metrics/prometheus"
+      ]
+    }
+  },
+
+  "commands": {
+    "dev": {
+      "api": "pnpm -w run dev:api",
+      "mobile:ios": "pnpm -w run mobile:ios",
+      "mobile:android": "pnpm -w run mobile:android",
+      "extension": "pnpm -w run dev:extension"
+    },
+    "docker": {
+      "start": "./scripts/docker-start.sh",
+      "stop": "./scripts/docker-stop.sh",
+      "logs": "docker-compose logs -f",
+      "ps": "docker ps"
+    },
+    "database": {
+      "migrate": "pnpm -w run db:migrate",
+      "generate": "pnpm -w run db:generate",
+      "connect": "docker exec -it docker-postgres-1 psql -U bookmarkai -d bookmarkai_dev"
+    },
+    "testing": {
+      "all": "pnpm -w run test:all",
+      "api": "pnpm --filter api-gateway test",
+      "mobile": "pnpm --filter @bookmarkai/mobile test"
+    },
+    "ml": {
+      "health": "docker exec bookmarkai-vector-worker python -c \"from vector_service.tasks import health_check; print(health_check())\"",
+      "queues": "docker exec ml-rabbitmq rabbitmqctl list_queues"
+    }
+  },
+
+  "environment": {
+    "structure": "env/{environment}/{service}.env",
+    "key_files": [
+      "env/base.env - Shared variables",
+      "env/development/api-gateway.env - API config",
+      "env/development/python-services.env - ML services config"
+    ],
+    "critical_vars": [
+      "JWT_SECRET - Must match across services",
+      "DATABASE_URL - PostgreSQL connection",
+      "RABBITMQ_URL - Message queue connection",
+      "OPENAI_API_KEY - For embeddings"
+    ]
+  },
+
+  "troubleshooting": {
+    "commonIssues": {
+      "portInUse": {
+        "error": "EADDRINUSE :3001",
+        "fix": "kill -9 $(lsof -t -i:3001)"
+      },
+      "mlTimeout": {
+        "error": "ML task timeout",
+        "fix": ["Check RabbitMQ queues", "Restart ML workers", "Check worker logs"]
+      },
+      "authFailed": {
+        "error": "401 Unauthorized",
+        "fix": ["Verify JWT_SECRET matches", "Check token expiration", "Verify Supabase connection"]
+      }
+    }
+  },
+
   "search": {
-    "includePatterns": [
-      "**/*.ts",
-      "**/*.tsx",
-      "**/*.py",
-      "**/*.json",
-      "**/*.yml",
-      "**/*.md"
+    "priorityPaths": [
+      "packages/api-gateway/src/**/*.ts",
+      "packages/mobile/bookmarkaimobile/src/**/*.tsx",
+      "python/*/src/**/*.py"
     ],
     "excludePatterns": [
       "**/node_modules/**",
       "**/dist/**",
-      "**/build/**",
       "**/.next/**",
-      "**/coverage/**",
-      "**/__pycache__/**",
-      "**/venv/**",
-      "**/.env*"
-    ],
-    "priorityPaths": [
-      "packages/api-gateway/src",
-      "packages/mobile/bookmarkaimobile/src",
-      "python/*/src",
-      "docs/architecture/decisions",
-      "env/*"
-    ],
-    "contextualPatterns": {
-      "authentication": [
-        "**/auth.service.ts",
-        "**/jwt.strategy.ts",
-        "**/guards/*.ts",
-        "**/supabase.service.ts"
-      ],
-      "mlPipeline": [
-        "**/ml.producer.ts",
-        "**/ml.module.ts",
-        "python/*/tasks.py",
-        "**/ml-producer.service.ts"
-      ],
-      "mobileShare": [
-        "**/ShareExtension/**",
-        "**/ShareIntent.kt",
-        "**/share.service.ts",
-        "**/ShareScreen.tsx"
-      ],
-      "vectorSearch": [
-        "**/search.service.ts",
-        "**/embeddings.schema.ts",
-        "python/vector-service/**",
-        "**/vector-*.ts"
-      ],
-      "database": [
-        "**/drizzle/schema/**",
-        "**/repositories/*.ts",
-        "**/migrations/**",
-        "**/seed.ts"
-      ]
-    },
-    "smartSearch": {
-      "useAstGrepFirst": true,
-      "parallelSearchDepth": 3,
-      "cacheResults": true,
-      "contextWindow": 5
-    }
-  },
-  "workflow": {
-    "setup": {
-      "installAll": "pnpm install",
-      "setupIOS": "cd packages/mobile/bookmarkaimobile/ios && pod install",
-      "enableHooks": "npx husky install"
-    },
-    "development": {
-      "api": "pnpm -w run dev:api",
-      "extension": "pnpm -w run dev:extension", 
-      "sdk": "pnpm -w run dev:sdk",
-      "mobile": {
-        "metro": "pnpm -w run mobile:metro",
-        "ios": "pnpm -w run mobile:ios",
-        "android": "pnpm -w run mobile:android"
-      }
-    },
-    "database": {
-      "generate": "pnpm -w run db:generate",
-      "migrate": "pnpm -w run db:migrate",
-      "connect": "docker exec -it docker-postgres-1 psql -U bookmarkai -d bookmarkai_dev"
-    },
-    "docker": {
-      "startAll": "./scripts/docker-start.sh",
-      "stopAll": "./scripts/docker-stop.sh",
-      "startML": "./scripts/start-ml-services.sh",
-      "stopML": "./scripts/stop-ml-services.sh",
-      "logs": {
-        "api": "docker logs -f bookmarkai-api-gateway",
-        "llm": "docker logs -f bookmarkai-llm-worker",
-        "whisper": "docker logs -f bookmarkai-whisper-worker",
-        "vector": "docker logs -f bookmarkai-vector-worker"
-      }
-    },
-    "testing": {
-      "all": "pnpm -w run test:all",
-      "mlPipeline": "cd packages/api-gateway && pnpm test:ml-pipeline",
-      "contracts": "pnpm --filter @bookmarkai/mobile test:contracts"
-    },
-    "quality": {
-      "lint": "pnpm -w run lint:all",
-      "typecheck": "pnpm -w run typecheck:all",
-      "deps": "pnpm -w run deps:check"
-    },
-    "build": {
-      "all": "pnpm -w run build:all",
-      "extension": "pnpm -w run build:extension",
-      "sdk": "pnpm -w run build:sdk",
-      "api": "docker build -t bookmarkai-api-gateway -f docker/Dockerfile.api-gateway ."
-    },
-    "ml": {
-      "testWhisper": "cd packages/api-gateway && node test-whisper-direct.js",
-      "testVector": "cd packages/api-gateway && node test-embedding-task.js",
-      "vectorIntegration": "./scripts/test-vector-integration.sh",
-      "healthCheck": "docker exec bookmarkai-vector-worker python -c \"from vector_service.tasks import health_check; print(health_check())\"",
-      "metrics": "curl http://localhost:9093/metrics | grep ml_embeddings"
-    },
-    "debug": {
-      "ports": "lsof -i :3001",
-      "killPort": "kill -9 $(lsof -t -i:3001)",
-      "dockerPs": "docker ps",
-      "rabbitmqQueues": "docker exec -it ml-rabbitmq rabbitmqctl list_queues",
-      "redisFlush": "docker exec -it docker-redis-1 redis-cli FLUSHALL"
-    }
-  },
-  "serviceCommands": {
-    "packages": {
-      "api-gateway": {
-        "dev": "pnpm --filter api-gateway start:dev",
-        "test": "pnpm --filter api-gateway test",
-        "migrate": "pnpm --filter api-gateway db:migrate",
-        "generateTypes": "pnpm --filter api-gateway generate:types"
-      },
-      "extension": {
-        "dev": "pnpm --filter @bookmarkai/extension dev",
-        "build": "pnpm --filter @bookmarkai/extension build",
-        "buildSDK": "pnpm --filter @bookmarkai/extension build:sdk"
-      },
-      "sdk": {
-        "dev": "pnpm --filter @bookmarkai/sdk dev",
-        "build": "pnpm --filter @bookmarkai/sdk build",
-        "generate": "pnpm --filter @bookmarkai/sdk generate",
-        "typecheck": "pnpm --filter @bookmarkai/sdk typecheck"
-      },
-      "mobile": {
-        "ios": "pnpm --filter @bookmarkai/mobile ios",
-        "android": "pnpm --filter @bookmarkai/mobile android",
-        "test": "pnpm --filter @bookmarkai/mobile test",
-        "contracts": "pnpm --filter @bookmarkai/mobile test:contracts"
-      }
-    },
-    "infrastructure": {
-      "install": "cd infrastructure && pnpm install",
-      "synth": "cd infrastructure && pnpm run synth",
-      "deploy": "cd infrastructure && pnpm run deploy"
-    },
-    "mlServices": {
-      "llm": {
-        "dev": "cd python/llm-service && source .venv/bin/activate && celery -A llm_service.celery_app worker --loglevel=info --queues=ml.summarize",
-        "setup": "cd python/llm-service && python -m venv .venv && source .venv/bin/activate && pip install -e ../shared && pip install -e ."
-      },
-      "whisper": {
-        "dev": "cd python/whisper-service && source .venv/bin/activate && celery -A whisper_service.celery_app worker --loglevel=info --queues=ml.transcribe",
-        "setup": "cd python/whisper-service && python -m venv .venv && source .venv/bin/activate && pip install -e ../shared && pip install -e ."
-      },
-      "vector": {
-        "dev": "cd python/vector-service && source .venv/bin/activate && celery -A vector_service.celery_app worker --loglevel=info --queues=ml.embed",
-        "setup": "cd python/vector-service && python -m venv .venv && source .venv/bin/activate && pip install -e ../shared && pip install -e ."
-      }
-    }
-  },
-  "environment": {
-    "structure": {
-      "baseDir": "env/",
-      "hierarchy": [
-        "base.env - Shared variables across ALL environments and services",
-        "{environment}/shared.env - Environment-specific shared variables", 
-        "{environment}/{service}.env - Service-specific variables"
-      ],
-      "environments": ["development", "staging", "production"],
-      "services": ["api-gateway", "python-services", "mobile", "extension"]
-    },
-    "files": {
-      "base": "env/base.env",
-      "baseExample": "env/base.env.example",
-      "development": {
-        "shared": "env/development/shared.env",
-        "apiGateway": "env/development/api-gateway.env",
-        "pythonServices": "env/development/python-services.env",
-        "mobile": "env/development/mobile.env",
-        "extension": "env/development/extension.env"
-      },
-      "staging": "env/staging/shared.env",
-      "production": "env/production/shared.env"
-    },
-    "namingConventions": {
-      "DB_*": "Database configuration",
-      "CACHE_*": "Redis/caching configuration", 
-      "MQ_*": "Message queue (RabbitMQ) configuration",
-      "STORAGE_*": "S3/MinIO object storage",
-      "AUTH_*": "Authentication configuration",
-      "ML_*": "Machine learning service configuration",
-      "MONITORING_*": "Observability configuration"
-    },
-    "commands": {
-      "validate": "npm run validate:env",
-      "migrate": "npm run migrate:env",
-      "setupDev": "cp env/base.env.example env/base.env",
-      "dockerDev": "docker-compose -f docker/docker-compose.yml up",
-      "dockerStaging": "ENVIRONMENT=staging docker-compose -f docker/docker-compose.yml up",
-      "dockerProd": "ENVIRONMENT=production docker-compose -f docker/docker-compose.yml up"
-    },
-    "security": [
-      "Never commit actual .env files to git",
-      "Use strong, unique passwords for each environment", 
-      "Rotate secrets regularly",
-      "Use AWS Secrets Manager for production secrets"
+      "**/venv/**"
     ]
   },
-  "database": {
-    "technology": "PostgreSQL 15 with pgvector",
-    "orm": "Drizzle ORM (TypeScript-first)",
-    "connection": "Node.js pg driver with connection pooling",
-    "coreEntities": {
-      "users": "Authentication, profiles, security (UUID primary keys)",
-      "shares": "Main content storage - social media URLs, metadata, processing status",
-      "metadata": "Platform-specific metadata (JSONB)",
-      "transcripts": "Audio/video transcriptions with timestamped segments",
-      "embeddings": "Vector embeddings (1536 dimensions, pgvector with HNSW/IVFFlat indexes)",
-      "ml_results": "ML task results (summarize_llm, transcribe_whisper, embed_vectors)",
-      "llm_costs": "LLM usage tracking with token counts and costs",
-      "vector_costs": "Embedding generation cost tracking",
-      "idempotency_records": "Request deduplication"
-    },
-    "vectorSearch": {
-      "extension": "pgvector",
-      "dimensions": 1536,
-      "indexes": ["HNSW (ef_construction=128, m=16)", "IVFFlat for large datasets"],
-      "similarity": "cosine similarity"
-    },
-    "schemas": "packages/api-gateway/src/drizzle/schema/",
-    "migrations": "packages/api-gateway/src/drizzle/migrations/"
-  },
+
+  "contextFiles": [
+    "CLAUDE.md - Project overview and conventions",
+    "docs/architecture/decisions/ADR-*.md - Architecture decisions",
+    "apps/api/openapi.yaml - API specification"
+  ],
+
   "monitoring": {
-    "stack": ["Prometheus (9090)", "Grafana (3000)", "Loki (3100)", "Tempo (3200)"],
-    "dashboards": {
-      "mlProducer": "Connection health, task processing, performance metrics",
-      "mlAnalytics": "Cost tracking, ML task performance, transcription analytics", 
-      "pythonMLServices": "Celery workers, task execution, queue health, CPU load"
-    },
-    "metrics": {
-      "mlProducer": "localhost:3001/api/ml/metrics/prometheus",
-      "llmWorker": "localhost:9091/metrics",
-      "whisperWorker": "localhost:9092/metrics", 
-      "vectorWorker": "localhost:9093/metrics",
-      "celeryFlower": "localhost:5555"
-    },
-    "alerts": "docker/prometheus/prometheus-alerts-ml.yml",
-    "access": {
-      "grafana": "http://localhost:3000 (admin/admin)",
-      "prometheus": "http://localhost:9090"
-    }
-  },
-  "api": {
-    "spec": "apps/api/openapi.yaml",
-    "version": "1.0",
-    "baseUrl": "/v1",
-    "authentication": "JWT Bearer tokens",
-    "endpoints": {
-      "auth": "/v1/auth/* - register, login, refresh, verify, reset password",
-      "shares": "/v1/shares - create, list, get (main content API)",
-      "mlAnalytics": "/ml/analytics/* - transcription costs, task summaries, budget status",
-      "metrics": "/metrics/* - idempotency metrics",
-      "test": "/v1/test/* - public, protected, admin endpoints"
-    },
-    "features": {
-      "idempotency": "Required Idempotency-Key header for share creation",
-      "pagination": "Cursor-based pagination with limit/cursor params",
-      "filtering": "Platform and status filtering for shares",
-      "costTracking": "Detailed ML cost analytics and budget monitoring"
-    }
-  },
-  "context": {
-    "importantFiles": [
-      "CLAUDE.md",
-      "package.json", 
-      "docker-compose.yml",
-      "docs/architecture/decisions/ADR-*.md",
-      "docs/project_commands_upd.md",
-      "env/README.md",
-      "env/base.env.example",
-      "apps/api/openapi.yaml",
-      "docker/grafana/provisioning/dashboards/"
-    ],
-    "architecturePatterns": [
-      "Event-driven architecture with BullMQ",
-      "Microservices with service mesh",
-      "CQRS pattern for read/write separation",
-      "Repository pattern for data access",
-      "Dependency injection with NestJS"
-    ]
-  },
-  "startup": {
-    "autoLoad": [
-      "CLAUDE.md",
-      "docs/architecture/decisions/ADR-*.md",
-      "docs/project_commands_upd.md",
-      "env/README.md"
-    ],
-    "recentChanges": {
-      "gitLogDepth": 10,
-      "showDiff": false,
-      "focusAreas": ["packages/api-gateway", "packages/mobile", "python"]
-    },
-    "healthChecks": [
-      "workflow.docker.dockerPs",
-      "workflow.ml.healthCheck",
-      "workflow.debug.rabbitmqQueues"
-    ],
-    "contextAwareness": {
-      "detectActiveArea": true,
-      "loadRelevantDocs": true,
-      "showRecentErrors": true
-    }
-  },
-  "quickStartProfiles": {
-    "ml-development": {
-      "description": "ML service development setup",
-      "commands": [
-        "workflow.docker.startML",
-        "workflow.ml.healthCheck",
-        "workflow.docker.logs.llm",
-        "workflow.docker.logs.whisper"
-      ],
-      "contextFiles": [
-        "python/llm-service/README.md",
-        "python/whisper-service/README.md",
-        "docs/ml-producer-metrics.md"
-      ]
-    },
-    "mobile-development": {
-      "description": "React Native development",
-      "commands": [
-        "workflow.development.mobile.metro",
-        "workflow.development.mobile.ios"
-      ],
-      "contextFiles": [
-        "packages/mobile/bookmarkaimobile/README.md",
-        "docs/architecture/decisions/ADR-050-*.md"
-      ]
-    },
-    "api-development": {
-      "description": "API Gateway development",
-      "commands": [
-        "workflow.docker.startAll",
-        "workflow.development.api",
-        "workflow.database.connect"
-      ],
-      "contextFiles": [
-        "packages/api-gateway/README.md",
-        "apps/api/openapi.yaml"
-      ]
-    },
-    "full-stack": {
-      "description": "Complete development environment",
-      "commands": ["aliases.startup", "aliases.health-check"],
-      "contextFiles": ["CLAUDE.md", "docs/project_commands_upd.md"]
-    }
-  },
-  "problemPatterns": {
-    "mlPipeline": {
-      "symptoms": ["ML task stuck", "embeddings not generated", "transcription timeout"],
-      "diagnosis": [
-        "workflow.ml.healthCheck",
-        "workflow.debug.rabbitmqQueues",
-        "workflow.docker.logs.llm"
-      ],
-      "solutions": [
-        "errorRecovery.mlServiceDown",
-        "Check python service logs for model loading issues",
-        "Verify RabbitMQ connection in env files"
-      ]
-    },
-    "authIssues": {
-      "symptoms": ["401 errors", "JWT expired", "Invalid token"],
-      "diagnosis": [
-        "Check env/development/api-gateway.env for JWT_SECRET",
-        "Verify AUTH_PROVIDER_ENABLED in env files"
-      ],
-      "solutions": [
-        "Ensure JWT_SECRET matches across services",
-        "Check token expiration settings",
-        "Verify Supabase connection"
-      ]
-    },
-    "vectorSearch": {
-      "symptoms": ["Search returns no results", "Embedding errors"],
-      "diagnosis": [
-        "workflow.ml.testVector",
-        "Check pgvector extension in PostgreSQL",
-        "workflow.docker.logs.vector"
-      ],
-      "solutions": [
-        "Run vector service health check",
-        "Check embedding dimensions (1536)",
-        "Verify OpenAI API key"
-      ]
-    },
-    "mobileShare": {
-      "symptoms": ["Share extension not working", "Content not captured"],
-      "diagnosis": [
-        "Check mobile app logs",
-        "Verify API endpoint configuration",
-        "Check authentication in share extension"
-      ],
-      "solutions": [
-        "Rebuild share extension",
-        "Check API_URL in mobile env",
-        "Verify app group configuration"
-      ]
-    }
-  },
-  "ai": {
-    "useMCPTools": true,
-    "mcpToolsEnabled": [
-      "mcp__zen__thinkdeep",
-      "mcp__zen__debug", 
-      "mcp__zen__analyze",
-      "mcp__zen__codereview",
-      "mcp__zen__chat",
-      "mcp__zen__consensus",
-      "mcp__zen__planner",
-      "mcp__zen__testgen",
-      "mcp__zen__refactor",
-      "mcp__zen__tracer"
-    ],
-    "preferredTools": [
-      "TodoWrite",
-      "mcp__zen__debug",
-      "mcp__zen__analyze",
-      "mcp__zen__thinkdeep"
-    ]
-  },
-  "performance": {
-    "parallelCommands": [
-      ["workflow.quality.lint", "workflow.quality.typecheck", "workflow.testing.all"],
-      ["workflow.docker.dockerPs", "workflow.debug.rabbitmqQueues"],
-      ["workflow.ml.healthCheck", "workflow.ml.metrics"],
-      ["serviceCommands.packages.api-gateway.test", "serviceCommands.packages.sdk.typecheck"],
-      ["workflow.docker.logs.api", "workflow.docker.logs.llm", "workflow.docker.logs.whisper"]
-    ],
-    "cacheDuration": {
-      "gitStatus": 300,
-      "dockerPs": 60,
-      "lsFiles": 180,
-      "nodeModules": 600,
-      "envFiles": 120
-    },
-    "quickModes": {
-      "fast": {
-        "description": "Optimized for speed - may skip some validations",
-        "settings": {
-          "parallelExecution": true,
-          "useCache": true,
-          "skipNonCritical": true
-        }
-      },
-      "thorough": {
-        "description": "Complete analysis - slower but comprehensive",
-        "settings": {
-          "parallelExecution": false,
-          "useCache": false,
-          "deepAnalysis": true
-        }
-      }
-    }
-  },
-  "errorRecovery": {
-    "portConflict": {
-      "steps": ["workflow.debug.killPort", "workflow.development.api"],
-      "description": "Kill conflicting process and restart API",
-      "symptoms": ["EADDRINUSE", "Port 3001 already in use"]
-    },
-    "dockerDown": {
-      "steps": ["workflow.docker.stopAll", "workflow.docker.startAll", "workflow.docker.logs.api"],
-      "description": "Restart all Docker services and check logs",
-      "symptoms": ["ECONNREFUSED", "Cannot connect to Docker"]
-    },
-    "testFailure": {
-      "steps": ["workflow.quality.lint", "workflow.quality.typecheck", "workflow.testing.contracts"],
-      "description": "Run quality checks before retesting",
-      "symptoms": ["Test suite failed", "Type errors"]
-    },
-    "mlServiceDown": {
-      "steps": ["workflow.docker.stopML", "workflow.docker.startML", "workflow.ml.healthCheck"],
-      "description": "Restart ML services and verify health",
-      "symptoms": ["ML_TIMEOUT", "Celery worker not responding", "Task stuck in queue"]
-    },
-    "databaseConnection": {
-      "steps": ["workflow.docker.dockerPs", "workflow.database.migrate", "workflow.database.connect"],
-      "description": "Check Docker, run migrations, test connection",
-      "symptoms": ["ECONNREFUSED :5432", "Database connection failed"]
-    },
-    "redisConnection": {
-      "steps": ["workflow.docker.dockerPs", "workflow.debug.redisFlush"],
-      "description": "Check Docker and flush Redis if needed",
-      "symptoms": ["Redis connection refused", "ECONNREFUSED :6379"]
-    },
-    "diagnostics": {
-      "preChecks": ["git status", "workflow.docker.dockerPs"],
-      "logCommands": {
-        "api": "docker logs --tail=100 bookmarkai-api-gateway",
-        "ml": "docker logs --tail=50 bookmarkai-llm-worker bookmarkai-whisper-worker",
-        "postgres": "docker logs --tail=50 docker-postgres-1",
-        "redis": "docker logs --tail=50 docker-redis-1"
-      },
-      "quickFixes": {
-        "EADDRINUSE": "errorRecovery.portConflict",
-        "ECONNREFUSED": "errorRecovery.dockerDown",
-        "ML_TIMEOUT": "errorRecovery.mlServiceDown",
-        "JWT_ERROR": "problemPatterns.authIssues"
-      }
-    }
-  },
-  "sessionMemory": {
-    "enabled": true,
-    "persistBetweenSessions": true,
-    "autoSave": true,
-    "elements": {
-      "currentFocus": "Track current development area",
-      "recentErrors": "Remember recent error patterns",
-      "modifiedFiles": "Track files changed in session",
-      "activeProfile": "Remember selected quick start profile",
-      "commonCommands": "Track frequently used commands"
-    },
-    "contextBuilding": {
-      "loadPreviousSession": true,
-      "suggestNextSteps": true,
-      "trackProgress": true
-    }
-  },
-  "batchOperations": {
-    "updateAllPythonDeps": {
-      "description": "Update all Python service dependencies",
-      "commands": [
-        "cd python/llm-service && pip install -U -r requirements.txt",
-        "cd python/whisper-service && pip install -U -r requirements.txt",
-        "cd python/vector-service && pip install -U -r requirements.txt",
-        "cd python/caption-service && pip install -U -r requirements.txt"
-      ]
-    },
-    "rebuildAllServices": {
-      "description": "Rebuild all services from scratch",
-      "commands": [
-        "pnpm -w run clean:all",
-        "pnpm install",
-        "pnpm -w run build:all",
-        "docker-compose -f docker/docker-compose.yml build --no-cache"
-      ]
-    },
-    "testAllML": {
-      "description": "Run all ML service tests",
-      "commands": [
-        "workflow.ml.testWhisper",
-        "workflow.ml.testVector",
-        "workflow.ml.vectorIntegration",
-        "workflow.testing.mlPipeline"
-      ]
-    },
-    "setupNewDev": {
-      "description": "Complete setup for new developer",
-      "commands": [
-        "workflow.setup.installAll",
-        "workflow.setup.enableHooks",
-        "workflow.environment.commands.setupDev",
-        "workflow.database.migrate",
-        "workflow.docker.startAll"
-      ]
-    }
-  },
-  "aliases": {
-    "qa": {
-      "description": "Run all quality assurance checks",
-      "commands": ["workflow.quality.lint", "workflow.quality.typecheck", "workflow.testing.all"]
-    },
-    "startup": {
-      "description": "Start development environment",
-      "commands": ["workflow.docker.startAll", "workflow.development.api", "workflow.docker.logs.api"]
-    },
-    "ml-restart": {
-      "description": "Restart ML services",
-      "commands": ["workflow.docker.stopML", "workflow.docker.startML", "workflow.ml.healthCheck"]
-    },
-    "db-reset": {
-      "description": "Reset database to clean state",
-      "commands": ["workflow.database.generate", "workflow.database.migrate"]
-    },
-    "logs-all": {
-      "description": "View all service logs",
-      "commands": ["workflow.docker.logs.api", "workflow.docker.logs.llm", "workflow.docker.logs.whisper", "workflow.docker.logs.vector"]
-    },
-    "health-check": {
-      "description": "Check all services health",
-      "commands": ["workflow.docker.dockerPs", "workflow.ml.healthCheck", "workflow.debug.rabbitmqQueues"]
-    },
-    "quick-test": {
-      "description": "Fast test suite for quick feedback",
-      "commands": ["workflow.quality.lint", "workflow.testing.contracts"]
-    },
-    "mobile-dev": {
-      "description": "Start mobile development",
-      "commands": ["workflow.development.mobile.metro", "workflow.development.mobile.ios"]
-    }
-  },
-  "customTriggers": {
-    "supermode": {
-      "pattern": "activate super",
-      "actions": ["parallel_execution", "predictive_mode", "dream_planning"]
-    },
-    "beastmode": {
-      "pattern": "activate beast mode",
-      "actions": ["aggressive_parallelization", "speculative_execution", "preemptive_solving", "10x_speed"]
-    },
-    "dreammode": {
-      "pattern": "dream up",
-      "actions": ["creative_refactoring", "radical_architecture", "future_planning"]
-    },
-    "quantummode": {
-      "pattern": "quantum debug",
-      "actions": ["parallel_universe_execution", "state_superposition", "probability_analysis"]
-    },
-    "timetravel": {
-      "pattern": "show evolution",
-      "actions": ["git_timeline_reconstruction", "bug_lifecycle_analysis", "code_archaeology"]
-    }
-  },
-  "developmentHints": {
-    "commonScenarios": {
-      "addingNewEndpoint": {
-        "steps": [
-          "1. Define route in controller (packages/api-gateway/src/modules/*/controllers)",
-          "2. Create/update service methods",
-          "3. Add DTOs for validation",
-          "4. Update OpenAPI spec (apps/api/openapi.yaml)",
-          "5. Generate SDK types (pnpm -w run sdk:generate)",
-          "6. Add tests"
-        ],
-        "files": [
-          "packages/api-gateway/src/modules/shares/shares.controller.ts",
-          "packages/api-gateway/src/modules/shares/shares.service.ts"
-        ]
-      },
-      "debuggingMLPipeline": {
-        "steps": [
-          "1. Check RabbitMQ queues (workflow.debug.rabbitmqQueues)",
-          "2. View ML service logs (workflow.docker.logs.llm)",
-          "3. Check Celery workers (localhost:5555)",
-          "4. Verify env variables in python services",
-          "5. Test direct task execution"
-        ],
-        "tools": ["mcp__zen__debug", "workflow.ml.healthCheck"]
-      },
-      "mobileFeatureDevelopment": {
-        "steps": [
-          "1. Update React Native component",
-          "2. Update SDK if API changes",
-          "3. Test on iOS simulator",
-          "4. Check share extension if relevant",
-          "5. Run contract tests"
-        ],
-        "context": ["packages/mobile/bookmarkaimobile/src", "packages/sdk"]
-      }
-    },
-    "criticalPaths": {
-      "contentIngestion": "Extension → API → Queue → ML Services → Database",
-      "search": "Mobile → API → Vector Service → pgvector → Results",
-      "shareExtension": "iOS/Android Share → Auth → API → Processing"
-    },
-    "performanceTips": [
-      "Use connection pooling for PostgreSQL",
-      "Batch ML requests when possible",
-      "Cache embeddings in Redis",
-      "Use pgvector HNSW indexes for large datasets",
-      "Monitor queue depths with Grafana"
-    ],
-    "commonGotchas": [
-      "JWT_SECRET must match across all services",
-      "Python services need shared module installed",
-      "Mobile env files are in packages/mobile/bookmarkaimobile/.env",
-      "Vector dimensions must be 1536 for OpenAI embeddings",
-      "Share extension needs separate auth handling"
-    ]
-  },
-  "initializationPriority": {
-    "essential": [
-      "CLAUDE.md",
-      ".claude/config.json",
-      "Recent git changes",
-      "Health checks"
-    ],
-    "contextual": [
-      "Based on recent file changes",
-      "Related ADRs",
-      "Service-specific docs",
-      "Error logs if issues detected"
-    ],
-    "onDemand": [
-      "Full ADR history",
-      "All service documentation",
-      "Complete command reference"
-    ]
+    "grafana": "http://localhost:3000 (admin/admin)",
+    "prometheus": "http://localhost:9090",
+    "celeryFlower": "http://localhost:5555"
   }
 }
