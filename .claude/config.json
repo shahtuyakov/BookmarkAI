@@ -486,10 +486,10 @@
     ],
     "preferredTools": [
       "ast-grep",
-      "Task", 
       "TodoWrite",
-      "TodoRead",
-      "mcp__zen__debug"
+      "mcp__zen__debug",
+      "mcp__zen__analyze",
+      "mcp__zen__thinkdeep"
     ],
     "astGrepCapabilities": {
       "description": "ast-grep (sg) - structural search/rewrite tool for many languages",
@@ -590,27 +590,65 @@
   "errorRecovery": {
     "portConflict": {
       "steps": ["workflow.debug.killPort", "workflow.development.api"],
-      "description": "Kill conflicting process and restart API"
+      "description": "Kill conflicting process and restart API",
+      "symptoms": ["EADDRINUSE", "Port 3001 already in use"]
     },
     "dockerDown": {
       "steps": ["workflow.docker.stopAll", "workflow.docker.startAll", "workflow.docker.logs.api"],
-      "description": "Restart all Docker services and check logs"
+      "description": "Restart all Docker services and check logs",
+      "symptoms": ["ECONNREFUSED", "Cannot connect to Docker"]
     },
     "testFailure": {
       "steps": ["workflow.quality.lint", "workflow.quality.typecheck", "workflow.testing.contracts"],
-      "description": "Run quality checks before retesting"
+      "description": "Run quality checks before retesting",
+      "symptoms": ["Test suite failed", "Type errors"]
     },
     "mlServiceDown": {
       "steps": ["workflow.docker.stopML", "workflow.docker.startML", "workflow.ml.healthCheck"],
-      "description": "Restart ML services and verify health"
+      "description": "Restart ML services and verify health",
+      "symptoms": ["ML_TIMEOUT", "Celery worker not responding", "Task stuck in queue"]
     },
     "databaseConnection": {
       "steps": ["workflow.docker.dockerPs", "workflow.database.migrate", "workflow.database.connect"],
-      "description": "Check Docker, run migrations, test connection"
+      "description": "Check Docker, run migrations, test connection",
+      "symptoms": ["ECONNREFUSED :5432", "Database connection failed"]
     },
     "redisConnection": {
       "steps": ["workflow.docker.dockerPs", "workflow.debug.redisFlush"],
-      "description": "Check Docker and flush Redis if needed"
+      "description": "Check Docker and flush Redis if needed",
+      "symptoms": ["Redis connection refused", "ECONNREFUSED :6379"]
+    },
+    "diagnostics": {
+      "preChecks": ["git status", "workflow.docker.dockerPs"],
+      "logCommands": {
+        "api": "docker logs --tail=100 bookmarkai-api-gateway",
+        "ml": "docker logs --tail=50 bookmarkai-llm-worker bookmarkai-whisper-worker",
+        "postgres": "docker logs --tail=50 docker-postgres-1",
+        "redis": "docker logs --tail=50 docker-redis-1"
+      },
+      "quickFixes": {
+        "EADDRINUSE": "errorRecovery.portConflict",
+        "ECONNREFUSED": "errorRecovery.dockerDown",
+        "ML_TIMEOUT": "errorRecovery.mlServiceDown",
+        "JWT_ERROR": "problemPatterns.authIssues"
+      }
+    }
+  },
+  "sessionMemory": {
+    "enabled": true,
+    "persistBetweenSessions": true,
+    "autoSave": true,
+    "elements": {
+      "currentFocus": "Track current development area",
+      "recentErrors": "Remember recent error patterns",
+      "modifiedFiles": "Track files changed in session",
+      "activeProfile": "Remember selected quick start profile",
+      "commonCommands": "Track frequently used commands"
+    },
+    "contextBuilding": {
+      "loadPreviousSession": true,
+      "suggestNextSteps": true,
+      "trackProgress": true
     }
   },
   "batchOperations": {
@@ -707,5 +745,81 @@
       "pattern": "show evolution",
       "actions": ["git_timeline_reconstruction", "bug_lifecycle_analysis", "code_archaeology"]
     }
+  },
+  "developmentHints": {
+    "commonScenarios": {
+      "addingNewEndpoint": {
+        "steps": [
+          "1. Define route in controller (packages/api-gateway/src/modules/*/controllers)",
+          "2. Create/update service methods",
+          "3. Add DTOs for validation",
+          "4. Update OpenAPI spec (apps/api/openapi.yaml)",
+          "5. Generate SDK types (pnpm -w run sdk:generate)",
+          "6. Add tests"
+        ],
+        "files": [
+          "packages/api-gateway/src/modules/shares/shares.controller.ts",
+          "packages/api-gateway/src/modules/shares/shares.service.ts"
+        ]
+      },
+      "debuggingMLPipeline": {
+        "steps": [
+          "1. Check RabbitMQ queues (workflow.debug.rabbitmqQueues)",
+          "2. View ML service logs (workflow.docker.logs.llm)",
+          "3. Check Celery workers (localhost:5555)",
+          "4. Verify env variables in python services",
+          "5. Test direct task execution"
+        ],
+        "tools": ["mcp__zen__debug", "workflow.ml.healthCheck"]
+      },
+      "mobileFeatureDevelopment": {
+        "steps": [
+          "1. Update React Native component",
+          "2. Update SDK if API changes",
+          "3. Test on iOS simulator",
+          "4. Check share extension if relevant",
+          "5. Run contract tests"
+        ],
+        "context": ["packages/mobile/bookmarkaimobile/src", "packages/sdk"]
+      }
+    },
+    "criticalPaths": {
+      "contentIngestion": "Extension → API → Queue → ML Services → Database",
+      "search": "Mobile → API → Vector Service → pgvector → Results",
+      "shareExtension": "iOS/Android Share → Auth → API → Processing"
+    },
+    "performanceTips": [
+      "Use connection pooling for PostgreSQL",
+      "Batch ML requests when possible",
+      "Cache embeddings in Redis",
+      "Use pgvector HNSW indexes for large datasets",
+      "Monitor queue depths with Grafana"
+    ],
+    "commonGotchas": [
+      "JWT_SECRET must match across all services",
+      "Python services need shared module installed",
+      "Mobile env files are in packages/mobile/bookmarkaimobile/.env",
+      "Vector dimensions must be 1536 for OpenAI embeddings",
+      "Share extension needs separate auth handling"
+    ]
+  },
+  "initializationPriority": {
+    "essential": [
+      "CLAUDE.md",
+      ".claude/config.json",
+      "Recent git changes",
+      "Health checks"
+    ],
+    "contextual": [
+      "Based on recent file changes",
+      "Related ADRs",
+      "Service-specific docs",
+      "Error logs if issues detected"
+    ],
+    "onDemand": [
+      "Full ADR history",
+      "All service documentation",
+      "Complete command reference"
+    ]
   }
 }
