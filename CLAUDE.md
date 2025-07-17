@@ -1,219 +1,169 @@
+Looking at your CLAUDE.md file, it's well-structured but could be more focused and practical. Here's my review with an improved version:
+
+## Key Issues:
+
+1. **Tool References**: Mentions non-standard tools (ast-grep, TodoWrite) that Claude Code may not have
+2. **Overly Prescriptive**: Tells Claude how to respond rather than focusing on project info
+3. **Information Scatter**: Important details buried in long lists
+4. **Missing Context**: Lacks practical examples of common tasks
+
+## Improved CLAUDE.md:
+
+```markdown
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Project Overview
+BookmarkAI - A platform that captures social media content (TikTok, Reddit, X/Twitter, YouTube, Instagram) and enriches it with AI-powered summaries, transcripts, and smart search.
 
-# Project Overview
-BookmarkAI is a social media content capture and enrichment platform that captures content from social media platforms (TikTok, Reddit, X/Twitter), enriches it with AI-powered summaries and transcripts, and resurfaces items through search and digests.
+## Architecture
+- **Monorepo Structure**: PNPM workspace with TypeScript/Python services
+- **API**: NestJS with Fastify, PostgreSQL + pgvector, Redis/BullMQ
+- **Mobile**: React Native 0.79 with share extensions
+- **ML Pipeline**: Python Celery workers processing via RabbitMQ
+- **Event Flow**: Content → API → Queue → ML Services → Database → Search
 
-## Technology Stack
-- **Backend**: NestJS (TypeScript) with Fastify adapter, PostgreSQL 15 with pgvector, Redis/BullMQ
-- **Mobile**: React Native 0.79 with TypeScript
-- **Python Services**: ML/AI services for transcription, summarization, and embeddings
-- **Infrastructure**: Docker Compose (local), AWS CDK for production deployment
-
-## Architecture Patterns
-- **Architecture Decision Records (ADRs)**:
-   - contains the ADRs for the project `docs/architecture/decisions/`
-   - contains the implementation notes for the ADRs `docs/context/tasks/`
-   - contains the memory for the ADRs `docs/memory/`
-
-## Essential Commands
-   - contains the essential commands for the project `docs/project_commands_upd.md`
-
-## Core Services Structure
+## Key Directories
 ```
 BookmarkAI/
-  ├── apps/api/                    # API specifications
-  ├── packages/                    # Monorepo packages
-  │   ├── api-gateway/            # NestJS backend (main API)
-  │   ├── mobile/bookmarkaimobile/# React Native app
-  │   ├── sdk/                    # Shared TypeScript SDK
-  │   ├── extension/              # Browser extension
-  │   └── orchestrator/           # Service orchestration
-  ├── python/                     # ML/AI services
-  │   ├── caption-service/        # Image captioning
-  │   ├── llm-service/           # LLM integration
-  │   ├── vector-service/        # Embeddings
-  │   └── whisper-service/       # Transcription
-  ├── infrastructure/            # AWS CDK definitions
-  ├── docker/                    # Docker & monitoring setup
-  ├── docs/                      # Documentation & ADRs
-  └── scripts/
+├── packages/api-gateway/        # Main API (NestJS)
+├── packages/mobile/             # React Native app
+├── packages/extension/          # Browser extension
+├── packages/sdk/               # TypeScript SDK
+├── python/                     # ML services (llm, whisper, vector, caption)
+├── docs/architecture/decisions/ # ADRs documenting major decisions
+└── env/                        # Environment configs (never commit actual .env files)
 ```
 
-## Code Style and Structure
-  - Write concise, technical code with accurate examples
-  - Use functional and declarative programming patterns; avoid classes
-  - Prefer iteration and modularization over code duplication
-  - Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError)
-  - Structure files: exported component, subcomponents, helpers, static content, types
+## Development Guidelines
 
-### Language-Specific Style
-**TypeScript:**
-  - Indent: 2 spaces
-  - Quotes: single quotes
-  - Semicolons: required
-  - Trailing comma: always
-  - Function style: arrow functions preferred
-  
-**Python:**
-  - Indent: 4 spaces
-  - Quotes: double quotes
-  - Max line length: 88 characters
-  - Formatter: black
+### Code Style
+**TypeScript**: 2 spaces, single quotes, semicolons, arrow functions preferred
+**Python**: 4 spaces, double quotes, black formatter, max 88 chars
 
-## Tool Usage Priority
-  1. **ast-grep (`sg`)**: Use for ALL syntax-aware searches. Examples:
-     - `sg --lang typescript 'class $NAME'` - Find all classes
-     - `sg --lang python 'def $FUNC($_):'` - Find all functions
-     - `sg --pattern '$VAR = new $CLASS($_)'` - Find instantiations
-  2. **Task tool**: Use for complex searches across multiple files
-  3. **TodoWrite/TodoRead**: Use frequently for task tracking
-  4. **Grep/Glob**: Use only for simple text searches or file patterns
+### Common Tasks
 
-### Search Configuration
-**Priority search paths** (check these first):
-  - `packages/api-gateway/src/`
-  - `packages/mobile/bookmarkaimobile/src/`
-  - `python/*/src/`
-  - `docs/architecture/decisions/`
-  - `env/`
+#### Adding an API Endpoint
+1. Create controller method in `packages/api-gateway/src/modules/{module}/`
+2. Add service logic and DTOs
+3. Update OpenAPI spec: `apps/api/openapi.yaml`
+4. Generate SDK types: `pnpm -w run sdk:generate`
+5. Add tests
 
-**Always exclude from searches:**
-  - `**/node_modules/**`, `**/dist/**`, `**/build/**`
-  - `**/__pycache__/**`, `**/venv/**`
-  - `**/.env*`, `**/.next/**`, `**/coverage/**`
-  
-## Development Workflow
-  1. **Before making changes**:
-     - Read relevant ADRs in `docs/architecture/decisions/`
-     - Check `docs/memory/` for previous context
-     - Use TodoWrite to plan tasks
-  
-  2. **When implementing features**:
-     - Follow patterns in `.claude/patterns/`
-     - Check existing similar implementations first
-     - Update tests alongside implementation
-     - Run lint/format before completion
-  
-  3. **For debugging**:
-     - Check logs in `docker/logs/`
-     - Use structured debugging approach
-     - Consider microservice interactions
-     - Check message queue health
+#### Debugging ML Pipeline
+1. Check queue status: `docker exec ml-rabbitmq rabbitmqctl list_queues`
+2. View worker logs: `docker logs -f bookmarkai-llm-worker`
+3. Monitor Celery: http://localhost:5555
+4. Check task results in `ml_results` table
 
-## Service-Specific Guidelines
+#### Mobile Development
+1. Start Metro: `pnpm -w run mobile:metro`
+2. Run iOS: `pnpm -w run mobile:ios`
+3. Components in: `packages/mobile/bookmarkaimobile/src/`
+4. Share extension: `packages/mobile/bookmarkaimobile/ios/ShareExtension/`
+
+## Essential Commands
+
+### Daily Development
+```bash
+# Start everything
+./scripts/docker-start.sh
+pnpm -w run dev:api
+
+# Database operations
+pnpm -w run db:migrate
+pnpm -w run db:generate
+
+# Testing
+pnpm test
+pnpm lint
+```
+
+### Service-Specific
+```bash
+# API Gateway
+pnpm --filter api-gateway start:dev
+pnpm --filter api-gateway test
+
+# Mobile
+pnpm --filter @bookmarkai/mobile ios
+pnpm --filter @bookmarkai/mobile test:contracts
+
+# ML Services
+./scripts/start-ml-services.sh
+docker logs -f bookmarkai-vector-worker
+```
+
+## Architecture Patterns
 
 ### API Gateway (NestJS)
-  - Use dependency injection consistently
-  - Follow repository pattern for data access
-  - Implement proper DTO validation
-  - Use guards for authentication/authorization
-  - Emit events for async operations
+- **Pattern**: Repository pattern with dependency injection
+- **Events**: BullMQ for async processing
+- **Auth**: JWT with guards
+- **Database**: Drizzle ORM with PostgreSQL
 
-### Python ML Services
-  - Load models once at startup
-  - Implement request batching
-  - Use Redis for caching
-  - Follow FastAPI best practices
-  - Add proper error handling and retries
+### ML Services (Python)
+- **Pattern**: Celery workers with Redis broker
+- **Models**: Loaded once at startup
+- **Caching**: Redis for embeddings
+- **Batching**: Process multiple items when possible
 
-### React Native Mobile
-  - Use functional components with hooks
-  - Implement proper error boundaries
-  - Follow atomic design principles
-  - Use React Query for data fetching
-  - Optimize for performance (memo, lazy loading)
+### Mobile (React Native)
+- **State**: React Query for server state
+- **Navigation**: React Navigation
+- **Forms**: React Hook Form with Zod validation
+- **Sharing**: Native share extensions
 
-## Critical Paths
-  1. **Content Ingestion**: Extension → API Gateway → Queue → Python Services
-  2. **Search**: Mobile → API Gateway → Vector Service → PostgreSQL
-  3. **Digest Generation**: Scheduler → Orchestrator → LLM Service → Notifications
+## Critical Information
+
+### Database Schema
+- `users`: Authentication and profiles
+- `shares`: Main content storage
+- `embeddings`: Vector embeddings (1536 dimensions)
+- `ml_results`: Task results and metadata
+- See: `packages/api-gateway/src/drizzle/schema/`
+
+### Environment Variables
+- Structure: `env/{environment}/{service}.env`
+- Critical: `JWT_SECRET`, `DATABASE_URL`, `RABBITMQ_URL`, `OPENAI_API_KEY`
+- Never commit actual .env files
+
+### Common Issues
+
+**Port Conflicts**
+```bash
+# Kill process on port 3001
+kill -9 $(lsof -t -i:3001)
+```
+
+**ML Tasks Stuck**
+- Check RabbitMQ queues
+- Restart workers: `./scripts/ml-restart.sh`
+- Check Redis connection
+
+**Auth Failures**
+- Verify JWT_SECRET matches across services
+- Check Supabase connection
+- Token expiration settings
 
 ## Performance Considerations
-  - Vector searches: Use pgvector indexes properly
-  - Queue processing: Monitor queue depths
-  - ML inference: Batch requests when possible
-  - Database: Use connection pooling
-  - Caching: Redis for hot data, embeddings cache
-
-## Security Guidelines
-  - Never commit secrets or API keys
-  - Use environment variables for configuration
-  - Validate all user inputs
-  - Implement rate limiting on endpoints
-  - Use HTTPS/TLS for all communications
-  - Sanitize data before storage
+- **Vector Search**: Use pgvector HNSW indexes
+- **Queue Depth**: Monitor with Grafana (http://localhost:3000)
+- **Batching**: Group ML requests when possible
+- **Caching**: Use Redis for hot data
 
 ## Testing Strategy
-  - Unit tests for business logic
-  - Integration tests for API endpoints
-  - E2E tests for critical user flows
-  - Load tests for ML services
-  - Always run tests before marking task complete
+- Unit tests for business logic
+- Integration tests for API endpoints
+- Contract tests for mobile-API communication
+- Load tests for ML services
 
-## Error Handling
-  - Use custom exception classes
-  - Log errors with context
-  - Return meaningful error messages
-  - Implement retry mechanisms
-  - Have fallback strategies
+## Monitoring
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
+- **Celery Flower**: http://localhost:5555
 
-## Monitoring & Observability
-  - Prometheus metrics for all services
-  - Grafana dashboards for visualization
-  - Structured logging with correlation IDs
-  - Health checks for all services
-  - Alert on queue depth and error rates
-
-## RESPONSE FORMAT
-  - **Utilize Chain-of-Thought (CoT) reasoning**
-  - When uncertain, ask clarifying questions
-  - Focus on working code over explanations
-  - Test your implementation before completion
-  - Keep responses concise and actionable
-
-## Important Reminders
-  - ALWAYS use TodoWrite for task planning
-  - NEVER create files unless necessary
-  - PREFER editing existing files
-  - RUN lint/test commands before completion
-  - CHECK ADRs for architectural decisions
-  - USE ast-grep for code searches
-
-## Quick Command Reference
-### Setup
-  - Install all: `pnpm install`
-  - iOS setup: `cd packages/mobile/bookmarkaimobile/ios && pod install`
-  - Enable hooks: `npx husky install`
-
-### Development
-  - API: `pnpm -w run dev:api`
-  - Extension: `pnpm -w run dev:extension`
-  - SDK: `pnpm -w run dev:sdk`
-  - Mobile Metro: `pnpm -w run mobile:metro`
-  - Mobile iOS: `pnpm -w run mobile:ios`
-  - Mobile Android: `pnpm -w run mobile:android`
-
-### Database
-  - Generate: `pnpm -w run db:generate`
-  - Migrate: `pnpm -w run db:migrate`
-  - Push schema: `pnpm -w run db:push`
-  - Seed: `pnpm -w run db:seed`
-
-### Testing
-  - All tests: `pnpm test`
-  - API tests: `pnpm test:api`
-  - Mobile tests: `pnpm test:mobile`
-  - E2E tests: `pnpm test:e2e`
-
-### Code Quality
-  - Lint: `pnpm lint`
-  - Format: `pnpm format`
-  - Type check: `pnpm typecheck`
-
-## Known Gotchas & Danger Zones
-- **packages/api-gateway/src/legacy/**: Contains fragile code - modify with extreme caution
-- **python/whisper-service/**: Memory intensive - monitor resource usage
-- **infrastructure/**: Changes directly affect production deployment
-- **.env files**: Never commit or expose - always use example files
+## Quick Reference
+- **ADRs**: `docs/architecture/decisions/` - Read before major changes
+- **API Spec**: `apps/api/openapi.yaml`
+- **Commands**: `docs/project_commands_upd.md`
+```
