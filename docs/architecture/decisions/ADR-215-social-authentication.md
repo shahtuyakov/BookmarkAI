@@ -2,7 +2,7 @@
 
 - **Status**: In Progress (Phase 1, 2 & 3 Complete)
 - **Date**: 2025-01-18
-- **Updated**: 2025-01-19
+- **Updated**: 2025-01-18 (Rate Limiter Fix)
 - **Authors**: @engineering-team
 - **Supersedes**: —
 - **Superseded by**: —
@@ -411,10 +411,21 @@ CREATE TABLE IF NOT EXISTS social_auth_profiles (
 - Prometheus alert rules for production
 
 **Known Issues:**
-1. **Rate Limiter Bug**: Middleware uses Express syntax with Fastify
-   - Causes `endpoint.includes()` error on undefined
-   - Affects all auth endpoints, not just social
-   - Needs fix to use `req.url` instead of `req.path`
+1. ~~**Rate Limiter Bug**: Middleware uses Express syntax with Fastify~~ ✅ FIXED
+   - ~~Causes `endpoint.includes()` error on undefined~~
+   - ~~Affects all auth endpoints, not just social~~
+   - ~~Needs fix to use `req.url` instead of `req.path`~~
+   - **Fixed**: Updated middleware to use Fastify types (`FastifyRequest`, `FastifyReply`)
+   - **Fixed**: Changed `req.path` to `req.url.split('?')[0]` for proper path extraction
+   - **Fixed**: Added social auth endpoints to rate limiting configuration
+
+### Phase 3.1: Bug Fixes (2025-01-18) ✅ COMPLETE
+**Rate Limiter Middleware Fix:**
+- Fixed middleware compatibility issue with Fastify
+- Changed from Express types (`Request`, `Response`) to Fastify types (`FastifyRequest`, `FastifyReply`)
+- Updated path extraction from `req.path` to `req.url.split('?')[0]`
+- Added social auth endpoints to rate limiting configuration in `app.module.ts`
+- No SDK changes required as HTTP responses remain unchanged
 
 ### Phase 4: Enhancement
 1. Add account linking UI

@@ -1,5 +1,5 @@
 import { Injectable, NestMiddleware, Logger, HttpStatus, HttpException } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
+import { FastifyRequest, FastifyReply } from 'fastify';
 import * as Redis from 'ioredis';
 import { ConfigService } from '../../../config/services/config.service';
 
@@ -18,10 +18,10 @@ export class RateLimitMiddleware implements NestMiddleware {
   /**
    * Middleware implementation for rate limiting
    */
-  async use(req: Request, res: Response, next: NextFunction) {
+  async use(req: FastifyRequest, res: FastifyReply, next: (error?: Error) => void) {
     const ip = this.getIpAddress(req);
-    const endpoint = req.path;
-    const email = req.body?.email;
+    const endpoint = req.url.split('?')[0]; // Extract path without query params
+    const email = (req.body as any)?.email;
     
     try {
       // IP-based rate limit (10 requests per minute)
@@ -99,7 +99,7 @@ export class RateLimitMiddleware implements NestMiddleware {
   /**
    * Get client IP address from request
    */
-  private getIpAddress(req: Request): string {
+  private getIpAddress(req: FastifyRequest): string {
     // Try different headers for IP address
     const forwardedFor = req.headers['x-forwarded-for'];
     if (forwardedFor) {

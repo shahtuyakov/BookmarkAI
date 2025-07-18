@@ -53,6 +53,8 @@ export class AppModule {
         { path: 'v1/auth/login', method: RequestMethod.POST },
         { path: 'v1/auth/register', method: RequestMethod.POST },
         { path: 'v1/auth/refresh', method: RequestMethod.POST },
+        { path: 'v1/auth/social/google', method: RequestMethod.POST },
+        { path: 'v1/auth/social/apple', method: RequestMethod.POST },
       );
   }
 }
