@@ -55,6 +55,9 @@ coverage
 .DS_Store
 Thumbs.db
 
+# Mobile - iOS Info.plist (contains Google Client ID from env)
+packages/mobile/bookmarkaimobile/ios/BookmarkAI/Info.plist
+
 # Build artifacts
 .next
 .turbo

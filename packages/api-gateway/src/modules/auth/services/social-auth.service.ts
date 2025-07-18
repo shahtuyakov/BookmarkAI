@@ -35,6 +35,7 @@ export class SocialAuthService {
   async authenticateGoogle(
     idToken: string,
     nonce?: string,
+    deviceInfo?: { platform?: string; version?: string },
   ): Promise<SocialAuthResult> {
     // Verify the Google ID token
     const googleUser = await this.googleAuthService.verifyIdToken(idToken);
@@ -52,7 +53,7 @@ export class SocialAuthService {
       name: googleUser.name,
       avatarUrl: googleUser.picture,
       emailVerified: googleUser.email_verified,
-    });
+    }, deviceInfo);
   }
 
   /**
@@ -64,6 +65,7 @@ export class SocialAuthService {
     nonce?: string,
     firstName?: string,
     lastName?: string,
+    deviceInfo?: { platform?: string; version?: string },
   ): Promise<SocialAuthResult> {
     // Verify the Apple ID token
     const appleUser = await this.appleAuthService.verifyIdToken(
@@ -84,20 +86,23 @@ export class SocialAuthService {
       email: appleUser.email,
       name,
       emailVerified: appleUser.email_verified,
-    });
+    }, deviceInfo);
   }
 
   /**
    * Find existing user or create new one
    */
-  private async findOrCreateUser(socialProfile: {
-    provider: SocialProvider;
-    providerId: string;
-    email?: string;
-    name: string;
-    avatarUrl?: string;
-    emailVerified: boolean;
-  }): Promise<SocialAuthResult> {
+  private async findOrCreateUser(
+    socialProfile: {
+      provider: SocialProvider;
+      providerId: string;
+      email?: string;
+      name: string;
+      avatarUrl?: string;
+      emailVerified: boolean;
+    },
+    deviceInfo?: { platform?: string; version?: string },
+  ): Promise<SocialAuthResult> {
     // Note: We need to add provider and providerId columns to the users table
     // For now, we'll use email as the primary identifier
     
@@ -170,7 +175,14 @@ export class SocialAuthService {
     const refreshFamilyId = uuidv4();
     await this.storeRefreshToken(userId, tokens.refreshToken, refreshFamilyId);
     
-    this.logger.log(`New user created via ${socialProfile.provider}: ${userId}`);
+    const deviceInfoStr = deviceInfo 
+      ? `${deviceInfo.platform || 'unknown'} ${deviceInfo.version || ''}`.trim()
+      : 'unknown device';
+    
+    this.logger.log(
+      `New user created via ${socialProfile.provider}: ${userId}\n` +
+      `  ${socialProfile.provider.charAt(0).toUpperCase() + socialProfile.provider.slice(1)} sign-in from ${deviceInfoStr}`
+    );
 
     return { 
       user: { ...newUser, role: 'user' }, 

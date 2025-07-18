@@ -18,6 +18,7 @@ import { PlatformNetworkAdapter } from '../adapters';
 import { ReactNativeStorageAdapter } from '@bookmarkai/sdk';
 import { keychainWrapper } from '../utils/keychain-wrapper';
 import { MMKV } from 'react-native-mmkv';
+import { DeviceEventEmitter } from 'react-native';
 
 // Feature flag to control which implementation to use
 // Set to true to test SDK implementation
@@ -63,6 +64,8 @@ const createSDKClient = () => {
     environment: __DEV__ ? 'development' : 'production',
     onTokenRefresh: (_tokens) => {
       // SDK token refresh callback triggered
+      // Emit an event to notify auth context to re-check authentication
+      DeviceEventEmitter.emit('auth-state-changed');
     },
   });
   

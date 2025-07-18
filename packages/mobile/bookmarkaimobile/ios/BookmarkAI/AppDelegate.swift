@@ -2,6 +2,7 @@ import UIKit
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
+import GoogleSignIn
 
 @main
 class AppDelegate: RCTAppDelegate {
@@ -35,8 +36,14 @@ class AppDelegate: RCTAppDelegate {
 #endif
   }
   
-  // Handle deep links
+  // Handle deep links and Google Sign-In
   override func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+    // Handle Google Sign-In
+    if GIDSignIn.sharedInstance.handle(url) {
+      return true
+    }
+    
+    // Handle app deep links
     if url.scheme == "bookmarkai" {
       // Let React Navigation handle the deep link
       return super.application(app, open: url, options: options)

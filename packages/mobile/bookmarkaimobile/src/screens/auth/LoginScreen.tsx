@@ -4,6 +4,8 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } f
 import { TextInput, Button, Text, HelperText } from 'react-native-paper';
 import { useAuth } from '../../contexts/auth-provider';
 import { AuthScreenNavigationProp } from '../../navigation/types';
+import { GoogleSignInButton, AppleSignInButton, OrDivider } from '../../components/Auth';
+import { useSocialAuth } from '../../hooks/useSocialAuth';
 
 type Props = {
   navigation: AuthScreenNavigationProp<'Login'>;
@@ -17,6 +19,7 @@ const LoginScreen = ({ navigation }: Props) => {
   const [passwordError, setPasswordError] = useState('');
   
   const { login, isLoading, error } = useAuth();
+  const { signInWithGoogle, signInWithApple, isLoading: isSocialLoading } = useSocialAuth();
 
   const validateEmail = (text: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,6 +70,18 @@ const LoginScreen = ({ navigation }: Props) => {
           <Text style={styles.subtitle}>Sign in to your account</Text>
           
           {error && <Text style={styles.errorText}>{error}</Text>}
+          
+          <GoogleSignInButton
+            onPress={signInWithGoogle}
+            disabled={isLoading || isSocialLoading}
+          />
+          
+          <AppleSignInButton
+            onPress={signInWithApple}
+            disabled={isLoading || isSocialLoading}
+          />
+          
+          <OrDivider />
           
           <TextInput
             label="Email"

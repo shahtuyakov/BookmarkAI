@@ -38,17 +38,12 @@ export class SocialAuthController {
     const result = await this.socialAuthService.authenticateGoogle(
       dto.idToken,
       dto.nonce,
+      dto.deviceInfo,
     );
 
     // Set cookie for web clients
     if (this.isWebClient(request)) {
       this.setCookieToken(response, result.tokens.accessToken);
-    }
-
-    // Log device info if provided
-    if (dto.deviceInfo) {
-      // Could be used for device tracking/security in the future
-      console.log(`Google sign-in from ${dto.deviceInfo.platform} ${dto.deviceInfo.version}`);
     }
 
     return {
@@ -84,16 +79,12 @@ export class SocialAuthController {
       dto.nonce,
       dto.firstName,
       dto.lastName,
+      dto.deviceInfo,
     );
 
     // Set cookie for web clients
     if (this.isWebClient(request)) {
       this.setCookieToken(response, result.tokens.accessToken);
-    }
-
-    // Log device info if provided
-    if (dto.deviceInfo) {
-      console.log(`Apple sign-in from ${dto.deviceInfo.platform} ${dto.deviceInfo.version}`);
     }
 
     return {
