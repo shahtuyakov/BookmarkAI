@@ -190,7 +190,7 @@ services:
       - '9090:9090'
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ../docs/prometheus-alerts-ml.yml:/etc/prometheus/alerts/ml-alerts.yml:ro
+      - ./prometheus/alerts/ml-alerts.yml:/etc/prometheus/alerts/ml-alerts.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

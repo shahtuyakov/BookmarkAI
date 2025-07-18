@@ -1,0 +1,91 @@
+groups:
+  - name: ml_service_alerts
+    interval: 30s
+    rules:
+      # ML Worker Health Alerts
+      - alert: MLWorkerDown
+        expr: up{job=~"llm-worker|whisper-worker|vector-worker|caption-worker"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: ml-pipeline
+        annotations:
+          summary: "ML Worker {{ $labels.job }} is down"
+          description: "ML Worker {{ $labels.job }} has been down for more than 5 minutes"
+
+      # Queue Depth Alerts
+      - alert: MLQueueBacklog
+        expr: rabbitmq_queue_messages{queue=~"llm|whisper|vector|caption"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+          service: ml-pipeline
+        annotations:
+          summary: "High queue depth for {{ $labels.queue }}"
+          description: "Queue {{ $labels.queue }} has over 1000 messages for 10+ minutes"
+
+      # Processing Rate Alerts
+      - alert: MLProcessingRateLow
+        expr: rate(celery_task_completed_total{queue=~"llm|whisper|vector|caption"}[5m]) < 0.1
+        for: 15m
+        labels:
+          severity: warning
+          service: ml-pipeline
+        annotations:
+          summary: "Low processing rate for {{ $labels.queue }}"
+          description: "Processing rate for {{ $labels.queue }} is below 0.1 tasks/sec"
+
+      # Task Failure Alerts
+      - alert: MLTaskFailureHigh
+        expr: rate(celery_task_failed_total{queue=~"llm|whisper|vector|caption"}[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+          service: ml-pipeline
+        annotations:
+          summary: "High failure rate for {{ $labels.queue }}"
+          description: "Failure rate for {{ $labels.queue }} exceeds 0.5 failures/sec"
+
+      # Memory Usage Alerts
+      - alert: MLWorkerMemoryHigh
+        expr: container_memory_usage_bytes{name=~"bookmarkai-.*-worker"} / container_spec_memory_limit_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: ml-pipeline
+        annotations:
+          summary: "High memory usage for {{ $labels.name }}"
+          description: "Memory usage for {{ $labels.name }} is above 90%"
+
+      # GPU Usage Alerts (if applicable)
+      - alert: GPUMemoryHigh
+        expr: nvidia_gpu_memory_used_bytes / nvidia_gpu_memory_total_bytes > 0.95
+        for: 5m
+        labels:
+          severity: warning
+          service: ml-pipeline
+        annotations:
+          summary: "GPU memory usage is high"
+          description: "GPU {{ $labels.gpu }} memory usage is above 95%"
+
+      # Model Loading Alerts
+      - alert: ModelLoadFailed
+        expr: ml_model_load_failures_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: ml-pipeline
+        annotations:
+          summary: "Model loading failed"
+          description: "Failed to load ML model {{ $labels.model }}"
+
+      # API Response Time Alerts
+      - alert: MLAPIResponseSlow
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{handler=~"/api/v1/(llm|whisper|vector|caption).*"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: ml-pipeline
+        annotations:
+          summary: "Slow ML API responses"
+          description: "95th percentile response time for {{ $labels.handler }} exceeds 10s"
