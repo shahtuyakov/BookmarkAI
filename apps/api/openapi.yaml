@@ -123,6 +123,32 @@ paths:
       responses:
         '200':
           description: ''
+  "/v1/auth/social/google":
+    post:
+      operationId: SocialAuthController_googleSignIn
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/GoogleAuthDto"
+      responses:
+        '200':
+          description: ''
+  "/v1/auth/social/apple":
+    post:
+      operationId: SocialAuthController_appleSignIn
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AppleAuthDto"
+      responses:
+        '200':
+          description: ''
   "/v1/test/protected":
     get:
       operationId: TestController_getProtected
@@ -463,6 +489,55 @@ components:
     ResetPasswordDto:
       type: object
       properties: {}
+    GoogleAuthDto:
+      type: object
+      properties:
+        idToken:
+          type: string
+          description: Google ID token from OAuth2
+        nonce:
+          type: string
+          description: Optional nonce for security
+        deviceInfo:
+          type: object
+          properties:
+            platform:
+              type: string
+              description: Device platform (web, ios, android)
+            version:
+              type: string
+              description: App version
+      required:
+        - idToken
+    AppleAuthDto:
+      type: object
+      properties:
+        idToken:
+          type: string
+          description: Apple ID token from Sign in with Apple
+        authorizationCode:
+          type: string
+          description: Authorization code for token exchange
+        nonce:
+          type: string
+          description: Optional nonce for security
+        firstName:
+          type: string
+          description: User's first name (only on first sign-in)
+        lastName:
+          type: string
+          description: User's last name (only on first sign-in)
+        deviceInfo:
+          type: object
+          properties:
+            platform:
+              type: string
+              description: Device platform (web, ios, android)
+            version:
+              type: string
+              description: App version
+      required:
+        - idToken
     CreateShareDto:
       type: object
       properties:

@@ -1,4 +1,5 @@
 export * from './users';
+export * from './social-auth-profiles';
 export * from './shares';
 export * from './metadata';
 export * from './transcripts';

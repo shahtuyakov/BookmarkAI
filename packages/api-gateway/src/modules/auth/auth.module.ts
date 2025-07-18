@@ -1,8 +1,12 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './controllers/auth.controller';
+import { SocialAuthController } from './controllers/social-auth.controller';
 import { TestController } from './controllers/test.controller';
 import { AuthService } from './services/auth.service';
+import { SocialAuthService } from './services/social-auth.service';
+import { GoogleAuthService } from './services/google-auth.service';
+import { AppleAuthService } from './services/apple-auth.service';
 import { KmsJwtService } from './services/kms-jwt.service';
 import { PasswordService } from './services/password.service';
 import { EmailService } from './services/email.service';
@@ -15,9 +19,12 @@ import { RolesGuard } from './guards/roles.guard';
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
   ],
-  controllers: [AuthController, TestController],
+  controllers: [AuthController, SocialAuthController, TestController],
   providers: [
     AuthService,
+    SocialAuthService,
+    GoogleAuthService,
+    AppleAuthService,
     KmsJwtService,
     PasswordService,
     EmailService,
@@ -33,6 +40,6 @@ import { RolesGuard } from './guards/roles.guard';
       useClass: RolesGuard,
     },
   ],
-  exports: [AuthService, KmsJwtService, PasswordService, EmailService],
+  exports: [AuthService, SocialAuthService, KmsJwtService, PasswordService, EmailService],
 })
 export class AuthModule {}

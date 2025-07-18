@@ -17,6 +17,10 @@ export const users = pgTable('users', {
   verificationTokenExpiry: timestamp('verification_token_expiry'),
   resetPasswordToken: text('reset_password_token'),
   resetPasswordTokenExpiry: timestamp('reset_password_token_expiry'),
+  // Social auth fields
+  provider: varchar('provider', { length: 20 }).notNull().default('email'),
+  providerId: varchar('provider_id', { length: 255 }),
+  avatarUrl: text('avatar_url'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });

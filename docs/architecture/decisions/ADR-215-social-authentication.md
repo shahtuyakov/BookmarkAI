@@ -1,7 +1,8 @@
 # ADR-215: Social Authentication Implementation
 
-- **Status**: Draft
+- **Status**: In Progress (Phase 1 Complete)
 - **Date**: 2025-01-18
+- **Updated**: 2025-01-18
 - **Authors**: @engineering-team
 - **Supersedes**: —
 - **Superseded by**: —
@@ -261,11 +262,28 @@ CREATE TABLE IF NOT EXISTS social_auth_profiles (
 
 ## 8 — Migration Strategy
 
-### Phase 1: Backend (Week 1)
-1. Implement social auth endpoints
-2. Add database migrations
-3. Deploy to staging
-4. Test with Postman/SDK
+### Phase 1: Backend (Week 1) ✅ COMPLETE
+1. ✅ Implement social auth endpoints
+2. ✅ Add database migrations
+3. ✅ Deploy to staging
+4. ✅ Test with Postman/SDK
+
+**Completed Tasks:**
+- ✅ Phase 1: Backend Social Auth - Create DTOs and validation
+- ✅ Phase 1: Backend Social Auth - Implement Google auth service
+- ✅ Phase 1: Backend Social Auth - Implement Apple auth service
+- ✅ Phase 1: Backend Social Auth - Create controller endpoints
+- ✅ Phase 1: Backend Social Auth - Database migrations
+- ✅ Phase 1: Backend Social Auth - Environment variables setup
+- ✅ Update OpenAPI spec with social auth endpoints
+- ✅ Update SDK with social auth methods
+
+**Implementation Notes:**
+- Google and Apple auth services use stub implementations for development
+- Production requires installing and configuring actual OAuth libraries
+- Database migration 0014_add_social_auth.sql adds provider fields to users table
+- New endpoints: POST /v1/auth/social/google and POST /v1/auth/social/apple
+- SDK methods: `client.auth.googleSignIn()` and `client.auth.appleSignIn()`
 
 ### Phase 2: Mobile (Week 2)
 1. Integrate Google Sign-In
