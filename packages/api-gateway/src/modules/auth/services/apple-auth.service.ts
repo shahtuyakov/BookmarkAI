@@ -38,62 +38,83 @@ export class AppleAuthService {
     nonce?: string,
     authorizationCode?: string,
   ): Promise<AppleUserInfo> {
-    try {
-      // Verify the identity token
-      const decodedToken = await appleSignin.verifyIdToken(
-        idToken,
-        {
-          audience: this.clientId,
-          nonce: nonce,
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Verify the identity token
+        const decodedToken = await appleSignin.verifyIdToken(
+          idToken,
+          {
+            audience: this.clientId,
+            nonce: nonce,
+          }
+        );
+
+        if (!decodedToken) {
+          throw new UnauthorizedException('Invalid Apple ID token');
         }
-      );
 
-      if (!decodedToken) {
-        throw new UnauthorizedException('Invalid Apple ID token');
-      }
+        // Extract user information from the token
+        const userInfo: AppleUserInfo = {
+          id: decodedToken.sub,
+          email: decodedToken.email,
+          email_verified: decodedToken.email_verified === 'true',
+        };
 
-      // Extract user information from the token
-      const userInfo: AppleUserInfo = {
-        id: decodedToken.sub,
-        email: decodedToken.email,
-        email_verified: decodedToken.email_verified === 'true',
-      };
-
-      // If we have an authorization code, we can get refresh token
-      // This is only available on first sign-in
-      if (authorizationCode && this.privateKey) {
-        try {
-          const clientSecret = this.generateClientSecret();
-          const tokenResponse = await appleSignin.getAuthorizationToken(
-            authorizationCode,
-            {
-              clientID: this.clientId,
-              clientSecret,
-              redirectUri: 'https://bookmarkai.app/auth/callback', // Update with actual redirect URI
+        // If we have an authorization code, we can get refresh token
+        // This is only available on first sign-in
+        if (authorizationCode && this.privateKey) {
+          try {
+            const clientSecret = this.generateClientSecret();
+            const tokenResponse = await appleSignin.getAuthorizationToken(
+              authorizationCode,
+              {
+                clientID: this.clientId,
+                clientSecret,
+                redirectUri: 'https://bookmarkai.app/auth/callback', // Update with actual redirect URI
+              }
+            );
+            
+            // We could store the refresh token for future use
+            // but for now, we just log that we got it
+            if (tokenResponse.refresh_token) {
+              this.logger.debug('Received Apple refresh token');
             }
+          } catch (error) {
+            // Authorization code exchange is optional
+            this.logger.warn('Failed to exchange authorization code', error);
+          }
+        }
+
+        return userInfo;
+      } catch (error) {
+        // Don't retry on authentication errors
+        if (error instanceof UnauthorizedException) {
+          throw error;
+        }
+        
+        // Log retry attempts
+        if (attempt < maxRetries) {
+          this.logger.warn(
+            `Apple token verification failed (attempt ${attempt}/${maxRetries}), retrying...`,
+            error,
           );
           
-          // We could store the refresh token for future use
-          // but for now, we just log that we got it
-          if (tokenResponse.refresh_token) {
-            this.logger.debug('Received Apple refresh token');
-          }
-        } catch (error) {
-          // Authorization code exchange is optional
-          this.logger.warn('Failed to exchange authorization code', error);
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+          continue;
         }
+        
+        // Final attempt failed
+        this.logger.error('Failed to verify Apple ID token after retries', error);
+        throw new UnauthorizedException('Failed to verify Apple credentials');
       }
-
-      return userInfo;
-    } catch (error) {
-      this.logger.error('Failed to verify Apple ID token', error);
-      
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
-      
-      throw new UnauthorizedException('Failed to verify Apple credentials');
     }
+    
+    // Should never reach here, but TypeScript needs this
+    throw new UnauthorizedException('Failed to verify Apple credentials');
   }
 
   /**

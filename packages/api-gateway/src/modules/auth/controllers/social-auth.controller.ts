@@ -6,19 +6,32 @@ import {
   HttpStatus,
   Res,
   Req,
+  ServiceUnavailableException,
+  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { Public } from '../decorators/public.decorator';
+import { HttpsOnlyGuard } from '../guards/https-only.guard';
 import { SocialAuthService } from '../services/social-auth.service';
+import { AuthMetricsService } from '../services/auth-metrics.service';
 import { GoogleAuthDto, AppleAuthDto } from '../dto/social-auth.dto';
+import { ConfigService } from '../../../config/services/config.service';
 
 @ApiTags('auth')
 @Controller('v1/auth/social')
+@UseGuards(HttpsOnlyGuard)
 export class SocialAuthController {
+  private readonly socialAuthEnabled: boolean;
+
   constructor(
     private readonly socialAuthService: SocialAuthService,
-  ) {}
+    private readonly authMetricsService: AuthMetricsService,
+    private readonly configService: ConfigService,
+  ) {
+    this.socialAuthEnabled = this.configService.get<boolean>('SOCIAL_AUTH_ENABLED', false);
+  }
 
   /**
    * Google Sign-In
@@ -29,33 +42,67 @@ export class SocialAuthController {
   @ApiOperation({ summary: 'Sign in with Google' })
   @ApiResponse({ status: 200, description: 'Successfully authenticated' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({ status: 503, description: 'Social authentication is disabled' })
   async googleSignIn(
     @Body() dto: GoogleAuthDto,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    // Authenticate with Google
-    const result = await this.socialAuthService.authenticateGoogle(
-      dto.idToken,
-      dto.nonce,
-      dto.deviceInfo,
-    );
-
-    // Set cookie for web clients
-    if (this.isWebClient(request)) {
-      this.setCookieToken(response, result.tokens.accessToken);
+    // Check if social auth is enabled
+    if (!this.socialAuthEnabled) {
+      throw new ServiceUnavailableException('Social authentication is currently disabled');
     }
 
-    return {
-      ...result.tokens,
-      user: {
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
-        provider: 'google',
-        isNewUser: result.isNewUser,
-      },
-    };
+    const startTime = Date.now();
+    this.authMetricsService.recordAuthAttempt('google', 'social');
+
+    try {
+      // Authenticate with Google
+      const result = await this.socialAuthService.authenticateGoogle(
+        dto.idToken,
+        dto.nonce,
+        dto.deviceInfo,
+      );
+
+      // Record metrics
+      const latencySeconds = (Date.now() - startTime) / 1000;
+      this.authMetricsService.recordAuthLatency('google', latencySeconds, 'social');
+      this.authMetricsService.recordAuthSuccess('google', 'social', result.isNewUser);
+
+      // Set cookie for web clients
+      if (this.isWebClient(request)) {
+        this.setCookieToken(response, result.tokens.accessToken);
+      }
+
+      return {
+        ...result.tokens,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          provider: 'google',
+          isNewUser: result.isNewUser,
+        },
+      };
+    } catch (error) {
+      // Record failure metrics
+      const errorType = error instanceof UnauthorizedException ? 'invalid_token' : 'provider_error';
+      this.authMetricsService.recordAuthFailure('google', 'social', errorType);
+      
+      // Log the error for monitoring
+      console.error('Google authentication failed:', error);
+      
+      // Return user-friendly error with fallback suggestion
+      if (error instanceof UnauthorizedException) {
+        throw new UnauthorizedException(
+          'Google authentication failed. Please try again or use email/password login.'
+        );
+      }
+      
+      throw new ServiceUnavailableException(
+        'Google authentication is temporarily unavailable. Please use email/password login or try again later.'
+      );
+    }
   }
 
   /**
@@ -67,36 +114,70 @@ export class SocialAuthController {
   @ApiOperation({ summary: 'Sign in with Apple' })
   @ApiResponse({ status: 200, description: 'Successfully authenticated' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({ status: 503, description: 'Social authentication is disabled' })
   async appleSignIn(
     @Body() dto: AppleAuthDto,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    // Authenticate with Apple
-    const result = await this.socialAuthService.authenticateApple(
-      dto.idToken,
-      dto.authorizationCode,
-      dto.nonce,
-      dto.firstName,
-      dto.lastName,
-      dto.deviceInfo,
-    );
-
-    // Set cookie for web clients
-    if (this.isWebClient(request)) {
-      this.setCookieToken(response, result.tokens.accessToken);
+    // Check if social auth is enabled
+    if (!this.socialAuthEnabled) {
+      throw new ServiceUnavailableException('Social authentication is currently disabled');
     }
 
-    return {
-      ...result.tokens,
-      user: {
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
-        provider: 'apple',
-        isNewUser: result.isNewUser,
-      },
-    };
+    const startTime = Date.now();
+    this.authMetricsService.recordAuthAttempt('apple', 'social');
+
+    try {
+      // Authenticate with Apple
+      const result = await this.socialAuthService.authenticateApple(
+        dto.idToken,
+        dto.authorizationCode,
+        dto.nonce,
+        dto.firstName,
+        dto.lastName,
+        dto.deviceInfo,
+      );
+
+      // Record metrics
+      const latencySeconds = (Date.now() - startTime) / 1000;
+      this.authMetricsService.recordAuthLatency('apple', latencySeconds, 'social');
+      this.authMetricsService.recordAuthSuccess('apple', 'social', result.isNewUser);
+
+      // Set cookie for web clients
+      if (this.isWebClient(request)) {
+        this.setCookieToken(response, result.tokens.accessToken);
+      }
+
+      return {
+        ...result.tokens,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          provider: 'apple',
+          isNewUser: result.isNewUser,
+        },
+      };
+    } catch (error) {
+      // Record failure metrics
+      const errorType = error instanceof UnauthorizedException ? 'invalid_token' : 'provider_error';
+      this.authMetricsService.recordAuthFailure('apple', 'social', errorType);
+      
+      // Log the error for monitoring
+      console.error('Apple authentication failed:', error);
+      
+      // Return user-friendly error with fallback suggestion
+      if (error instanceof UnauthorizedException) {
+        throw new UnauthorizedException(
+          'Apple authentication failed. Please try again or use email/password login.'
+        );
+      }
+      
+      throw new ServiceUnavailableException(
+        'Apple authentication is temporarily unavailable. Please use email/password login or try again later.'
+      );
+    }
   }
 
   /**

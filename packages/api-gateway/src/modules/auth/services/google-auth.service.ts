@@ -30,41 +30,62 @@ export class GoogleAuthService {
    * Verify Google ID token and extract user information
    */
   async verifyIdToken(idToken: string): Promise<GoogleUserInfo> {
-    try {
-      const ticket = await this.oauth2Client.verifyIdToken({
-        idToken,
-        audience: this.clientId,
-      });
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const ticket = await this.oauth2Client.verifyIdToken({
+          idToken,
+          audience: this.clientId,
+        });
 
-      const payload = ticket.getPayload();
-      
-      if (!payload) {
-        throw new UnauthorizedException('Invalid Google ID token');
-      }
+        const payload = ticket.getPayload();
+        
+        if (!payload) {
+          throw new UnauthorizedException('Invalid Google ID token');
+        }
 
-      // Verify token hasn't expired
-      const currentTime = Math.floor(Date.now() / 1000);
-      if (payload.exp < currentTime) {
-        throw new UnauthorizedException('Google ID token has expired');
-      }
+        // Verify token hasn't expired
+        const currentTime = Math.floor(Date.now() / 1000);
+        if (payload.exp < currentTime) {
+          throw new UnauthorizedException('Google ID token has expired');
+        }
 
-      // Extract user information
-      return {
-        id: payload.sub,
-        email: payload.email!,
-        name: payload.name || payload.email!.split('@')[0],
-        picture: payload.picture,
-        email_verified: payload.email_verified || false,
-      };
-    } catch (error) {
-      this.logger.error('Failed to verify Google ID token', error);
-      
-      if (error instanceof UnauthorizedException) {
-        throw error;
+        // Extract user information
+        return {
+          id: payload.sub,
+          email: payload.email!,
+          name: payload.name || payload.email!.split('@')[0],
+          picture: payload.picture,
+          email_verified: payload.email_verified || false,
+        };
+      } catch (error) {
+        // Don't retry on authentication errors
+        if (error instanceof UnauthorizedException) {
+          throw error;
+        }
+        
+        // Log retry attempts
+        if (attempt < maxRetries) {
+          this.logger.warn(
+            `Google token verification failed (attempt ${attempt}/${maxRetries}), retrying...`,
+            error,
+          );
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+          continue;
+        }
+        
+        // Final attempt failed
+        this.logger.error('Failed to verify Google ID token after retries', error);
+        throw new UnauthorizedException('Failed to verify Google credentials');
       }
-      
-      throw new UnauthorizedException('Failed to verify Google credentials');
     }
+    
+    // Should never reach here, but TypeScript needs this
+    throw new UnauthorizedException('Failed to verify Google credentials');
   }
 
   /**

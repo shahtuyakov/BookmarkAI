@@ -60,6 +60,31 @@ export class RateLimitMiddleware implements NestMiddleware {
         }
       }
       
+      // Apply rate limiting for social auth endpoints
+      if (endpoint.includes('/auth/social/')) {
+        const provider = endpoint.split('/').pop(); // Get provider name (google/apple)
+        const providerKey = `ratelimit:social:${provider}:${ip}`;
+        const providerCount = await this.redis.incr(providerKey);
+        
+        // Set expiry on first request (5 minutes for social auth)
+        if (providerCount === 1) {
+          await this.redis.expire(providerKey, 300); // 5 minutes
+        }
+        
+        // Limit to 10 attempts per 5 minutes per provider
+        if (providerCount > 10) {
+          this.logger.warn(`Social auth rate limit exceeded for ${provider} from IP ${ip}`);
+          
+          // Track for monitoring
+          await this.redis.incr(`auth:social:failed:${provider}`);
+          
+          throw new HttpException(
+            `Too many ${provider} authentication attempts, please try again later`,
+            HttpStatus.TOO_MANY_REQUESTS
+          );
+        }
+      }
+      
       next();
     } catch (error) {
       if (error instanceof HttpException) {
