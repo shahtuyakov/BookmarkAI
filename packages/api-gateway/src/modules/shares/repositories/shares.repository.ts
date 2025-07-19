@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, gte } from 'drizzle-orm';
 import { DrizzleService } from '../../../database/services/drizzle.service';
 import { shares } from '../../../db/schema/shares';
+import { mlResults } from '../../../db/schema/ml-results';
 import { ShareStatus } from '../constants/share-status.enum';
 import { Platform } from '../constants/platform.enum';
+import { GetEnrichedSharesQueryDto, MLStatus } from '../dto/get-enriched-shares-query.dto';
 
 export interface CreateShareData {
   userId: string;
@@ -351,5 +353,342 @@ export class SharesRepository {
       .returning();
     
     return deletedShare;
+  }
+
+  /**
+   * Find shares with ML results joined (enriched)
+   */
+  async findEnrichedShares(userId: string, query: GetEnrichedSharesQueryDto) {
+    const limit = query.limit || 20;
+    const conditions: any[] = [eq(shares.userId, userId)];
+
+    // Platform filter
+    if (query.platform && query.platform.length > 0) {
+      conditions.push(inArray(shares.platform, query.platform));
+    }
+
+    // Status filter
+    if (query.status && query.status.length > 0) {
+      conditions.push(inArray(shares.status, query.status));
+    }
+
+    // Media type filter
+    if (query.mediaType) {
+      conditions.push(eq(shares.mediaType, query.mediaType));
+    }
+
+    // Date filter
+    if (query.since) {
+      conditions.push(gte(shares.createdAt, new Date(query.since)));
+    }
+
+    // Handle cursor for pagination
+    if (query.cursor) {
+      try {
+        const [cursorDate, id] = query.cursor.split('_');
+        if (cursorDate && id) {
+          const cursorCondition = sql`(${shares.createdAt}, ${shares.id}) < (${new Date(cursorDate)}, ${id})`;
+          conditions.push(cursorCondition);
+        }
+      } catch (error) {
+        // Invalid cursor, ignore it
+      }
+    }
+
+    // Build query with left join to ML results
+    const results = await this.db.database
+      .select({
+        share: shares,
+        mlResults: {
+          summary: sql<any>`
+            (SELECT result_data->>'summary' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'summarize_llm' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          transcript: sql<any>`
+            (SELECT result_data->>'transcript' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'transcribe_whisper' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          summaryStatus: sql<string>`
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'summarize_llm' 
+                AND result_data->>'status' = 'success'
+              ) THEN 'done'
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'summarize_llm' 
+                AND result_data->>'status' = 'failed'
+              ) THEN 'failed'
+              WHEN ${shares.status} = 'processing' THEN 'processing'
+              WHEN ${shares.mediaType} IN ('video', 'audio') THEN 'pending'
+              ELSE 'not_applicable'
+            END
+          `,
+          transcriptStatus: sql<string>`
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'transcribe_whisper' 
+                AND result_data->>'status' = 'success'
+              ) THEN 'done'
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'transcribe_whisper' 
+                AND result_data->>'status' = 'failed'
+              ) THEN 'failed'
+              WHEN ${shares.status} = 'processing' THEN 'processing'
+              WHEN ${shares.mediaType} IN ('video', 'audio') THEN 'pending'
+              ELSE 'not_applicable'
+            END
+          `,
+          embeddingsStatus: sql<string>`
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'embed_vectors'
+              ) THEN 'done'
+              WHEN ${shares.status} = 'done' THEN 'pending'
+              ELSE 'not_applicable'
+            END
+          `,
+          keyPoints: sql<string[]>`
+            (SELECT result_data->'keyPoints' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'summarize_llm' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          language: sql<string>`
+            (SELECT result_data->>'language' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'transcribe_whisper' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          duration: sql<number>`
+            (SELECT (result_data->>'duration')::float 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'transcribe_whisper' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+        }
+      })
+      .from(shares)
+      .where(and(...conditions))
+      .orderBy(desc(shares.createdAt), desc(shares.id))
+      .limit(limit + 1);
+
+    // Apply ML status filter
+    let filteredResults = results;
+    if (query.mlStatus) {
+      filteredResults = results.filter(r => {
+        const summaryDone = r.mlResults.summaryStatus === 'done';
+        const transcriptDone = r.mlResults.transcriptStatus === 'done';
+        const embeddingsDone = r.mlResults.embeddingsStatus === 'done';
+        
+        switch (query.mlStatus) {
+          case MLStatus.COMPLETE:
+            // All applicable ML tasks are done
+            const videoComplete = r.share.mediaType === 'video' || r.share.mediaType === 'audio' 
+              ? summaryDone && transcriptDone : summaryDone;
+            return videoComplete;
+          case MLStatus.PARTIAL:
+            // Some ML results available
+            return summaryDone || transcriptDone || embeddingsDone;
+          case MLStatus.NONE:
+            // No ML results yet
+            return !summaryDone && !transcriptDone && !embeddingsDone;
+          case MLStatus.FAILED:
+            // Any ML task failed
+            return r.mlResults.summaryStatus === 'failed' || 
+                   r.mlResults.transcriptStatus === 'failed';
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply transcript filter
+    if (query.hasTranscript === true) {
+      filteredResults = filteredResults.filter(r => r.mlResults.transcript !== null);
+    }
+
+    // Check if there are more items
+    const hasMore = filteredResults.length > limit;
+    const items = filteredResults.slice(0, limit);
+
+    // Generate cursor for next page
+    let nextCursor = undefined;
+    if (hasMore && items.length > 0) {
+      const lastItem = items[items.length - 1];
+      nextCursor = `${lastItem.share.createdAt.toISOString()}_${lastItem.share.id}`;
+    }
+
+    return {
+      items,
+      hasMore,
+      cursor: nextCursor,
+      limit,
+    };
+  }
+
+  /**
+   * Find a single enriched share by ID
+   */
+  async findEnrichedShareById(id: string, userId: string) {
+    const results = await this.db.database
+      .select({
+        share: shares,
+        mlResults: {
+          summary: sql<any>`
+            (SELECT result_data->>'summary' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'summarize_llm' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          transcript: sql<any>`
+            (SELECT result_data->>'transcript' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'transcribe_whisper' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          summaryStatus: sql<string>`
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'summarize_llm' 
+                AND result_data->>'status' = 'success'
+              ) THEN 'done'
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'summarize_llm' 
+                AND result_data->>'status' = 'failed'
+              ) THEN 'failed'
+              WHEN ${shares.status} = 'processing' THEN 'processing'
+              WHEN ${shares.mediaType} IN ('video', 'audio') THEN 'pending'
+              ELSE 'not_applicable'
+            END
+          `,
+          transcriptStatus: sql<string>`
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'transcribe_whisper' 
+                AND result_data->>'status' = 'success'
+              ) THEN 'done'
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'transcribe_whisper' 
+                AND result_data->>'status' = 'failed'
+              ) THEN 'failed'
+              WHEN ${shares.status} = 'processing' THEN 'processing'
+              WHEN ${shares.mediaType} IN ('video', 'audio') THEN 'pending'
+              ELSE 'not_applicable'
+            END
+          `,
+          embeddingsStatus: sql<string>`
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM ${mlResults} 
+                WHERE share_id = ${shares.id} 
+                AND task_type = 'embed_vectors'
+              ) THEN 'done'
+              WHEN ${shares.status} = 'done' THEN 'pending'
+              ELSE 'not_applicable'
+            END
+          `,
+          keyPoints: sql<string[]>`
+            (SELECT result_data->'keyPoints' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'summarize_llm' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          language: sql<string>`
+            (SELECT result_data->>'language' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'transcribe_whisper' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          duration: sql<number>`
+            (SELECT (result_data->>'duration')::float 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'transcribe_whisper' 
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          summaryProcessedAt: sql<string>`
+            (SELECT created_at::text 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'summarize_llm' 
+             AND result_data->>'status' = 'success'
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          transcriptProcessedAt: sql<string>`
+            (SELECT created_at::text 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'transcribe_whisper' 
+             AND result_data->>'status' = 'success'
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          summaryError: sql<string>`
+            (SELECT result_data->>'error' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'summarize_llm' 
+             AND result_data->>'status' = 'failed'
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+          transcriptError: sql<string>`
+            (SELECT result_data->>'error' 
+             FROM ${mlResults} 
+             WHERE share_id = ${shares.id} 
+             AND task_type = 'transcribe_whisper' 
+             AND result_data->>'status' = 'failed'
+             ORDER BY created_at DESC 
+             LIMIT 1)
+          `,
+        }
+      })
+      .from(shares)
+      .where(and(eq(shares.id, id), eq(shares.userId, userId)))
+      .limit(1);
+
+    return results[0] || null;
   }
 }

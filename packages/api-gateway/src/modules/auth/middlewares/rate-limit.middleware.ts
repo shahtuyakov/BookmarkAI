@@ -1,5 +1,5 @@
 import { Injectable, NestMiddleware, Logger, HttpStatus, HttpException } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
+import { FastifyRequest, FastifyReply } from 'fastify';
 import * as Redis from 'ioredis';
 import { ConfigService } from '../../../config/services/config.service';
 
@@ -18,10 +18,10 @@ export class RateLimitMiddleware implements NestMiddleware {
   /**
    * Middleware implementation for rate limiting
    */
-  async use(req: Request, res: Response, next: NextFunction) {
+  async use(req: FastifyRequest, res: FastifyReply, next: (error?: Error) => void) {
     const ip = this.getIpAddress(req);
-    const endpoint = req.path;
-    const email = req.body?.email;
+    const endpoint = req.url.split('?')[0]; // Extract path without query params
+    const email = (req.body as any)?.email;
     
     try {
       // IP-based rate limit (10 requests per minute)
@@ -60,6 +60,31 @@ export class RateLimitMiddleware implements NestMiddleware {
         }
       }
       
+      // Apply rate limiting for social auth endpoints
+      if (endpoint.includes('/auth/social/')) {
+        const provider = endpoint.split('/').pop(); // Get provider name (google/apple)
+        const providerKey = `ratelimit:social:${provider}:${ip}`;
+        const providerCount = await this.redis.incr(providerKey);
+        
+        // Set expiry on first request (5 minutes for social auth)
+        if (providerCount === 1) {
+          await this.redis.expire(providerKey, 300); // 5 minutes
+        }
+        
+        // Limit to 10 attempts per 5 minutes per provider
+        if (providerCount > 10) {
+          this.logger.warn(`Social auth rate limit exceeded for ${provider} from IP ${ip}`);
+          
+          // Track for monitoring
+          await this.redis.incr(`auth:social:failed:${provider}`);
+          
+          throw new HttpException(
+            `Too many ${provider} authentication attempts, please try again later`,
+            HttpStatus.TOO_MANY_REQUESTS
+          );
+        }
+      }
+      
       next();
     } catch (error) {
       if (error instanceof HttpException) {
@@ -74,7 +99,7 @@ export class RateLimitMiddleware implements NestMiddleware {
   /**
    * Get client IP address from request
    */
-  private getIpAddress(req: Request): string {
+  private getIpAddress(req: FastifyRequest): string {
     // Try different headers for IP address
     const forwardedFor = req.headers['x-forwarded-for'];
     if (forwardedFor) {

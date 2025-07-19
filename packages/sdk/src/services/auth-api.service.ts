@@ -129,4 +129,67 @@ export class AuthApiService {
     const userData = response.data.data || response.data;
     return userData;
   }
+
+  /**
+   * Sign in with Google
+   */
+  async googleSignIn(params: {
+    idToken: string;
+    nonce?: string;
+    deviceInfo?: { platform?: string; version?: string };
+  }): Promise<LoginResponse> {
+    const response = await this.client.request<any>({
+      url: '/v1/auth/social/google',
+      method: 'POST',
+      data: params,
+    });
+
+    // Handle nested response structure
+    const loginData = response.data.data || response.data;
+    
+    if (!loginData.accessToken || !loginData.refreshToken) {
+      throw new Error('Invalid login response: missing tokens');
+    }
+
+    // Automatically set tokens in the client
+    await this.client.setTokens({
+      accessToken: loginData.accessToken,
+      refreshToken: loginData.refreshToken,
+    }, loginData.expiresIn);
+
+    return loginData;
+  }
+
+  /**
+   * Sign in with Apple
+   */
+  async appleSignIn(params: {
+    idToken: string;
+    authorizationCode?: string;
+    nonce?: string;
+    firstName?: string;
+    lastName?: string;
+    deviceInfo?: { platform?: string; version?: string };
+  }): Promise<LoginResponse> {
+    const response = await this.client.request<any>({
+      url: '/v1/auth/social/apple',
+      method: 'POST',
+      data: params,
+    });
+
+    // Handle nested response structure
+    const loginData = response.data.data || response.data;
+    
+    if (!loginData.accessToken || !loginData.refreshToken) {
+      throw new Error('Invalid login response: missing tokens');
+    }
+
+    // Automatically set tokens in the client
+    await this.client.setTokens({
+      accessToken: loginData.accessToken,
+      refreshToken: loginData.refreshToken,
+    }, loginData.expiresIn);
+
+    return loginData;
+  }
 }

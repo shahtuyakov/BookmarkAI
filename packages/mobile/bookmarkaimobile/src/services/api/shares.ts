@@ -1,4 +1,5 @@
 import apiClient from './client';
+import type { MLResultsDto } from '@bookmarkai/sdk';
 
 export interface Share {
   id: string;
@@ -23,11 +24,22 @@ export interface Share {
   };
 }
 
+export interface EnrichedShare extends Share {
+  mlResults?: MLResultsDto;
+}
+
 export interface GetSharesParams {
   cursor?: string;
   limit?: number;
   platform?: string;
   status?: string;
+}
+
+export interface GetEnrichedSharesParams extends GetSharesParams {
+  mlStatus?: 'complete' | 'partial' | 'none' | 'failed';
+  mediaType?: 'video' | 'image' | 'audio' | 'none';
+  hasTranscript?: boolean;
+  since?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -61,6 +73,18 @@ export const sharesAPI = {
         },
       }
     );
+    return response.data.data;
+  },
+  
+  // Get enriched shares with ML results
+  getEnrichedShares: async (params?: GetEnrichedSharesParams): Promise<PaginatedResponse<EnrichedShare>> => {
+    const response = await apiClient.get<{data: PaginatedResponse<EnrichedShare>}>('/v1/shares/enriched', { params });
+    return response.data.data;
+  },
+  
+  // Get a specific enriched share by ID
+  getEnrichedShareById: async (id: string): Promise<EnrichedShare> => {
+    const response = await apiClient.get<{data: EnrichedShare}>(`/v1/shares/enriched/${id}`);
     return response.data.data;
   },
 };

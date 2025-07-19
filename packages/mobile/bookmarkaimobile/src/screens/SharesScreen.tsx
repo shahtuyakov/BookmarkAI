@@ -17,31 +17,29 @@ import {
   Chip,
   Banner,
 } from 'react-native-paper';
-import { useSharesList, useCreateShare, useQueuedShares } from '../hooks/useShares';
-import { Share } from '@bookmarkai/sdk';
+import { useCreateShare } from '../hooks/useShares';
+import { useEnrichedSharesList } from '../hooks/useEnrichedShares';
+import type { Share, EnrichedShare } from '../services/api/shares';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function SharesScreen() {
   const insets = useSafeAreaInsets();
   
-  // Fetch shares list
+  // Fetch enriched shares list with ML results
   const {
-    data,
+    shares,
     isLoading,
     error,
-    refetch,
+    refresh,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useSharesList({ limit: 20 });
+  } = useEnrichedSharesList({ limit: 20 });
 
   // Create share mutation
   const createShare = useCreateShare();
 
-  // Get queued shares
-  const { data: queueData } = useQueuedShares();
-
-  const shares = data?.items || [];
+  // shares is already provided by useEnrichedSharesList
 
   const handleCreateShare = useCallback(() => {
     // In a real app, this would open a form or share sheet
@@ -73,21 +71,21 @@ export function SharesScreen() {
     );
   }, [createShare]);
 
-  const renderShare = useCallback(({ item }: { item: Share }) => (
+  const renderShare = useCallback(({ item }: { item: Share | EnrichedShare }) => (
     <Card style={styles.card}>
       <Card.Content>
         <Title numberOfLines={1}>{item.title || item.url}</Title>
         <Paragraph numberOfLines={2}>{item.url}</Paragraph>
-        {item.notes && (
+        {item.description && (
           <Paragraph style={styles.notes} numberOfLines={2}>
-            {item.notes}
+            {item.description}
           </Paragraph>
         )}
         <View style={styles.chipContainer}>
           <Chip
             mode="flat"
             compact
-            style={[styles.chip, styles[`chip_${item.status}`]]}
+            style={styles.chip}
           >
             {item.status}
           </Chip>
@@ -117,7 +115,7 @@ export function SharesScreen() {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.errorText}>Failed to load bookmarks</Text>
-        <Button mode="contained" onPress={() => refetch()}>
+        <Button mode="contained" onPress={() => refresh()}>
           Retry
         </Button>
       </View>
@@ -126,15 +124,6 @@ export function SharesScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {queueData && queueData.stats.pending > 0 && (
-        <Banner
-          visible
-          actions={[]}
-          icon="cloud-upload"
-        >
-          {queueData.stats.pending} bookmarks waiting to sync
-        </Banner>
-      )}
 
       <FlatList
         data={shares}
@@ -142,7 +131,7 @@ export function SharesScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={false} onRefresh={refetch} />
+          <RefreshControl refreshing={false} onRefresh={refresh} />
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}

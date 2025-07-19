@@ -154,8 +154,15 @@ export const SDKAuthProvider: React.FC<SDKAuthProviderProps> = ({ children, clie
     
     const authErrorListener = DeviceEventEmitter.addListener('auth-error', handleAuthError);
     
+    // Listen for auth state changes (e.g., after social login)
+    const authStateChangedListener = DeviceEventEmitter.addListener('auth-state-changed', () => {
+      console.log('🔄 [SDKAuthContext] Auth state changed event received, re-checking auth...');
+      checkAuth();
+    });
+    
     return () => {
       authErrorListener.remove();
+      authStateChangedListener.remove();
     };
   }, [authService, client]);
   

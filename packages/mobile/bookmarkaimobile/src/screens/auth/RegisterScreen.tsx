@@ -4,6 +4,8 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 're
 import { TextInput, Button, Text, HelperText } from 'react-native-paper';
 import { useAuth } from '../../contexts/auth-provider';
 import { AuthScreenNavigationProp } from '../../navigation/types';
+import { GoogleSignInButton, AppleSignInButton, OrDivider } from '../../components/Auth';
+import { useSocialAuth } from '../../hooks/useSocialAuth';
 
 type Props = {
   navigation: AuthScreenNavigationProp<'Register'>;
@@ -23,6 +25,7 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
   
   const { register, isLoading, error } = useAuth();
+  const { signInWithGoogle, signInWithApple, isLoading: isSocialLoading } = useSocialAuth();
 
   const validateName = (text: string) => {
     if (!text) {
@@ -118,6 +121,18 @@ const RegisterScreen = ({ navigation }: Props) => {
           <Text style={styles.subtitle}>Join BookmarkAI today</Text>
           
           {error && <Text style={styles.errorText}>{error}</Text>}
+          
+          <GoogleSignInButton
+            onPress={signInWithGoogle}
+            disabled={isLoading || isSocialLoading}
+          />
+          
+          <AppleSignInButton
+            onPress={signInWithApple}
+            disabled={isLoading || isSocialLoading}
+          />
+          
+          <OrDivider />
           
           <TextInput
             label="Name"
