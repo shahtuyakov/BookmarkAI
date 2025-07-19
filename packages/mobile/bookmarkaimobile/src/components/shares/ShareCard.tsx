@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Card, Text, Chip, useTheme, Avatar } from 'react-native-paper';
-import type { Share } from '../../services/api/shares';
+import { Card, Text, Chip, useTheme, Avatar, Divider } from 'react-native-paper';
+import type { Share, EnrichedShare } from '../../services/api/shares';
 
 interface ShareCardProps {
-  share: Share;
-  onPress: (share: Share) => void;
+  share: Share | EnrichedShare;
+  onPress: (share: Share | EnrichedShare) => void;
 }
 
 const getPlatformColor = (platform: string) => {
@@ -70,6 +70,41 @@ const formatDate = (dateString: string) => {
   });
 };
 
+const getMLStatusColor = (share: Share | EnrichedShare, theme: any) => {
+  if (!('mlResults' in share) || !share.mlResults) {
+    return theme.colors.onSurfaceVariant;
+  }
+  
+  const { processingStatus } = share.mlResults;
+  const statuses = [processingStatus.summary, processingStatus.transcript];
+  
+  if (statuses.some(s => s === 'failed')) {
+    return theme.colors.error;
+  } else if (statuses.every(s => s === 'done' || s === 'not_applicable')) {
+    return theme.colors.tertiary;
+  } else if (statuses.some(s => s === 'processing')) {
+    return theme.colors.primary;
+  }
+  
+  return theme.colors.secondary;
+};
+
+const getMLStatusText = (share: Share | EnrichedShare) => {
+  if (!('mlResults' in share) || !share.mlResults) {
+    return null;
+  }
+  
+  const { processingStatus } = share.mlResults;
+  const hasSummary = processingStatus.summary === 'done';
+  const hasTranscript = processingStatus.transcript === 'done';
+  
+  if (hasSummary && hasTranscript) return 'AI Ready';
+  if (hasSummary || hasTranscript) return 'AI Partial';
+  if (processingStatus.summary === 'processing' || processingStatus.transcript === 'processing') return 'AI Processing';
+  
+  return null;
+};
+
 const ShareCard: React.FC<ShareCardProps> = ({ share, onPress }) => {
   const theme = useTheme();
   
@@ -124,6 +159,35 @@ const ShareCard: React.FC<ShareCardProps> = ({ share, onPress }) => {
           </Text>
         )}
         
+        {/* ML Results Section */}
+        {'mlResults' in share && share.mlResults && (
+          <>
+            <Divider style={styles.divider} />
+            
+            {share.mlResults.summary && (
+              <View style={styles.mlSection}>
+                <View style={styles.mlHeader}>
+                  <Text style={styles.mlIcon}>📝</Text>
+                  <Text style={styles.mlTitle}>AI Summary</Text>
+                </View>
+                <Text style={styles.mlSummary} numberOfLines={3}>
+                  {share.mlResults.summary}
+                </Text>
+              </View>
+            )}
+            
+            {share.mlResults.keyPoints && share.mlResults.keyPoints.length > 0 && (
+              <View style={styles.keyPointsSection}>
+                {share.mlResults.keyPoints.slice(0, 2).map((point: string, index: number) => (
+                  <Text key={index} style={styles.keyPoint} numberOfLines={1}>
+                    • {point}
+                  </Text>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+        
         <View style={styles.metaContainer}>
           <Chip
             mode="outlined"
@@ -131,6 +195,15 @@ const ShareCard: React.FC<ShareCardProps> = ({ share, onPress }) => {
             textStyle={{ color: getStatusColor(share.status, theme) }}>
             {share.status.toUpperCase()}
           </Chip>
+          
+          {getMLStatusText(share) && (
+            <Chip
+              mode="outlined"
+              style={[styles.statusChip, { borderColor: getMLStatusColor(share, theme) }]}
+              textStyle={{ color: getMLStatusColor(share, theme), fontSize: 11 }}>
+              {getMLStatusText(share)}
+            </Chip>
+          )}
           
           <Text style={styles.date}>{formatDate(share.createdAt)}</Text>
         </View>
@@ -186,6 +259,42 @@ const styles = StyleSheet.create({
   date: {
     fontSize: 12,
     color: '#888',
+  },
+  divider: {
+    marginVertical: 8,
+    backgroundColor: '#E0E0E0',
+  },
+  mlSection: {
+    marginBottom: 8,
+  },
+  mlHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  mlIcon: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  mlTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  mlSummary: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#333',
+  },
+  keyPointsSection: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  keyPoint: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#555',
+    marginBottom: 2,
   },
 });
 

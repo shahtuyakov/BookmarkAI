@@ -11,13 +11,14 @@ import {
 } from 'react-native';
 import { FAB, Searchbar, Text, useTheme, Dialog, Portal, Button, TextInput, Chip } from 'react-native-paper';
 import { HomeScreenNavigationProp } from '../../navigation/types';
-import { useSharesList, useCreateShare } from '../../hooks/useShares';
+import { useCreateShare } from '../../hooks/useShares';
+import { useEnrichedSharesList } from '../../hooks/useEnrichedShares';
 import { useSDKSharesList, useSDKCreateShare } from '../../hooks/useSDKShares';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import ShareCard from '../../components/shares/ShareCard';
 import EmptyState from '../../components/shares/EmptyState';
 import { isUsingSDKAuth, useSDKClient } from '../../contexts/auth-provider';
-import type { Share } from '../../services/api/shares';
+import type { Share, EnrichedShare } from '../../services/api/shares';
 
 interface HomeScreenProps {
   navigation: HomeScreenNavigationProp<'Home'>;
@@ -36,10 +37,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const sdkClient = useSDKClient();
   const usingSDKAuth = isUsingSDKAuth();
   
-  // Use SDK hooks if SDK auth is enabled, otherwise use direct API hooks
+  // Use SDK hooks if SDK auth is enabled, otherwise use enriched API hooks for ML results
   const sharesResult = usingSDKAuth && sdkClient 
     ? useSDKSharesList(sdkClient, { limit: 20 })
-    : useSharesList({ limit: 20 });
+    : useEnrichedSharesList({ limit: 20 });
   
   const { 
     shares,
@@ -84,7 +85,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   };
   
   // Navigate to detail screen when a share is tapped
-  const handleSharePress = (share: Share) => {
+  const handleSharePress = (share: Share | EnrichedShare) => {
     const title = typeof share.metadata?.title === 'string' ? share.metadata.title : 'Details';
     navigation.navigate('Detail', { id: share.id, title });
   };
