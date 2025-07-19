@@ -332,6 +332,110 @@ paths:
       - shares
       security:
       - bearer: []
+  "/v1/shares/enriched":
+    get:
+      operationId: EnrichedSharesController_getEnrichedShares
+      summary: Get paginated list of shares with ML results
+      description: Returns shares with their ML processing results (summaries, transcripts) in a single response
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of items per page (1-100)
+        example: 20
+        schema:
+          type: number
+      - name: cursor
+        required: false
+        in: query
+        description: Pagination cursor
+        schema:
+          type: string
+      - name: platform
+        required: false
+        in: query
+        description: Filter by platform(s), comma-separated
+        example: tiktok,youtube
+        schema:
+          type: string
+      - name: mlStatus
+        required: false
+        in: query
+        description: Filter by ML processing status
+        schema:
+          enum:
+          - complete
+          - partial
+          - none
+          - failed
+          type: string
+      - name: mediaType
+        required: false
+        in: query
+        description: Filter by media type
+        schema:
+          enum:
+          - video
+          - image
+          - audio
+          - none
+          type: string
+      - name: status
+        required: false
+        in: query
+        description: Filter by share status, comma-separated
+        example: done,processing
+        schema:
+          type: string
+      - name: hasTranscript
+        required: false
+        in: query
+        description: Only return shares with transcripts
+        schema:
+          type: boolean
+      - name: since
+        required: false
+        in: query
+        description: Only return shares created after this date
+        example: '2024-01-01'
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List of enriched shares
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PaginatedEnrichedSharesDto"
+      tags:
+      - Enriched Shares
+      security:
+      - bearer: []
+  "/v1/shares/enriched/{id}":
+    get:
+      operationId: EnrichedSharesController_getEnrichedShareById
+      summary: Get a specific share by ID with ML results
+      description: Returns a single share with all its ML processing results
+      parameters:
+      - name: id
+        required: true
+        in: path
+        description: Share ID
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Enriched share details
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/EnrichedShareDto"
+        '404':
+          description: Share not found
+      tags:
+      - Enriched Shares
+      security:
+      - bearer: []
   "/metrics/idempotency":
     get:
       operationId: MetricsController_getIdempotencyMetrics
@@ -648,6 +752,125 @@ components:
         limit:
           type: number
           description: Number of items returned
+          example: 20
+      required:
+      - items
+      - hasMore
+      - limit
+    MLResultsDto:
+      type: object
+      properties:
+        summary:
+          type: string
+          description: AI-generated summary of the content
+          example: This video demonstrates a cooking technique for...
+        keyPoints:
+          type: array
+          items:
+            type: string
+          description: Key points extracted from the content
+          example: ['Use fresh ingredients', 'Cook at medium heat', 'Season to taste']
+        transcript:
+          type: string
+          description: Transcript of audio/video content
+          example: Hello everyone, today we are going to...
+        language:
+          type: string
+          description: Detected language of the content
+          example: en
+        duration:
+          type: number
+          description: Duration of audio/video in seconds
+          example: 180
+        hasEmbeddings:
+          type: boolean
+          description: Whether embeddings have been generated
+          example: true
+        processingStatus:
+          type: object
+          description: Processing status for each ML task
+          properties:
+            summary:
+              type: string
+              enum:
+              - pending
+              - processing
+              - done
+              - failed
+              - not_applicable
+            transcript:
+              type: string
+              enum:
+              - pending
+              - processing
+              - done
+              - failed
+              - not_applicable
+            embeddings:
+              type: string
+              enum:
+              - pending
+              - processing
+              - done
+              - failed
+              - not_applicable
+          required:
+          - summary
+          - transcript
+          - embeddings
+        processedAt:
+          type: object
+          description: Timestamps when each ML task was processed
+          properties:
+            summary:
+              type: string
+              format: date-time
+            transcript:
+              type: string
+              format: date-time
+            embeddings:
+              type: string
+              format: date-time
+        error:
+          type: object
+          description: Error messages for failed ML tasks
+          properties:
+            summary:
+              type: string
+            transcript:
+              type: string
+            embeddings:
+              type: string
+      required:
+      - processingStatus
+    EnrichedShareDto:
+      type: object
+      allOf:
+      - "$ref": "#/components/schemas/ShareDto"
+      - type: object
+        properties:
+          mlResults:
+            "$ref": "#/components/schemas/MLResultsDto"
+            description: ML processing results
+    PaginatedEnrichedSharesDto:
+      type: object
+      properties:
+        items:
+          description: List of enriched shares
+          type: array
+          items:
+            "$ref": "#/components/schemas/EnrichedShareDto"
+        cursor:
+          type: string
+          description: Cursor for next page
+          example: eyJpZCI6IjEyMzQ1Njc4In0=
+        hasMore:
+          type: boolean
+          description: Whether more items exist
+          example: true
+        limit:
+          type: number
+          description: Number of items per page
           example: 20
       required:
       - items

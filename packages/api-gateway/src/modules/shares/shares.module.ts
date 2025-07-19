@@ -7,6 +7,7 @@ import { SharesController } from './controllers/shares.controller';
 import { MetricsController } from './controllers/metrics.controller';
 import { SearchController } from './controllers/search.controller';
 import { WorkflowController } from './controllers/workflow.controller';
+import { EnrichedSharesController } from './controllers/enriched-shares.controller';
 import { SharesService } from './services/shares.service';
 import { IdempotencyService } from './services/idempotency.service';
 import { MetricsService } from './services/metrics.service';
@@ -14,6 +15,7 @@ import { SearchService } from './services/search.service';
 import { WorkflowService } from './services/workflow.service';
 import { WorkflowMetricsService } from './services/workflow-metrics.service';
 import { VideoWorkflowService } from './services/video-workflow.service';
+import { EnrichedSharesService } from './services/enriched-shares.service';
 import { SharesRateLimitMiddleware } from './middlewares/rate-limit.middleware';
 import { SHARE_QUEUE } from './queue/share-queue.constants';
 import { ErrorService } from './services/error.service';
@@ -71,7 +73,7 @@ import * as Redis from 'ioredis';
       }),
     }),
   ],
-  controllers: [SharesController, MetricsController, SearchController, WorkflowController],
+  controllers: [SharesController, MetricsController, SearchController, WorkflowController, EnrichedSharesController],
   providers: [
     SharesService,
     IdempotencyService,
@@ -80,6 +82,7 @@ import * as Redis from 'ioredis';
     WorkflowService,
     WorkflowMetricsService,
     VideoWorkflowService,
+    EnrichedSharesService,
     SearchRepository,
     SharesRepository,
     DrizzleService,
